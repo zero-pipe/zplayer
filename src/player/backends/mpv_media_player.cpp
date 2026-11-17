@@ -52,8 +52,9 @@ public:
             return;
         }
         mpv_opengl_fbo mpfbo{
-            static_cast<int>(defaultFramebufferObject()), width() * devicePixelRatioF(),
-            height() * devicePixelRatioF(), 0};
+            static_cast<int>(defaultFramebufferObject()),
+            static_cast<int>(width() * devicePixelRatioF()),
+            static_cast<int>(height() * devicePixelRatioF()), 0};
         int flip_y{1};
         mpv_render_param params[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &mpfbo},
@@ -142,6 +143,7 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_initialize(m_holder->h);
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);
         mpv_set_wakeup_callback(m_holder->h, mpvWakeup, this);
+        applyVideoSettings();  // push defaults before the first loadfile
     }
 
     m_renderer = new Renderer(this);
@@ -254,6 +256,82 @@ void MpvMediaPlayer::setVolume(int volume)
     }
 }
 
+// Map the engine-neutral settings onto libmpv properties. Most of these are
+// live properties, so they take effect on the current stream immediately and
+// persist into the next loadfile().
+void MpvMediaPlayer::applyVideoSettings()
+{
+    if (!m_holder || !m_holder->h) {
+        return;
+    }
+    mpv_handle *h = m_holder->h;
+
+    // --- Hardware decoding ---
+    const char *hw = "auto-safe";
+    switch (m_settings.hwdec) {
+    case HwDecode::Disabled:      hw = "no"; break;
+    case HwDecode::D3D11VA:       hw = "d3d11va"; break;
+    case HwDecode::Cuda:          hw = "cuda"; break;
+    case HwDecode::Dxva2:         hw = "dxva2"; break;
+    case HwDecode::VideoToolbox:  hw = "videotoolbox"; break;
+    case HwDecode::Vaapi:         hw = "vaapi"; break;
+    case HwDecode::Auto:
+    default:                      hw = "auto-safe"; break;
+    }
+    mpv_set_property_string(h, "hwdec", hw);
+
+    // --- Picture adjustments (mpv equalizer properties, -100..100) ---
+    const FilterSettings &f = m_settings.filters;
+    double b = qBound(-100, f.brightness, 100);
+    double c = qBound(-100, f.contrast, 100);
+    double s = qBound(-100, f.saturation, 100);
+    double hu = qBound(-100, f.hue, 100);
+    mpv_set_property(h, "brightness", MPV_FORMAT_DOUBLE, &b);
+    mpv_set_property(h, "contrast", MPV_FORMAT_DOUBLE, &c);
+    mpv_set_property(h, "saturation", MPV_FORMAT_DOUBLE, &s);
+    mpv_set_property(h, "hue", MPV_FORMAT_DOUBLE, &hu);
+
+    // --- Raw filter chain ("" clears it) ---
+    mpv_set_property_string(h, "vf", f.rawChain.join(QLatin1Char(',')).toUtf8().constData());
+
+    // --- Deinterlace ---
+    mpv_set_property_string(h, "deinterlace", m_settings.deinterlace ? "yes" : "no");
+
+    // --- Subtitles ---
+    const SubtitleSettings &sub = m_settings.subtitle;
+    mpv_set_property_string(h, "sub-visibility", sub.enabled ? "yes" : "no");
+    mpv_set_property_string(h, "sub-auto",
+                            sub.autoLoadInFolder ? "fuzzy" : "no");
+    if (!sub.fontFamily.isEmpty()) {
+        mpv_set_property_string(h, "sub-font", sub.fontFamily.toUtf8().constData());
+    }
+    // Track selection: -1 = auto, otherwise a specific sid.
+    if (!sub.enabled) {
+        mpv_set_property_string(h, "sid", "no");
+    } else if (sub.track >= 0) {
+        int64_t sid = sub.track;
+        mpv_set_property(h, "sid", MPV_FORMAT_INT64, &sid);
+    } else {
+        mpv_set_property_string(h, "sid", "auto");
+    }
+
+    // External subtitle file: added once the file is loaded (tracked there too).
+    applyExternalSubtitle();
+}
+
+void MpvMediaPlayer::applyExternalSubtitle()
+{
+    if (!m_holder || !m_holder->h) {
+        return;
+    }
+    const QString file = m_settings.subtitle.externalFile;
+    if (file.isEmpty() || m_state == MediaState::Idle || m_state == MediaState::Stopped) {
+        return;
+    }
+    const char *cmd[] = {"sub-add", file.toUtf8().constData(), "select", nullptr};
+    mpv_command(m_holder->h, cmd);
+}
+
 void MpvMediaPlayer::onMpvEvents()
 {
     if (!m_holder || !m_holder->h) {
@@ -277,6 +355,9 @@ void MpvMediaPlayer::handleEvent(void *ev)
         break;
     case MPV_EVENT_FILE_LOADED:
         setState(MediaState::Playing);
+        // A freshly loaded file needs the settings re-applied: hwdec/vf are
+        // read at load time, and an external subtitle must be re-added.
+        applyVideoSettings();
         emit started();
         break;
     case MPV_EVENT_PLAYBACK_RESTART:

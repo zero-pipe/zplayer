@@ -178,6 +178,7 @@ void VideoGrid::rebuildLayout()
 VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool ptz)
 {
     auto *tile = new VideoTile(ch, name, ptz, m_gridHost);
+    tile->applyVideoSettings(m_settings);  // inherit the grid's defaults
     connect(tile, &VideoTile::clickedTile, this,
             [this](const zp::ChannelRef &c) {
                 const int idx = indexOf(c);
@@ -198,6 +199,16 @@ void VideoGrid::addTileAt(VideoTile *tile, int index)
     }
     m_tiles[index] = tile;
     rebuildLayout();
+}
+
+void VideoGrid::setVideoSettings(const VideoSettings &settings)
+{
+    m_settings = settings;
+    for (VideoTile *t : m_tiles) {
+        if (t) {
+            t->applyVideoSettings(settings);
+        }
+    }
 }
 
 void VideoGrid::openStream(const ChannelRef &ch, const QString &name,

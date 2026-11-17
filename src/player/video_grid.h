@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QUrl>
 #include "platform/platform_api.h"
+#include "player/media_player.h"
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
@@ -48,6 +49,11 @@ public:
     void markFailed(const zp::ChannelRef &ch, const QString &message);
     void markConnecting(const zp::ChannelRef &ch);
 
+    // Grid-wide default video settings (hwdec / subtitles / filters). Stored so
+    // newly created tiles inherit them, and pushed to all live tiles now.
+    void setVideoSettings(const VideoSettings &settings);
+    VideoSettings videoSettings() const { return m_settings; }
+
 signals:
     void activeChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
     void streamClosed(const zp::ChannelRef &ch);
@@ -71,6 +77,7 @@ private:
     Layout m_kind = L2x2;
     int m_activeIndex = -1;
     QVector<VideoTile *> m_tiles;
+    VideoSettings m_settings;
 
     QStackedLayout *m_stack = nullptr;
     QWidget *m_gridHost = nullptr;

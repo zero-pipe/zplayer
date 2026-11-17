@@ -36,6 +36,10 @@ public:
     void stop();
     void setSelected(bool selected);
 
+    // Apply engine-neutral video settings (hwdec / subtitles / filters) to this
+    // tile's engine. Safe before or during playback.
+    void applyVideoSettings(const VideoSettings &settings);
+
     // Drive the overlay state without starting playback (used by the grid for
     // "connecting" placeholders and error marking before/after playStarted).
     void showConnecting(const QString &text = QString());

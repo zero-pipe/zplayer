@@ -4,8 +4,60 @@
 #include <QObject>
 #include <QUrl>
 #include <QWidget>
+#include <QString>
+#include <QStringList>
+#include <QColor>
 
 namespace zp {
+
+// ---------------------------------------------------------------------------
+// Engine-neutral video settings
+//
+// Exposed through IMediaPlayer::setVideoSettings(). The values are phrased in
+// terms common to all backends; each adapter maps them to its own native knobs
+// (libmpv properties, QtAV setters, ...). Settings are stored by the engine and
+// applied to the current stream when possible, and always carried into the next
+// open()/play(). UI code never mentions a specific engine.
+// ---------------------------------------------------------------------------
+
+// Hardware decoding strategy. Not every backend/platform supports every mode;
+// unsupported requests degrade to a safe software/auto path, never an error.
+enum class HwDecode {
+    Auto,      // let the engine decide (safe default)
+    Disabled,  // software decode only
+    D3D11VA,   // Windows: D3D11 video decode
+    Cuda,      // NVIDIA NVDEC/CUDA
+    Dxva2,     // Windows: DXVA2 (older)
+    VideoToolbox, // macOS
+    Vaapi      // Linux
+};
+
+struct SubtitleSettings {
+    bool enabled = true;
+    QString externalFile;      // absolute path to an external subtitle file ("" = none)
+    int track = -1;            // in-container track index (-1 = auto / first)
+    bool autoLoadInFolder = true; // pick up a matching .srt/.ass next to the media
+    QString fontFamily;        // "" = engine default
+};
+
+struct FilterSettings {
+    // Simple picture adjustments (typical range -100..100, 0 = neutral).
+    int brightness = 0;
+    int contrast = 0;
+    int saturation = 0;
+    int hue = 0;
+    // Extra raw filter-chain entries, in the engine's own filter syntax. Kept
+    // opaque on purpose so advanced callers can use backend-specific filters;
+    // adapters that cannot parse them simply ignore this list.
+    QStringList rawChain;
+};
+
+struct VideoSettings {
+    HwDecode hwdec = HwDecode::Auto;
+    SubtitleSettings subtitle;
+    FilterSettings filters;
+    bool deinterlace = false;  // enable a deinterlacer for interlaced sources
+};
 
 // ---------------------------------------------------------------------------
 // Media engine abstraction
@@ -60,6 +112,12 @@ public:
     virtual void setMuted(bool muted) = 0;
     virtual void setVolume(int volume /*0..100*/) = 0;
 
+    // Apply engine-neutral video settings. Safe to call before or during
+    // playback; implementations store them and (re)apply to the live stream
+    // where the backend allows, and always carry them into the next open().
+    void setVideoSettings(const VideoSettings &settings) { m_settings = settings; applyVideoSettings(); }
+    VideoSettings videoSettings() const { return m_settings; }
+
     virtual MediaState state() const = 0;
 
     // Human-readable backend name for diagnostics ("QtAV", "libmpv", ...).
@@ -71,6 +129,13 @@ signals:
     void paused();
     void stopped();
     void failed(const QString &message);
+
+protected:
+    // Backends override to push m_settings into their engine. Called by
+    // setVideoSettings(); default is a no-op.
+    virtual void applyVideoSettings() {}
+
+    VideoSettings m_settings;
 };
 
 } // namespace zp

@@ -25,15 +25,20 @@ public:
     MediaState state() const override { return m_state; }
     QString backendName() const override { return QStringLiteral("libmpv"); }
 
+protected:
+    void applyVideoSettings() override;
+
 private slots:
     void onMpvEvents();
 
 private:
     class Renderer;
-    struct MpvHolder;    void setState(MediaState s);
+    struct MpvHolder;
+    void setState(MediaState s);
     void handleEvent(void *event);
     void loadPending();          // loadfile once the render context is ready
     void onRenderReady();        // called by the Renderer after GL init
+    void applyExternalSubtitle(); // sub-add the configured external subtitle file
 
 public:
     // Raw mpv handle, for the Renderer's render-context creation.

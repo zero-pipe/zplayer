@@ -154,6 +154,13 @@ void VideoTile::stop()
     }
 }
 
+void VideoTile::applyVideoSettings(const VideoSettings &settings)
+{
+    if (m_player) {
+        m_player->setVideoSettings(settings);
+    }
+}
+
 void VideoTile::showConnecting(const QString &text)
 {
     setState(Connecting, text.isEmpty() ? tr("连接中…") : text);

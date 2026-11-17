@@ -23,6 +23,9 @@ public:
     MediaState state() const override { return m_state; }
     QString backendName() const override { return QStringLiteral("QtAV"); }
 
+protected:
+    void applyVideoSettings() override;
+
 private:
     class Renderer;
     struct AVPlayerHolder;
