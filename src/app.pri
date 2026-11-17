@@ -15,7 +15,8 @@ SOURCES += \
     ui/login_dialog.cpp \
     ui/device_tree_view.cpp \
     ui/ptz_panel.cpp \
-    ui/video_settings_dialog.cpp
+    ui/video_settings_page.cpp \
+    ui/settings_dialog.cpp
 
 HEADERS += \
     app/PlayerWindow.h \
@@ -35,7 +36,8 @@ HEADERS += \
     ui/login_dialog.h \
     ui/device_tree_view.h \
     ui/ptz_panel.h \
-    ui/video_settings_dialog.h
+    ui/video_settings_page.h \
+    ui/settings_dialog.h
 
 # ---- Media engine implementations (guarded by app.pro CONFIG) ----
 contains(DEFINES, ZP_WITH_MPV) {

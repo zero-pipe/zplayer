@@ -221,6 +221,21 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(5, 12); path.lineTo(19, 12);
         path.moveTo(13, 6); path.lineTo(19, 12); path.lineTo(13, 18);
         break;
+    case Sun: {
+        path.addEllipse(QPointF(12, 12), 4, 4);
+        for (int i = 0; i < 8; ++i) {
+            const qreal a = i * M_PI / 4.0;
+            path.moveTo(12 + std::cos(a) * 7.0, 12 + std::sin(a) * 7.0);
+            path.lineTo(12 + std::cos(a) * 9.5, 12 + std::sin(a) * 9.5);
+        }
+        break;
+    }
+    case Moon:
+        path.moveTo(14.5, 3.5);
+        path.cubicTo(8.0, 4.5, 6.0, 11.0, 8.5, 15.5);
+        path.cubicTo(10.5, 19.0, 15.0, 19.5, 18.5, 17.0);
+        path.cubicTo(12.5, 17.5, 9.5, 11.5, 14.5, 3.5);
+        break;
     }
     strokePath(p, path, color, w);
     return pm;

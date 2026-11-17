@@ -397,11 +397,33 @@ QScrollBar::handle:horizontal { background: %borderStrong%; border-radius: 3px; 
 QScrollBar::handle:horizontal:hover { background: %muted%; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 
-/* ---------------- Video settings dialog ---------------- */
+/* ---------------- Settings dialog ---------------- */
 
-QDialog#VideoSettingsDialog {
+QDialog#SettingsDialog {
     background: %bgPanel%;
 }
+
+/* Category nav list on the left */
+QListWidget#SettingsNav {
+    background: %bgRoot%;
+    border: 1px solid %border%;
+    border-radius: 10px;
+    outline: none;
+    padding: 6px;
+}
+QListWidget#SettingsNav::item {
+    color: %text2%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+QListWidget#SettingsNav::item:hover { background: %bgHover%; color: %text%; }
+QListWidget#SettingsNav::item:selected {
+    background: %accentSoft%;
+    color: %accent%;
+    font-weight: 600;
+}
+
 QLabel#VsGroupTitle {
     color: %accent%;
     font-size: 12px;

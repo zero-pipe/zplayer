@@ -20,7 +20,7 @@ QPixmap appLogo(int size);
 // Stroked line icons (24x24 grid), theme-colored.
 enum Glyph {
     User, Lock, Eye, Gear, Search, Grid1, Grid4, Grid9,
-    Close, Expand, Refresh, ChevronDown, ArrowRight
+    Close, Expand, Refresh, ChevronDown, ArrowRight, Sun, Moon
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 

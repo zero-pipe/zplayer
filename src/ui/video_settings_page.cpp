@@ -1,4 +1,4 @@
-#include "ui/video_settings_dialog.h"
+#include "ui/video_settings_page.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -9,20 +9,15 @@
 #include <QLineEdit>
 #include <QSlider>
 #include <QPushButton>
-#include <QDialogButtonBox>
 #include <QFileDialog>
 
 namespace zp {
 
-VideoSettingsDialog::VideoSettingsDialog(QWidget *parent)
-    : QDialog(parent)
+VideoSettingsPage::VideoSettingsPage(QWidget *parent)
+    : QWidget(parent)
 {
-    setObjectName(QStringLiteral("VideoSettingsDialog"));
-    setWindowTitle(tr("视频设置"));
-    setMinimumWidth(420);
-
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(22, 20, 22, 16);
+    root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(14);
 
     // ===================== Hardware decoding =====================
@@ -46,8 +41,7 @@ VideoSettingsDialog::VideoSettingsDialog(QWidget *parent)
     hwRow->addWidget(m_hwdec, 1);
     root->addLayout(hwRow);
 
-    const QString subHint = tr("非当前平台支持的模式会自动回退到安全路径，不会报错");
-    auto *hwHint = new QLabel(subHint, this);
+    auto *hwHint = new QLabel(tr("非当前平台支持的模式会自动回退到安全路径，不会报错"), this);
     hwHint->setObjectName(QStringLiteral("VsHint"));
     root->addWidget(hwHint);
 
@@ -113,24 +107,19 @@ VideoSettingsDialog::VideoSettingsDialog(QWidget *parent)
     fileRow->addWidget(browse);
     root->addLayout(fileRow);
 
-    // ===================== Buttons =====================
     root->addStretch(1);
-    auto *btns = new QDialogButtonBox(QDialogButtonBox::Close, this);
-    btns->button(QDialogButtonBox::Close)->setText(tr("完成"));
-    connect(btns, &QDialogButtonBox::rejected, this, &QDialog::accept);
-    root->addWidget(btns);
 
     // ===================== Wiring: live apply =====================
     connect(m_hwdec, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &VideoSettingsDialog::emitChanged);
+            this, &VideoSettingsPage::emitChanged);
     connect(m_deinterlace, &QCheckBox::toggled,
-            this, &VideoSettingsDialog::emitChanged);
+            this, &VideoSettingsPage::emitChanged);
     connect(m_subEnabled, &QCheckBox::toggled,
-            this, &VideoSettingsDialog::emitChanged);
+            this, &VideoSettingsPage::emitChanged);
     connect(m_subAutoLoad, &QCheckBox::toggled,
-            this, &VideoSettingsDialog::emitChanged);
+            this, &VideoSettingsPage::emitChanged);
     connect(m_subFile, &QLineEdit::textChanged,
-            this, &VideoSettingsDialog::emitChanged);
+            this, &VideoSettingsPage::emitChanged);
 
     auto wireSlider = [this](QSlider *sl, QLabel *val) {
         connect(sl, &QSlider::valueChanged, this, [this, val](int v) {
@@ -153,10 +142,9 @@ VideoSettingsDialog::VideoSettingsDialog(QWidget *parent)
     });
 }
 
-void VideoSettingsDialog::setSettings(const VideoSettings &s)
+void VideoSettingsPage::setSettings(const VideoSettings &s)
 {
     m_settings = s;
-    // Block signals while syncing widgets from the model.
     const QSignalBlocker bHwdec(m_hwdec);
     const QSignalBlocker bDeint(m_deinterlace);
     const QSignalBlocker bSubEn(m_subEnabled);
@@ -185,7 +173,7 @@ void VideoSettingsDialog::setSettings(const VideoSettings &s)
     m_subFile->setText(s.subtitle.externalFile);
 }
 
-void VideoSettingsDialog::emitChanged()
+void VideoSettingsPage::emitChanged()
 {
     VideoSettings s = m_settings;
     s.hwdec = static_cast<HwDecode>(m_hwdec->currentData().toInt());

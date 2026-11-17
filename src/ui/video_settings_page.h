@@ -1,7 +1,7 @@
-#ifndef ZP_VIDEO_SETTINGS_DIALOG_H
-#define ZP_VIDEO_SETTINGS_DIALOG_H
+#ifndef ZP_VIDEO_SETTINGS_PAGE_H
+#define ZP_VIDEO_SETTINGS_PAGE_H
 
-#include <QDialog>
+#include <QWidget>
 
 #include "player/media_player.h"
 
@@ -15,14 +15,13 @@ QT_END_NAMESPACE
 
 namespace zp {
 
-// Non-modal-safe settings sheet for the engine-neutral VideoSettings: hardware
-// decoding, picture adjustments, and subtitles. Every control emits
-// settingsChanged() live so the caller can push it straight to the grid/engine;
-// there is no OK/Apply gate.
-class VideoSettingsDialog : public QDialog {
+// The "视频" settings page: hardware decoding, picture adjustments and
+// subtitles. Embeds into SettingsDialog as one category. Emits settingsChanged
+// live so the caller can push it straight to the grid/engine.
+class VideoSettingsPage : public QWidget {
     Q_OBJECT
 public:
-    explicit VideoSettingsDialog(QWidget *parent = nullptr);
+    explicit VideoSettingsPage(QWidget *parent = nullptr);
 
     void setSettings(const VideoSettings &s);
     VideoSettings settings() const { return m_settings; }
@@ -53,4 +52,4 @@ private:
 
 } // namespace zp
 
-#endif // ZP_VIDEO_SETTINGS_DIALOG_H
+#endif // ZP_VIDEO_SETTINGS_PAGE_H

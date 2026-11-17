@@ -5,7 +5,7 @@
 #include "ui/toast.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
-#include "ui/video_settings_dialog.h"
+#include "ui/settings_dialog.h"
 #include "player/video_grid.h"
 
 #include <QApplication>
@@ -102,34 +102,51 @@ void PlayerWindow::buildUi()
     tb->addWidget(statusLabel);
     tb->addSpacing(8);
 
-    // Settings (theme switch + server) gear
-    auto *settingsBtn = new QToolButton(topBar);
-    settingsBtn->setObjectName(QStringLiteral("IconBtn"));
-    settingsBtn->setIcon(QIcon(icons::glyph(icons::Gear, ThemeManager::instance().tokens().text2, 18)));
-    settingsBtn->setIconSize(QSize(18, 18));
-    settingsBtn->setCursor(Qt::PointingHandCursor);
-    settingsBtn->setToolTip(tr("设置"));
-    settingsBtn->setPopupMode(QToolButton::InstantPopup);
-    auto *settingsMenu = new QMenu(settingsBtn);
-    auto *videoAct = settingsMenu->addAction(tr("视频设置…"));
-    connect(videoAct, &QAction::triggered, this, [this]() {
-        VideoSettingsDialog dlg(this);
-        dlg.setSettings(m_grid ? m_grid->videoSettings() : VideoSettings());
-        connect(&dlg, &VideoSettingsDialog::settingsChanged, this,
-                [this](const VideoSettings &s) {
-                    if (m_grid) m_grid->setVideoSettings(s);
-                });
-        dlg.exec();
-    });
-    auto *themeAct = settingsMenu->addAction(tr("切换主题（深/浅）"));
-    connect(themeAct, &QAction::triggered, this, [this]() {
+    // Theme quick-toggle (sun/moon) — icon button, toggles directly.
+    auto *themeBtn = new QToolButton(topBar);
+    themeBtn->setObjectName(QStringLiteral("IconBtn"));
+    themeBtn->setIconSize(QSize(18, 18));
+    themeBtn->setCursor(Qt::PointingHandCursor);
+    themeBtn->setToolTip(tr("切换主题（深/浅）"));
+    auto refreshThemeIcon = [themeBtn]() {
+        const bool dark = ThemeManager::instance().presetName() == QLatin1String("dark");
+        themeBtn->setIcon(QIcon(icons::glyph(dark ? icons::Sun : icons::Moon,
+                                             ThemeManager::instance().tokens().text2, 18)));
+    };
+    refreshThemeIcon();
+    connect(themeBtn, &QToolButton::clicked, this, [this]() {
         const QString cur = ThemeManager::instance().presetName();
         const QString next = (cur == QLatin1String("dark")) ? QStringLiteral("light")
                                                             : QStringLiteral("dark");
         ThemeManager::instance().setPreset(next);
         SessionManager::instance().setTheme(next);
     });
-    settingsBtn->setMenu(settingsMenu);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            themeBtn, refreshThemeIcon);
+    tb->addWidget(themeBtn);
+    tb->addSpacing(4);
+
+    // Settings gear — opens the settings window directly (no popup menu).
+    auto *settingsBtn = new QToolButton(topBar);
+    settingsBtn->setObjectName(QStringLiteral("IconBtn"));
+    settingsBtn->setIcon(QIcon(icons::glyph(icons::Gear,
+                                            ThemeManager::instance().tokens().text2, 18)));
+    settingsBtn->setIconSize(QSize(18, 18));
+    settingsBtn->setCursor(Qt::PointingHandCursor);
+    settingsBtn->setToolTip(tr("设置"));
+    connect(settingsBtn, &QToolButton::clicked, this, [this]() {
+        SettingsDialog dlg(m_grid ? m_grid->videoSettings() : VideoSettings(),
+                           ThemeManager::instance().presetName(), this);
+        connect(&dlg, &SettingsDialog::videoSettingsChanged, this,
+                [this](const VideoSettings &s) {
+                    if (m_grid) m_grid->setVideoSettings(s);
+                });
+        connect(&dlg, &SettingsDialog::themeChanged, this, [this](const QString &name) {
+            ThemeManager::instance().setPreset(name);
+            SessionManager::instance().setTheme(name);
+        });
+        dlg.exec();
+    });
     tb->addWidget(settingsBtn);
 
     tb->addSpacing(4);
