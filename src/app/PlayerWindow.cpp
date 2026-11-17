@@ -93,15 +93,6 @@ void PlayerWindow::buildUi()
 
     tb->addStretch(1);
 
-    // Status: online channels
-    auto *statusLabel = new QLabel(topBar);
-    statusLabel->setObjectName(QStringLiteral("TopStatus"));
-    statusLabel->setText(QString::fromUtf8("● ") + tr("已连接"));
-    statusLabel->setStyleSheet(QStringLiteral("color:%1;font-size:12px;")
-                               .arg(ThemeManager::instance().tokens().text2.name()));
-    tb->addWidget(statusLabel);
-    tb->addSpacing(8);
-
     // Theme quick-toggle (sun/moon) — icon button, toggles directly.
     auto *themeBtn = new QToolButton(topBar);
     themeBtn->setObjectName(QStringLiteral("IconBtn"));
@@ -314,8 +305,6 @@ void PlayerWindow::onChildrenReady(const QString &parentId, const QList<DeviceNo
         m_tree->setRootNodes(nodes);
         if (nodes.isEmpty()) {
             toastError(tr("未获取到组织目录"));
-        } else {
-            toastSuccess(tr("组织目录已加载"));
         }
     } else {
         m_tree->addChildren(parentId, nodes);
