@@ -8,7 +8,7 @@ namespace zp {
 class PlatformHttpClient;
 
 // Real IPlatformApi implementation talking to zero-web-server over HTTP/JSON.
-// See docs/DESIGN.md §3 for the endpoint mapping.
+// Endpoint mapping is documented in the class .cpp header comment.
 class WebPlatformApi : public IPlatformApi {
     Q_OBJECT
 public:

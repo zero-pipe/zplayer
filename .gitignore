@@ -1,12 +1,11 @@
 # build outputs
 /build/
+/out/
 
-# vendored 3rd-party sources / reference material (large, not committed)
-/3rdpart/qtav/
-/3rdpart/mpv/
-/3rdpart/mpv-examples/
-/3rdpart/iina/
+# vendored 3rd-party runtimes (large; only headers/.pri/.lib are tracked).
+# qtav-sdk is x86-only and unused in the x64 mainline -> ignored wholesale.
 /3rdpart/qtav-sdk/
+/3rdpart/mpv-sdk/bin/
 
 # qmake / IDE
 *.user
@@ -17,6 +16,9 @@ config.log
 Makefile*
 *.pro.autosave
 .vscode/
+
+# local build config (per-machine toolchain paths; see build.local.bat.example)
+/build.local.bat
 
 # runtime artifacts
 *.log
@@ -40,6 +42,3 @@ ui_*.h
 # mpv SDK: keep the (small) import library so the app links without the
 # 184 MB runtime DLL set; the bin/x64 DLLs stay untracked on purpose.
 !/3rdpart/mpv-sdk/lib/**/*.lib
-
-#design
-docs/design/*.png

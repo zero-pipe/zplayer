@@ -1,4 +1,4 @@
-#include "player/qtav_media_player.h"
+#include "player/backends/qtav_media_player.h"
 
 #include <QtAV/AVPlayer.h>
 #include <QtAV/VideoOutput.h>

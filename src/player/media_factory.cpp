@@ -2,10 +2,10 @@
 #include "player/media_player.h"
 
 #ifdef ZP_WITH_MPV
-#include "player/mpv_media_player.h"
+#include "player/backends/mpv_media_player.h"
 #endif
 #ifdef ZP_WITH_QTAV
-#include "player/qtav_media_player.h"
+#include "player/backends/qtav_media_player.h"
 #endif
 
 namespace zp {

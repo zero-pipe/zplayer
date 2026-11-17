@@ -1,5 +1,5 @@
-#include "player/mpv_media_player.h"
-#include "player/mpv/qthelper.hpp"
+#include "player/backends/mpv_media_player.h"
+#include "player/backends/mpv/qthelper.hpp"
 
 #include <mpv/client.h>
 #include <mpv/render_gl.h>

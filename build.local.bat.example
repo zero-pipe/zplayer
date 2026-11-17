@@ -1,0 +1,15 @@
+@echo off
+REM ===========================================================================
+REM  build.local.bat.example
+REM
+REM  Copy this file to build.local.bat (same folder) and edit the paths for
+REM  YOUR machine. build.local.bat is git-ignored, so your local paths are
+REM  never committed. build.bat auto-detects sensible defaults; you only need
+REM  this file if your toolchain lives somewhere non-standard.
+REM ===========================================================================
+
+REM Visual Studio (any edition that installs the C++ x64 tools)
+REM set "VCVARS=D:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat"
+
+REM Qt 5.14.2 built for MSVC 2017 64-bit (point at the ...\bin folder)
+REM set "QT_BIN=D:\Qt\Qt5.14.2\5.14.2\msvc2017_64\bin"

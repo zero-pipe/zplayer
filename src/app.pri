@@ -39,14 +39,14 @@ HEADERS += \
 
 # ---- Media engine implementations (guarded by app.pro CONFIG) ----
 contains(DEFINES, ZP_WITH_MPV) {
-    SOURCES += player/mpv_media_player.cpp
-    HEADERS += player/mpv_media_player.h
+    SOURCES += player/backends/mpv_media_player.cpp
+    HEADERS += player/backends/mpv_media_player.h
     # qthelper.hpp is a header-only helper, included by mpv_media_player.cpp.
 }
 
 contains(DEFINES, ZP_WITH_QTAV) {
-    SOURCES += player/qtav_media_player.cpp
-    HEADERS += player/qtav_media_player.h
+    SOURCES += player/backends/qtav_media_player.cpp
+    HEADERS += player/backends/qtav_media_player.h
 }
 
 RESOURCES += resources/resources.qrc
