@@ -1,0 +1,28 @@
+# build outputs
+/build/
+/3rdpart/qtav/_build/
+
+# qmake / IDE
+*.user
+*.user.*
+.qmake.stash
+.qmake.cache
+config.log
+Makefile*
+*.pro.autosave
+
+# objects
+*.o
+*.obj
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# binaries
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
