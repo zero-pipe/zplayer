@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QUrl>
 #include "platform/platform_api.h"
+#include "player/media_player.h"
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -12,15 +13,11 @@ class QStackedLayout;
 class QPushButton;
 QT_END_NAMESPACE
 
-namespace QtAV {
-class AVPlayer;
-class VideoOutput;
-}
-
 namespace zp {
 
-// One stream cell: an AVPlayer + renderer behind a status overlay, with a
-// floating header (title, state, close/maximize).
+// One stream cell: a media engine renderer behind a status overlay, with a
+// floating header (title, state, close/maximize). Depends only on IMediaPlayer,
+// so the concrete engine (QtAV / libmpv / ...) can be swapped freely.
 class VideoTile : public QWidget {
     Q_OBJECT
 public:
@@ -64,9 +61,8 @@ private:
     bool m_selected = false;
     State m_state = Idle;
 
-    QtAV::AVPlayer *m_player = nullptr;
-    QtAV::VideoOutput *m_output = nullptr;
-    QWidget *m_video = nullptr;
+    IMediaPlayer *m_player = nullptr;   // engine, owns its renderer
+    QWidget *m_video = nullptr;         // renderer surface inserted in the stage
     QStackedLayout *m_stage = nullptr;
     QWidget *m_overlay = nullptr;
     QLabel *m_overlayText = nullptr;

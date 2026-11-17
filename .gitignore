@@ -2,6 +2,12 @@
 /build/
 /3rdpart/qtav/_build/
 
+# vendored 3rd-party sources / reference material (large, not committed)
+/3rdpart/mpv/
+/3rdpart/mpv-examples/
+/3rdpart/iina/
+/3rdpart/qtav-sdk/
+
 # qmake / IDE
 *.user
 *.user.*

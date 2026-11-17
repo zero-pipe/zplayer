@@ -5,6 +5,7 @@
 #include "platform/platform_api.h"
 #include "platform/web_platform_api.h"
 #include "platform/mock_platform_api.h"
+#include "player/media_player.h"
 
 #include <QApplication>
 #include <QGuiApplication>
@@ -184,6 +185,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<zp::Session>("zp::Session");
     qRegisterMetaType<zp::DeviceNode>("zp::DeviceNode");
     qRegisterMetaType<zp::PresetInfo>("zp::PresetInfo");
+    qRegisterMetaType<zp::MediaState>("zp::MediaState");
 
     zp::ThemeManager::instance().apply(app);
     zp::ThemeManager::instance().setPreset(zp::SessionManager::instance().theme());

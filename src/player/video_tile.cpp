@@ -1,8 +1,5 @@
 #include "player/video_tile.h"
-
-#include <QtAV/AVPlayer.h>
-#include <QtAV/VideoOutput.h>
-#include <QtAV/AVError.h>
+#include "player/media_factory.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -66,13 +63,12 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     hl->addWidget(closeBtn);
 
     // --- Stage: video page + overlay page ---
-    m_player = new QtAV::AVPlayer(this);
-    m_output = new QtAV::VideoOutput(this);
-    m_video = m_output->widget();
+    m_player = media::createPlayer(MediaBackend::Auto);
+    m_player->setParent(this);
+    m_video = m_player->renderer()->widget();
     if (m_video) {
         m_video->setObjectName(QStringLiteral("TileVideo"));
         m_video->setMinimumSize(80, 45);
-        m_player->setRenderer(m_output);
     }
 
     m_overlay = new QWidget(this);
@@ -115,18 +111,18 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     vl->addWidget(header);
     vl->addWidget(stageWidget, 1);
 
-    connect(m_player, &QtAV::AVPlayer::started, this, [this]() {
+    connect(m_player, &IMediaPlayer::started, this, [this]() {
         setState(Playing, tr("播放中"));
         m_stage->setCurrentWidget(m_video ? m_video : m_overlay);
     });
-    connect(m_player, &QtAV::AVPlayer::stopped, this, [this]() {
+    connect(m_player, &IMediaPlayer::stopped, this, [this]() {
         if (m_state != Failed) {
             setState(Idle, tr("已停止"));
         }
     });
-    connect(m_player, &QtAV::AVPlayer::error, this, [this](const QtAV::AVError &e) {
+    connect(m_player, &IMediaPlayer::failed, this, [this](const QString &msg) {
         setState(Failed, tr("播放失败"));
-        m_overlayText->setToolTip(e.string());
+        m_overlayText->setToolTip(msg);
     });
 
     setState(Idle, tr("未连接"));
@@ -147,7 +143,7 @@ void VideoTile::play(const QUrl &url)
         return;
     }
     setState(Connecting, tr("连接中…"));
-    m_player->setFile(url.toString());
+    m_player->open(url);
     m_player->play();
 }
 

@@ -7,6 +7,8 @@ SOURCES += \
     platform/mock_platform_api.cpp \
     player/video_tile.cpp \
     player/video_grid.cpp \
+    player/media_factory.cpp \
+    player/qtav_media_player.cpp \
     ui/theme.cpp \
     ui/icons.cpp \
     ui/toast.cpp \
@@ -25,6 +27,9 @@ HEADERS += \
     platform/mock_platform_api.h \
     player/video_tile.h \
     player/video_grid.h \
+    player/media_player.h \
+    player/media_factory.h \
+    player/qtav_media_player.h \
     ui/theme.h \
     ui/icons.h \
     ui/toast.h \
