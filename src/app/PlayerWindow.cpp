@@ -5,6 +5,7 @@
 #include "ui/toast.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
+#include "ui/video_settings_dialog.h"
 #include "player/video_grid.h"
 
 #include <QApplication>
@@ -115,6 +116,16 @@ void PlayerWindow::buildUi()
     settingsBtn->setToolTip(tr("设置"));
     settingsBtn->setPopupMode(QToolButton::InstantPopup);
     auto *settingsMenu = new QMenu(settingsBtn);
+    auto *videoAct = settingsMenu->addAction(tr("视频设置…"));
+    connect(videoAct, &QAction::triggered, this, [this]() {
+        VideoSettingsDialog dlg(this);
+        dlg.setSettings(m_grid ? m_grid->videoSettings() : VideoSettings());
+        connect(&dlg, &VideoSettingsDialog::settingsChanged, this,
+                [this](const VideoSettings &s) {
+                    if (m_grid) m_grid->setVideoSettings(s);
+                });
+        dlg.exec();
+    });
     auto *themeAct = settingsMenu->addAction(tr("切换主题（深/浅）"));
     connect(themeAct, &QAction::triggered, this, [this]() {
         const QString cur = ThemeManager::instance().presetName();
