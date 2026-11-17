@@ -223,6 +223,14 @@ void PlayerWindow::buildUi()
     connect(m_grid, &VideoGrid::activeChannelChanged, this, &PlayerWindow::onActiveChannelChanged);
     connect(m_grid, &VideoGrid::retryRequested, this, &PlayerWindow::onRetryRequested);
     connect(m_grid, &VideoGrid::maximizeRequested, this, &PlayerWindow::onMaximizeRequested);
+    connect(m_grid, &VideoGrid::snapshotTaken, this,
+            [this](const zp::ChannelRef &, const QString &path, bool ok) {
+        if (ok) {
+            toastSuccess(tr("已抓图：%1").arg(path));
+        } else {
+            toastError(tr("抓图失败"));
+        }
+    });
     connect(m_grid, &VideoGrid::streamClosed, this, [this](const zp::ChannelRef &ch) {
         m_api->stopPlay(ch);
     });

@@ -50,6 +50,8 @@ signals:
     void closeRequested(const zp::ChannelRef &ch);
     void retryRequested(const zp::ChannelRef &ch);
     void maximizeRequested(const zp::ChannelRef &ch);
+    // Emitted after the footer's snapshot action. path is where it was saved.
+    void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
@@ -58,6 +60,7 @@ protected:
 private:
     void setState(State state, const QString &text);
     void refreshSelectionStyle();
+    void takeSnapshot();
 
     ChannelRef m_channel;
     QString m_name;
@@ -73,6 +76,7 @@ private:
     QPushButton *m_retryBtn = nullptr;
     QLabel *m_status = nullptr;
     QLabel *m_title = nullptr;
+    QWidget *m_footer = nullptr;        // bottom action bar (snapshot, ...)
 };
 
 } // namespace zp

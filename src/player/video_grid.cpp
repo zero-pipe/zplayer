@@ -34,8 +34,8 @@ VideoGrid::VideoGrid(QWidget *parent)
     m_gridHost->setObjectName(QStringLiteral("GridHost"));
     m_gridHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_grid = new QGridLayout(m_gridHost);
-    m_grid->setContentsMargins(8, 8, 8, 8);
-    m_grid->setSpacing(6);
+    m_grid->setContentsMargins(0, 0, 0, 0);
+    m_grid->setSpacing(3);   // gaps show the grid-host color as separator lines
 
     m_stack = new QStackedLayout(this);
     m_stack->setContentsMargins(0, 0, 0, 0);
@@ -189,6 +189,7 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
     connect(tile, &VideoTile::closeRequested, this, &VideoGrid::closeStream);
     connect(tile, &VideoTile::retryRequested, this, &VideoGrid::retryRequested);
     connect(tile, &VideoTile::maximizeRequested, this, &VideoGrid::maximizeRequested);
+    connect(tile, &VideoTile::snapshotTaken, this, &VideoGrid::snapshotTaken);
     return tile;
 }
 

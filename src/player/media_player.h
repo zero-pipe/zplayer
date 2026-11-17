@@ -118,6 +118,22 @@ public:
     void setVideoSettings(const VideoSettings &settings) { m_settings = settings; applyVideoSettings(); }
     VideoSettings videoSettings() const { return m_settings; }
 
+    // Capture the current video frame to an image file. Returns true if the
+    // request was dispatched (some engines, e.g. mpv, write asynchronously).
+    // Default implementation grabs the renderer widget; engines may override
+    // with a native capture (better quality / no UI chrome).
+    virtual bool grabSnapshot(const QString &filePath)
+    {
+        if (!filePath.isEmpty()) {
+            if (IMediaRenderer *r = renderer()) {
+                if (QWidget *w = r->widget()) {
+                    return w->grab().save(filePath);
+                }
+            }
+        }
+        return false;
+    }
+
     virtual MediaState state() const = 0;
 
     // Human-readable backend name for diagnostics ("QtAV", "libmpv", ...).

@@ -1,5 +1,6 @@
 #include "player/video_tile.h"
 #include "player/media_factory.h"
+#include "ui/icons.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -10,6 +11,10 @@
 #include <QMouseEvent>
 #include <QStyle>
 #include <QFontMetrics>
+#include <QStandardPaths>
+#include <QDateTime>
+#include <QDir>
+#include <QRegExp>
 
 namespace zp {
 
@@ -105,11 +110,28 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     }
     m_stage->addWidget(m_overlay);
 
+    // --- Footer: bottom action bar (snapshot now, AI actions later) ---
+    m_footer = new QWidget(this);
+    m_footer->setObjectName(QStringLiteral("TileFooter"));
+    auto *fl = new QHBoxLayout(m_footer);
+    fl->setContentsMargins(8, 3, 8, 3);
+    fl->setSpacing(6);
+    auto *snapBtn = new QToolButton(m_footer);
+    snapBtn->setObjectName(QStringLiteral("TileBtn"));
+    snapBtn->setIcon(QIcon(icons::camera(true)));
+    snapBtn->setIconSize(QSize(15, 15));
+    snapBtn->setToolTip(tr("抓图"));
+    snapBtn->setCursor(Qt::PointingHandCursor);
+    connect(snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
+    fl->addWidget(snapBtn);
+    fl->addStretch(1);
+
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(1, 1, 1, 1);
     vl->setSpacing(0);
     vl->addWidget(header);
     vl->addWidget(stageWidget, 1);
+    vl->addWidget(m_footer);
 
     connect(m_player, &IMediaPlayer::started, this, [this]() {
         setState(Playing, tr("播放中"));
@@ -159,6 +181,25 @@ void VideoTile::applyVideoSettings(const VideoSettings &settings)
     if (m_player) {
         m_player->setVideoSettings(settings);
     }
+}
+
+void VideoTile::takeSnapshot()
+{
+    if (!m_player || m_state != Playing) {
+        emit snapshotTaken(m_channel, QString(), false);
+        return;
+    }
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (dir.isEmpty()) {
+        dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    QString safe = m_name.isEmpty() ? m_channel.channelId : m_name;
+    safe.replace(QRegExp(QStringLiteral("[\\\\/:*?\"<>|\\s]+")), QStringLiteral("_"));
+    const QString path = QDir(dir).filePath(
+        QStringLiteral("%1_%2.png").arg(safe, stamp));
+    const bool ok = m_player->grabSnapshot(path);
+    emit snapshotTaken(m_channel, path, ok);
 }
 
 void VideoTile::showConnecting(const QString &text)

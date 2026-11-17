@@ -22,6 +22,7 @@ public:
     void stop() override;
     void setMuted(bool muted) override;
     void setVolume(int volume) override;
+    bool grabSnapshot(const QString &filePath) override;
     MediaState state() const override { return m_state; }
     QString backendName() const override { return QStringLiteral("libmpv"); }
 

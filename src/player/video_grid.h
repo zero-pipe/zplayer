@@ -60,6 +60,7 @@ signals:
     void retryRequested(const zp::ChannelRef &ch);
     void maximizeRequested(const zp::ChannelRef &ch);
     void layoutChanged(int index);
+    void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };

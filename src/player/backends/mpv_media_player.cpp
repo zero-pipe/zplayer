@@ -256,6 +256,20 @@ void MpvMediaPlayer::setVolume(int volume)
     }
 }
 
+// Native snapshot: let mpv write the current decoded frame ("video" = no OSD
+// or subtitles). Asynchronous — the file appears shortly after this returns.
+bool MpvMediaPlayer::grabSnapshot(const QString &filePath)
+{
+    if (!m_holder || !m_holder->h || filePath.isEmpty()) {
+        return false;
+    }
+    QString local = filePath;
+    local.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    QByteArray path = local.toUtf8();
+    const char *cmd[] = {"screenshot-to-file", path.constData(), "video", nullptr};
+    return mpv_command(m_holder->h, cmd) >= 0;
+}
+
 // Map the engine-neutral settings onto libmpv properties. Most of these are
 // live properties, so they take effect on the current stream immediately and
 // persist into the next loadfile().

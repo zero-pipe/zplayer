@@ -227,17 +227,20 @@ QSplitter#BodySplitter::handle { background: %borderStrong%; }
 
 QWidget#VideoArea { background: %bgRoot%; }
 QWidget#GridEmpty { background: transparent; }
+/* Grid divider: the host background shows through the inter-cell gaps,
+   producing a clear 田-style cross between split tiles. */
+QWidget#GridHost { background: %borderStrong%; }
 
 QWidget#VideoTile {
     background: %videoBg%;
     border: 1px solid %borderStrong%;
-    border-radius: 12px;
+    border-radius: 6px;
 }
 QWidget#VideoTile[selected="true"] {
     border: 2px solid %accent%;
     background: %accentSoft%;
 }
-QWidget#VideoTile[selected="false"]:hover { border-color: %accentSoft2%; }
+QWidget#VideoTile[selected="false"]:hover { border-color: %accent%; }
 
 QWidget#TileHeader {
     background: %bgPanel%;
@@ -245,9 +248,16 @@ QWidget#TileHeader {
 QWidget#TileHeader:hover, QWidget#VideoTile[selected="true"] QWidget#TileHeader {
     background: %accentSoft%;
 }
-QWidget#TileHeader { border-top-left-radius: 12px; border-top-right-radius: 12px; }
+QWidget#TileHeader { border-top-left-radius: 6px; border-top-right-radius: 6px; }
 QLabel#TileTitle { color: %text%; font-size: 12.5px; font-weight: 600; }
 QLabel#TileStatus { font-size: 11px; }
+
+QWidget#TileFooter {
+    background: %bgPanel%;
+    border-top: 1px solid %divider%;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
 
 QToolButton#TileBtn {
     background: %bgPanel%;
