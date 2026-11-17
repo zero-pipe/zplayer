@@ -5,10 +5,9 @@ SOURCES += \
     platform/platform_http_client.cpp \
     platform/web_platform_api.cpp \
     platform/mock_platform_api.cpp \
+    player/media_factory.cpp \
     player/video_tile.cpp \
     player/video_grid.cpp \
-    player/media_factory.cpp \
-    player/qtav_media_player.cpp \
     ui/theme.cpp \
     ui/icons.cpp \
     ui/toast.cpp \
@@ -25,11 +24,10 @@ HEADERS += \
     platform/platform_http_client.h \
     platform/web_platform_api.h \
     platform/mock_platform_api.h \
-    player/video_tile.h \
-    player/video_grid.h \
     player/media_player.h \
     player/media_factory.h \
-    player/qtav_media_player.h \
+    player/video_tile.h \
+    player/video_grid.h \
     ui/theme.h \
     ui/icons.h \
     ui/toast.h \
@@ -38,5 +36,17 @@ HEADERS += \
     ui/device_tree_view.h \
     ui/ptz_joystick.h \
     ui/ptz_panel.h
+
+# ---- Media engine implementations (guarded by app.pro CONFIG) ----
+contains(DEFINES, ZP_WITH_MPV) {
+    SOURCES += player/mpv_media_player.cpp
+    HEADERS += player/mpv_media_player.h
+    # qthelper.hpp is a header-only helper, included by mpv_media_player.cpp.
+}
+
+contains(DEFINES, ZP_WITH_QTAV) {
+    SOURCES += player/qtav_media_player.cpp
+    HEADERS += player/qtav_media_player.h
+}
 
 RESOURCES += resources/resources.qrc

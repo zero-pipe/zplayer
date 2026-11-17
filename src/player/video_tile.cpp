@@ -180,7 +180,10 @@ void VideoTile::setState(State state, const QString &text)
 
     m_overlayText->setText(text);
     m_retryBtn->setVisible(state == Failed);
-    if (state == Playing) {
+    // Keep the video widget visible while connecting/playing so the engine's
+    // OpenGL context is created early (libmpv needs its render context ready
+    // before the first frame can be decoded).
+    if (state == Playing || state == Connecting) {
         m_stage->setCurrentWidget(m_video ? m_video : m_overlay);
     } else {
         m_stage->setCurrentWidget(m_overlay);

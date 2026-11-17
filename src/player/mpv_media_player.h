@@ -1,0 +1,52 @@
+#ifndef ZP_MPV_MEDIA_PLAYER_H
+#define ZP_MPV_MEDIA_PLAYER_H
+
+#include "player/media_player.h"
+
+#include <QPointer>
+
+namespace zp {
+
+// IMediaPlayer implementation backed by libmpv (render API over OpenGL).
+// This is the primary engine; QtAV is kept only as a legacy fallback.
+class MpvMediaPlayer : public IMediaPlayer {
+    Q_OBJECT
+public:
+    explicit MpvMediaPlayer(QObject *parent = nullptr);
+    ~MpvMediaPlayer() override;
+
+    IMediaRenderer *renderer() override;
+    void open(const QUrl &url) override;
+    void play() override;
+    void pause() override;
+    void stop() override;
+    void setMuted(bool muted) override;
+    void setVolume(int volume) override;
+    MediaState state() const override { return m_state; }
+    QString backendName() const override { return QStringLiteral("libmpv"); }
+
+private slots:
+    void onMpvEvents();
+
+private:
+    class Renderer;
+    struct MpvHolder;    void setState(MediaState s);
+    void handleEvent(void *event);
+    void loadPending();          // loadfile once the render context is ready
+    void onRenderReady();        // called by the Renderer after GL init
+
+public:
+    // Raw mpv handle, for the Renderer's render-context creation.
+    void *mpvHandle() const;
+
+private:
+    Renderer *m_renderer = nullptr;
+    MpvHolder *m_holder = nullptr;
+    MediaState m_state = MediaState::Idle;
+    bool m_renderReady = false;  // mpv_render_context created
+    QString m_pendingUrl;        // URL waiting for the render context
+};
+
+} // namespace zp
+
+#endif // ZP_MPV_MEDIA_PLAYER_H

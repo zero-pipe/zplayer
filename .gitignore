@@ -1,8 +1,8 @@
 # build outputs
 /build/
-/3rdpart/qtav/_build/
 
 # vendored 3rd-party sources / reference material (large, not committed)
+/3rdpart/qtav/
 /3rdpart/mpv/
 /3rdpart/mpv-examples/
 /3rdpart/iina/
@@ -36,6 +36,10 @@ ui_*.h
 *.exp
 *.pdb
 *.ilk
+
+# mpv SDK: keep the (small) import library so the app links without the
+# 184 MB runtime DLL set; the bin/x64 DLLs stay untracked on purpose.
+!/3rdpart/mpv-sdk/lib/**/*.lib
 
 #design
 docs/design/*.png

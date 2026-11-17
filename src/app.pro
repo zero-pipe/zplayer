@@ -10,15 +10,30 @@ msvc {
     QMAKE_CXXFLAGS += /utf-8
 }
 
-# The QtAV engine is prebuilt into 3rdpart/qtav/_build (see build.bat).
-# Override with qmake QTAV_BUILD_DIR=<dir> if you build the engine elsewhere.
-isEmpty(QTAV_BUILD_DIR): QTAV_BUILD_DIR = $$clean_path($$PWD/../3rdpart/qtav/_build)
-BUILD_DIR = $$QTAV_BUILD_DIR
+# ---- Media engines ----
+# Primary: libmpv (prebuilt SDK, x64). QtAV is a legacy fallback and only
+# compiled when CONFIG+=with_qtav is passed (requires an x86 toolchain + the
+# x86-only qtav-sdk). The QtAV adapter sources are always present in the tree.
 
-QTAV_ROOT = $$clean_path($$PWD/../3rdpart/qtav)
-include($$QTAV_ROOT/.qmake.conf)
-include($$QTAV_ROOT/src/libQtAV.pri)
-include($$QTAV_ROOT/widgets/libQtAVWidgets.pri)
+# libmpv SDK (default on)
+isEmpty(MPV_SDK_DIR): MPV_SDK_DIR = $$clean_path($$PWD/../3rdpart/mpv-sdk)
+exists($$MPV_SDK_DIR/mpv-sdk.pri) {
+    include($$MPV_SDK_DIR/mpv-sdk.pri)
+    DEFINES += ZP_WITH_MPV
+} else {
+    warning("mpv-sdk not found at $$MPV_SDK_DIR; media engine will be unavailable")
+}
+
+# QtAV SDK (opt-in)
+with_qtav {
+    isEmpty(QTAV_SDK_DIR): QTAV_SDK_DIR = $$clean_path($$PWD/../3rdpart/qtav-sdk)
+    exists($$QTAV_SDK_DIR/qtav-sdk.pri) {
+        include($$QTAV_SDK_DIR/qtav-sdk.pri)
+        DEFINES += ZP_WITH_QTAV
+    } else {
+        error("CONFIG+=with_qtav but qtav-sdk not found at $$QTAV_SDK_DIR")
+    }
+}
 
 INCLUDEPATH += $$PWD
 include(app.pri)

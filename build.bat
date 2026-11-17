@@ -2,50 +2,42 @@
 setlocal enabledelayedexpansion
 
 REM ===== Toolchain / dependency paths (edit for your machine) =====
-set "VCVARS=D:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars32.bat"
-set "QT_BIN=D:\Qt\Qt5.14.2\5.14.2\msvc2017\bin"
-set "FFMPEG=F:\06.chenqw\4_ffplay\ffmpeg-4.2.1-win32-dev"
-set "FFMPEG_DLLS=F:\06.chenqw\4_ffplay\dll"
+set "VCVARS=D:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat"
+set "QT_BIN=D:\Qt\Qt5.14.2\5.14.2\msvc2017_64\bin"
 REM ================================================================
 
 set "ROOT=%~dp0"
-set "ENGINE=%ROOT%3rdpart\qtav\_build"
-set "AINBUILD=%ROOT%build"
+set "MPV_SDK=%ROOT%3rdpart\mpv-sdk"
+set "QTAV_SDK=%ROOT%3rdpart\qtav-sdk"
+set "BUILDDIR=%ROOT%build"
+set "OUTBIN=%ROOT%out"
 
 call "%VCVARS%" || goto :err
 set "PATH=%QT_BIN%;%PATH%"
-set "INCLUDE=%FFMPEG%\include;%INCLUDE%"
-set "LIB=%FFMPEG%\lib;%LIB%"
 
 echo ============================================================
-echo [1/2] Building QtAV engine...
+echo Building zero-player (x64, libmpv)...
 echo ============================================================
-if not exist "%ENGINE%" mkdir "%ENGINE%"
-pushd "%ENGINE%"
-"%QT_BIN%\qmake.exe" "..\QtAV.pro" -r CONFIG+=release CONFIG+=no-examples || goto :err
+if not exist "%BUILDDIR%" mkdir "%BUILDDIR%"
+pushd "%BUILDDIR%"
+"%QT_BIN%\qmake.exe" "%ROOT%src\app.pro" CONFIG+=release MPV_SDK_DIR="%MPV_SDK%" || goto :err
 nmake /NOLOGO || goto :err
 popd
 
-echo ============================================================
-echo [2/2] Building zero-player...
-echo ============================================================
-if not exist "%AINBUILD%" mkdir "%AINBUILD%"
-pushd "%AINBUILD%"
-"%QT_BIN%\qmake.exe" -cache "%ENGINE%\.qmake.cache" "%ROOT%src\app.pro" CONFIG+=release || goto :err
-nmake /NOLOGO || goto :err
-popd
+set "APPEXE=%BUILDDIR%\release\zero-player.exe"
+if not exist "%APPEXE%" set "APPEXE=%BUILDDIR%\zero-player.exe"
 
-set "OUTBIN=%ENGINE%\bin"
-echo.
-echo Build OK. Output: %OUTBIN%\zero-player.exe
+if not exist "%OUTBIN%" mkdir "%OUTBIN%"
+copy /y "%APPEXE%" "%OUTBIN%\" >nul
 
-echo Deploying Qt runtime + FFmpeg DLLs...
+echo Deploying Qt runtime + libmpv + dependencies...
 "%QT_BIN%\windeployqt.exe" --release --no-translations "%OUTBIN%\zero-player.exe" >nul 2>&1
-rem Qt5OpenGL is linked but not always auto-detected; copy it explicitly.
 if exist "%QT_BIN%\Qt5OpenGL.dll" copy /y "%QT_BIN%\Qt5OpenGL.dll" "%OUTBIN%" >nul
-if exist "%FFMPEG_DLLS%" copy /y "%FFMPEG_DLLS%\*.dll" "%OUTBIN%" >nul
-echo Done. Run: "%OUTBIN%\zero-player.exe"
-echo (Optional) set ZERO_PLAYER_DEMO_FILE=path\to\video.mp4 to play a local sample.
+REM libmpv + its runtime dependency DLLs (ffmpeg, libass, ...).
+if exist "%MPV_SDK%\bin\x64" copy /y "%MPV_SDK%\bin\x64\*.dll" "%OUTBIN%" >nul
+
+echo.
+echo Build OK. Run: "%OUTBIN%\zero-player.exe"
 exit /b 0
 
 :err
