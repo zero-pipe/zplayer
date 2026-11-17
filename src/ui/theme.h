@@ -1,29 +1,67 @@
 #ifndef ZP_THEME_H
 #define ZP_THEME_H
 
+#include <QString>
+#include <QColor>
+#include <QObject>
+
 class QApplication;
 
 namespace zp {
 
-// Applies the "cold-blue command center" theme: Fusion style, dark palette and
-// the global stylesheet (:/theme.qss). Call once at startup.
-void applyTheme(QApplication &app);
+// All visual parameters as plain data so they can be swapped at runtime and
+// persisted. Two built-in presets: "light" (default, aligned with the web
+// platform's blue/white) and "dark".
+struct ThemeTokens {
+    QString name;                 // "light" | "dark"
 
-// Access to the design tokens used by painted widgets (icons/overlays).
-namespace color {
-struct Rgb { int r, g, b; };
-constexpr Rgb kBgRoot      {0x0B, 0x0F, 0x14};
-constexpr Rgb kBgPanel     {0x12, 0x18, 0x21};
-constexpr Rgb kBgElevated  {0x18, 0x20, 0x2B};
-constexpr Rgb kBorder      {0x23, 0x2D, 0x3A};
-constexpr Rgb kTextPrimary {0xE6, 0xED, 0xF3};
-constexpr Rgb kTextSecond  {0x9A, 0xA7, 0xB6};
-constexpr Rgb kAccent      {0x2F, 0x81, 0xF7};
-constexpr Rgb kAccent2     {0x22, 0xB8, 0xCF};
-constexpr Rgb kSuccess     {0x2E, 0xCC, 0x71};
-constexpr Rgb kWarning     {0xE3, 0xB3, 0x41};
-constexpr Rgb kDanger      {0xF8, 0x51, 0x49};
-} // namespace color
+    QColor bgRoot, bgPanel, bgElevated, bgInput, bgHover;
+    QColor border, borderStrong, divider;
+    QColor text, text2, muted;
+
+    QColor accent, accent2, accentSoft, accentSoft2;
+    QColor success, successSoft;
+    QColor warning, warningSoft;
+    QColor danger, dangerSoft;
+
+    QColor videoBg;
+
+    int radiusPanel = 12;
+    int radiusCard = 10;
+    int radiusBtn = 9;
+    QString fontFamily = QStringLiteral("\"Segoe UI\", \"Microsoft YaHei UI\", \"PingFang SC\", sans-serif");
+    QString monoFamily = QStringLiteral("\"Cascadia Mono\", Consolas, monospace");
+
+    static ThemeTokens light();
+    static ThemeTokens dark();
+    static ThemeTokens preset(const QString &name);
+};
+
+class ThemeManager : public QObject {
+    Q_OBJECT
+public:
+    static ThemeManager &instance();
+
+    // Applies Fusion + palette + generated stylesheet. Call once at startup.
+    void apply(QApplication &app);
+
+    const ThemeTokens &tokens() const { return m_tokens; }
+    QString presetName() const { return m_tokens.name; }
+
+    // Switch to a built-in preset ("light"/"dark") and restyle live.
+    void setPreset(const QString &name);
+
+signals:
+    void themeChanged();
+
+private:
+    ThemeManager() = default;
+    void restyle();
+    QString buildStyleSheet() const;
+
+    QApplication *m_app = nullptr;
+    ThemeTokens m_tokens = ThemeTokens::light();
+};
 
 } // namespace zp
 

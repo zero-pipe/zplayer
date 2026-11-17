@@ -10,6 +10,8 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QPointer>
+#include <QTimer>
+#include <QWidget>
 #include <QDialog>
 
 namespace {
@@ -55,6 +57,27 @@ private:
             }
         });
         m_login->show();
+        scheduleShot();
+    }
+
+    // Dev only: grab a widget to a PNG after it has laid out (ZP_SHOT=path).
+    QWidget *shotTarget() const
+    {
+        if (m_player) return m_player;
+        if (m_login) return m_login;
+        return nullptr;
+    }
+    void scheduleShot()
+    {
+        const QString path = qEnvironmentVariable("ZP_SHOT");
+        if (path.isEmpty()) {
+            return;
+        }
+        QTimer::singleShot(1200, this, [this, path]() {
+            if (QWidget *w = shotTarget()) {
+                w->grab().save(path, "PNG");
+            }
+        });
     }
 
     void beginLogin(const QString &baseUrl, const QString &user,
@@ -138,6 +161,7 @@ private:
             m_login->deleteLater();
             m_login = nullptr;
         }
+        scheduleShot();
     }
 
     QApplication &m_app;
@@ -161,7 +185,8 @@ int main(int argc, char *argv[])
     qRegisterMetaType<zp::DeviceNode>("zp::DeviceNode");
     qRegisterMetaType<zp::PresetInfo>("zp::PresetInfo");
 
-    zp::applyTheme(app);
+    zp::ThemeManager::instance().apply(app);
+    zp::ThemeManager::instance().setPreset(zp::SessionManager::instance().theme());
 
     AppController controller(app);
     controller.start();

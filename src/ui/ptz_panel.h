@@ -5,50 +5,42 @@
 #include "platform/platform_api.h"
 
 QT_BEGIN_NAMESPACE
-class QToolButton;
 class QSlider;
 class QLabel;
-class QListWidget;
 QT_END_NAMESPACE
 
 namespace zp {
 
-class Toast;
+class PtzJoystick;
 
-// Right panel: PTZ direction/zoom + speed + presets. Commands go through the
-// platform (pass-through), never directly to the device.
+// Right panel: telemetry joystick + speed. Commands go through the platform
+// (pass-through). Phase 1 scope: direction + speed only (no presets/lens).
 class PtzPanel : public QWidget {
     Q_OBJECT
 public:
     explicit PtzPanel(QWidget *parent = nullptr);
 
     void setTarget(const ChannelRef &ch, const QString &name, bool ptzCapable);
-    void setPresets(const QList<PresetInfo> &presets);
 
 signals:
     void commandIssued(const zp::ChannelRef &ch, const zp::PtzCommand &cmd);
-    void queryPresetsRequested(const zp::ChannelRef &ch);
-    void callPresetRequested(const zp::ChannelRef &ch, int presetId);
-    void addPresetRequested(const zp::ChannelRef &ch, int presetId);
-    void deletePresetRequested(const zp::ChannelRef &ch, int presetId);
 
 private:
-    void send(PtzCommand::Type type);
-    QToolButton *makeDirButton(const QString &glyph, const QString &tip, PtzCommand::Type type);
+    void applySpeedToCommand(PtzCommand &cmd) const;
     void updateEnabled();
-    void refreshPresets();
 
     ChannelRef m_channel;
     QString m_name;
     bool m_ptzEnabled = false;
-    int m_speed = 5;
+    int m_baseSpeed = 5;
 
     QLabel *m_target = nullptr;
+    PtzJoystick *m_stick = nullptr;
+    QLabel *m_pan = nullptr;
+    QLabel *m_tilt = nullptr;
+    QLabel *m_spd = nullptr;
     QSlider *m_speedSlider = nullptr;
     QLabel *m_speedValue = nullptr;
-    QList<QToolButton *> m_dirButtons;
-    QListWidget *m_presetList = nullptr;
-    QWidget *m_ptzSection = nullptr;
 };
 
 } // namespace zp

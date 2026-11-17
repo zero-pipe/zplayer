@@ -10,8 +10,10 @@ SOURCES += \
     ui/theme.cpp \
     ui/icons.cpp \
     ui/toast.cpp \
+    ui/icon_field.cpp \
     ui/login_dialog.cpp \
     ui/device_tree_view.cpp \
+    ui/ptz_joystick.cpp \
     ui/ptz_panel.cpp
 
 HEADERS += \
@@ -26,8 +28,10 @@ HEADERS += \
     ui/theme.h \
     ui/icons.h \
     ui/toast.h \
+    ui/icon_field.h \
     ui/login_dialog.h \
     ui/device_tree_view.h \
+    ui/ptz_joystick.h \
     ui/ptz_panel.h
 
 RESOURCES += resources/resources.qrc

@@ -43,11 +43,6 @@ private slots:
     void onActiveChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
     void onPtzCommand(const zp::ChannelRef &ch, const zp::PtzCommand &cmd);
     void onPtzAcknowledged(const zp::ChannelRef &ch, int cmdType, int speed);
-    void onQueryPresets(const zp::ChannelRef &ch);
-    void onPresetsReady(const zp::ChannelRef &ch, const QList<zp::PresetInfo> &presets);
-    void onCallPreset(const zp::ChannelRef &ch, int presetId);
-    void onAddPreset(const zp::ChannelRef &ch, int presetId);
-    void onDeletePreset(const zp::ChannelRef &ch, int presetId);
     void onMaximizeRequested(const zp::ChannelRef &ch);
     void onRetryRequested(const zp::ChannelRef &ch);
     void onSessionExpired();

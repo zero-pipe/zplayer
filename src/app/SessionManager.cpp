@@ -106,4 +106,34 @@ void SessionManager::setLastLayout(int index)
     s.setValue(kLayout, index);
 }
 
+QString SessionManager::theme() const
+{
+    QSettings s;
+    return s.value("ui/theme", QStringLiteral("light")).toString();
+}
+
+void SessionManager::setTheme(const QString &name)
+{
+    QSettings s;
+    s.setValue("ui/theme", name);
+}
+
+QString SessionManager::serverAlias() const
+{
+    QSettings s;
+    return s.value("server/alias").toString();
+}
+
+void SessionManager::setServerAlias(const QString &alias)
+{
+    QSettings s;
+    s.setValue("server/alias", alias);
+}
+
+void SessionManager::setBaseUrl(const QString &baseUrl)
+{
+    QSettings s;
+    s.setValue(kBaseUrl, baseUrl);
+}
+
 } // namespace zp

@@ -33,6 +33,17 @@ public:
     int lastLayout() const;
     void setLastLayout(int index);
 
+    // UI theme preset ("light" | "dark").
+    QString theme() const;
+    void setTheme(const QString &name);
+
+    // Server display alias (shown in settings, optional).
+    QString serverAlias() const;
+    void setServerAlias(const QString &alias);
+
+    // Persist just the server base URL (from the settings sheet).
+    void setBaseUrl(const QString &baseUrl);
+
 private:
     SessionManager() = default;
     static QString encode(const QString &plain);

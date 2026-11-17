@@ -4,6 +4,7 @@
 #include "ui/ptz_panel.h"
 #include "ui/toast.h"
 #include "ui/icons.h"
+#include "ui/theme.h"
 #include "player/video_grid.h"
 
 #include <QApplication>
@@ -22,7 +23,7 @@
 namespace zp {
 
 namespace {
-const char *kLayoutNames[] = {"1×1", "2×2", "3×3", "4×4", "1+5"};
+const char *kLayoutNames[] = {"1x1", "2x2", "3x3", "4x4", "1+5"};
 const VideoGrid::Layout kLayoutKinds[] = {
     VideoGrid::L1x1, VideoGrid::L2x2, VideoGrid::L3x3, VideoGrid::L4x4, VideoGrid::L1p5
 };
@@ -44,7 +45,6 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     connect(m_api, &IPlatformApi::playStarted, this, &PlayerWindow::onPlayStarted);
     connect(m_api, &IPlatformApi::streamFailed, this, &PlayerWindow::onStreamFailed);
     connect(m_api, &IPlatformApi::ptzAcknowledged, this, &PlayerWindow::onPtzAcknowledged);
-    connect(m_api, &IPlatformApi::presetsReady, this, &PlayerWindow::onPresetsReady);
     connect(m_api, &IPlatformApi::sessionExpired, this, &PlayerWindow::onSessionExpired);
     connect(m_api, &IPlatformApi::errorOccurred, this, &PlayerWindow::onError);
 
@@ -85,53 +85,53 @@ void PlayerWindow::buildUi()
     auto *logo = new QLabel(topBar);
     logo->setPixmap(icons::appLogo(28));
     logo->setFixedSize(28, 28);
-    auto *appName = new QLabel(QStringLiteral("ZeroPlayer"), topBar);
+    auto *appName = new QLabel(QStringLiteral("ZeroEngine"), topBar);
     appName->setObjectName(QStringLiteral("AppName"));
     tb->addWidget(logo);
     tb->addWidget(appName);
 
     tb->addSpacing(6);
-    m_groupChip = new QLabel(tr("根资源组"), topBar);
+    m_groupChip = new QLabel(tr("组织目录"), topBar);
     m_groupChip->setObjectName(QStringLiteral("GroupChip"));
     tb->addWidget(m_groupChip);
 
     tb->addStretch(1);
 
-    m_search = new QLineEdit(topBar);
-    m_search->setObjectName(QStringLiteral("SearchBox"));
-    m_search->setPlaceholderText(tr("搜索通道…"));
-    m_search->setClearButtonEnabled(true);
-    m_search->setFixedWidth(200);
-    tb->addWidget(m_search);
+    // Status: online channels
+    auto *statusLabel = new QLabel(topBar);
+    statusLabel->setObjectName(QStringLiteral("TopStatus"));
+    statusLabel->setText(QString::fromUtf8("● ") + tr("已连接"));
+    statusLabel->setStyleSheet(QStringLiteral("color:%1;font-size:12px;")
+                               .arg(ThemeManager::instance().tokens().text2.name()));
+    tb->addWidget(statusLabel);
+    tb->addSpacing(8);
 
-    tb->addSpacing(6);
+    // Settings (theme switch + server) gear
+    auto *settingsBtn = new QToolButton(topBar);
+    settingsBtn->setObjectName(QStringLiteral("IconBtn"));
+    settingsBtn->setIcon(QIcon(icons::glyph(icons::Gear, ThemeManager::instance().tokens().text2, 18)));
+    settingsBtn->setIconSize(QSize(18, 18));
+    settingsBtn->setCursor(Qt::PointingHandCursor);
+    settingsBtn->setToolTip(tr("设置"));
+    settingsBtn->setPopupMode(QToolButton::InstantPopup);
+    auto *settingsMenu = new QMenu(settingsBtn);
+    auto *themeAct = settingsMenu->addAction(tr("切换主题（深/浅）"));
+    connect(themeAct, &QAction::triggered, this, [this]() {
+        const QString cur = ThemeManager::instance().presetName();
+        const QString next = (cur == QLatin1String("dark")) ? QStringLiteral("light")
+                                                            : QStringLiteral("dark");
+        ThemeManager::instance().setPreset(next);
+        SessionManager::instance().setTheme(next);
+    });
+    settingsBtn->setMenu(settingsMenu);
+    tb->addWidget(settingsBtn);
 
-    // Layout segmented control
-    m_layoutGroup = new QButtonGroup(this);
-    m_layoutGroup->setExclusive(true);
-    auto *layoutRow = new QHBoxLayout();
-    layoutRow->setSpacing(4);
-    for (int i = 0; i < 5; ++i) {
-        auto *b = new QToolButton(topBar);
-        b->setObjectName(QStringLiteral("LayoutBtn"));
-        b->setText(QLatin1String(kLayoutNames[i]));
-        b->setCheckable(true);
-        b->setCursor(Qt::PointingHandCursor);
-        b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
-        m_layoutGroup->addButton(b, i);
-        layoutRow->addWidget(b);
-    }
-    connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
-            this, &PlayerWindow::onLayoutButtonClicked);
-    tb->addLayout(layoutRow);
-
-    tb->addSpacing(6);
+    tb->addSpacing(4);
 
     auto *userBtn = new QToolButton(topBar);
     userBtn->setObjectName(QStringLiteral("UserBtn"));
-    userBtn->setText(QString::fromUtf8("👤 %1").arg(m_session.username.isEmpty()
-                                                ? QStringLiteral("user")
-                                                : m_session.username));
+    userBtn->setText(m_session.username.isEmpty() ? QStringLiteral("user")
+                                                   : m_session.username);
     userBtn->setCursor(Qt::PointingHandCursor);
     userBtn->setPopupMode(QToolButton::InstantPopup);
     auto *userMenu = new QMenu(userBtn);
@@ -144,6 +144,55 @@ void PlayerWindow::buildUi()
     tb->addWidget(userBtn);
 
     rootLay->addWidget(topBar);
+
+    // ---------------- Workspace toolbar (layout + stream) ----------------
+    auto *wsToolbar = new QWidget(root);
+    wsToolbar->setObjectName(QStringLiteral("WsToolbar"));
+    wsToolbar->setFixedHeight(52);
+    auto *wt = new QHBoxLayout(wsToolbar);
+    wt->setContentsMargins(14, 0, 14, 0);
+    wt->setSpacing(8);
+
+    m_layoutGroup = new QButtonGroup(this);
+    m_layoutGroup->setExclusive(true);
+    for (int i = 0; i < 5; ++i) {
+        auto *b = new QToolButton(wsToolbar);
+        b->setObjectName(QStringLiteral("LayoutBtn"));
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
+        b->setIcon(QIcon(icons::glyph(
+            i == 0 ? icons::Grid1 : (i == 1 ? icons::Grid4 : icons::Grid9),
+            ThemeManager::instance().tokens().text2, 16)));
+        b->setIconSize(QSize(16, 16));
+        m_layoutGroup->addButton(b, i);
+        wt->addWidget(b);
+        if (i == 0 || i == 1 || i == 2) {
+            // group 1/4/9 as icon buttons; 4x4 and 1+5 keep text
+        }
+    }
+    // Give text labels to the irregular layouts so they're distinguishable.
+    if (auto *b = m_layoutGroup->button(3)) b->setText(QStringLiteral("16"));
+    if (auto *b = m_layoutGroup->button(4)) b->setText(QStringLiteral("1+5"));
+    connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+            this, &PlayerWindow::onLayoutButtonClicked);
+
+    wt->addSpacing(4);
+    auto *vsep = new QWidget(wsToolbar);
+    vsep->setFixedSize(1, 20);
+    vsep->setStyleSheet(QStringLiteral("background:%1;").arg(ThemeManager::instance().tokens().border.name()));
+    wt->addWidget(vsep);
+    wt->addSpacing(4);
+
+    m_search = new QLineEdit(wsToolbar);
+    m_search->setObjectName(QStringLiteral("SearchBox"));
+    m_search->setPlaceholderText(tr("搜索通道…"));
+    m_search->setClearButtonEnabled(true);
+    m_search->setFixedWidth(200);
+    wt->addWidget(m_search);
+    wt->addStretch(1);
+
+    rootLay->addWidget(wsToolbar);
 
     // ---------------- Body: 3 columns ----------------
     auto *body = new QWidget(root);
@@ -203,10 +252,6 @@ void PlayerWindow::buildUi()
     });
 
     connect(m_ptz, &PtzPanel::commandIssued, this, &PlayerWindow::onPtzCommand);
-    connect(m_ptz, &PtzPanel::queryPresetsRequested, this, &PlayerWindow::onQueryPresets);
-    connect(m_ptz, &PtzPanel::callPresetRequested, this, &PlayerWindow::onCallPreset);
-    connect(m_ptz, &PtzPanel::addPresetRequested, this, &PlayerWindow::onAddPreset);
-    connect(m_ptz, &PtzPanel::deletePresetRequested, this, &PlayerWindow::onDeletePreset);
 
     statusBar()->showMessage(tr("已登录：%1").arg(m_session.username));
 }
@@ -301,36 +346,6 @@ void PlayerWindow::onPtzCommand(const ChannelRef &ch, const PtzCommand &cmd)
 void PlayerWindow::onPtzAcknowledged(const ChannelRef &, int, int)
 {
     // Silent success; PTZ is fire-and-forget with immediate feedback.
-}
-
-void PlayerWindow::onQueryPresets(const ChannelRef &ch)
-{
-    m_api->queryPresets(ch);
-}
-
-void PlayerWindow::onPresetsReady(const ChannelRef &ch, const QList<PresetInfo> &presets)
-{
-    if (ch == m_active) {
-        m_ptz->setPresets(presets);
-    }
-}
-
-void PlayerWindow::onCallPreset(const ChannelRef &ch, int presetId)
-{
-    m_api->callPreset(ch, presetId);
-    toastInfo(tr("调用预置位 %1").arg(presetId));
-}
-
-void PlayerWindow::onAddPreset(const ChannelRef &ch, int presetId)
-{
-    m_api->addPreset(ch, presetId);
-    toastInfo(tr("保存预置位 %1").arg(presetId));
-}
-
-void PlayerWindow::onDeletePreset(const ChannelRef &ch, int presetId)
-{
-    m_api->deletePreset(ch, presetId);
-    toastInfo(tr("删除预置位 %1").arg(presetId));
 }
 
 void PlayerWindow::onMaximizeRequested(const ChannelRef &ch)

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZeroPlayer · 播放</title>
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
+  <svg class="i" id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+</button>
+
+<div class="player">
+  <!-- ======================= 顶栏 ======================= -->
+  <header class="topbar">
+    <div class="logo">
+      <span class="mark">
+        <svg viewBox="0 0 40 40" fill="none">
+          <path d="M20 4 33 11.5 33 26.5 20 34 7 26.5 7 11.5 Z" fill="#1565C0"/>
+          <circle cx="20" cy="19" r="7.4" fill="#fff"/>
+          <circle cx="20" cy="19" r="4" fill="#1E88E5"/>
+        </svg>
+      </span>
+      <span class="name"><b>Zero</b>Engine</span>
+    </div>
+
+    <div class="group-chip">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h6l2 2h8v12H4z" stroke-linejoin="round"/></svg>
+      <span>智慧园区</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="status">
+      <div class="status-item"><span class="dot ok"></span>在线 6 / 8</div>
+    </div>
+
+    <button class="icon-btn" title="设置">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+    </button>
+
+    <button class="user-btn">
+      <span class="av">A</span><span class="un">admin</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+  </header>
+
+  <!-- ======================= 三栏 ======================= -->
+  <div class="body">
+    <!-- ---------- 左：组织目录（对齐 web 分组/通道） ---------- -->
+    <aside class="left-panel">
+      <div class="panel-head">
+        <span class="panel-title">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h6l2 2h8v12H4z" stroke-linejoin="round"/></svg>
+          组织目录
+        </span>
+      </div>
+
+      <div class="left-search">
+        <div class="search-box">
+          <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></span>
+          <input placeholder="搜索设备 / 通道…">
+        </div>
+      </div>
+
+      <div class="tree">
+        <div class="tree-group"><span class="arrow">▾</span><span>智慧园区总控中心</span><span class="cnt">0001</span></div>
+
+        <div class="tree-group" style="padding-left:22px"><span class="arrow">▾</span><span>周边防线与出入口</span></div>
+        <div class="tree-leaf on">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">01_东门主入口高速球机</div></div>
+        </div>
+        <div class="tree-leaf">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">02_南侧周界球机</div></div>
+        </div>
+        <div class="tree-leaf">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">03_地下车库A区枪机</div></div>
+        </div>
+
+        <div class="tree-group" style="padding-left:22px"><span class="arrow">▸</span><span>危化品仓库与变电站</span></div>
+        <div class="tree-leaf">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">04_变电站双光谱热成像</div></div>
+        </div>
+        <div class="tree-leaf">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">05_智能仓储月台球机</div></div>
+        </div>
+        <div class="tree-leaf off">
+          <span class="cam"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10.5 21 8v8l-6-2.5z"/></svg></span>
+          <div class="info"><div class="nm">06_库房固定枪机</div></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ---------- 中：视频工作区 ---------- -->
+    <main class="workspace">
+      <div class="toolbar">
+        <div class="seg">
+          <button class="on" title="1 画面"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+          <button title="4 分屏"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
+          <button title="9 分屏"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/><rect x="16" y="4" width="4" height="4"/><rect x="4" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="16" y="10" width="4" height="4"/><rect x="4" y="16" width="4" height="4"/><rect x="10" y="16" width="4" height="4"/><rect x="16" y="16" width="4" height="4"/></svg></button>
+        </div>
+        <div class="vsep"></div>
+        <div class="stream-chip"><span class="dot ok"></span>主码流 · <b>H.265</b></div>
+      </div>
+
+      <!-- 2x2 视频格 -->
+      <div class="grid">
+        <div class="tile sel">
+          <div class="video g1"></div>
+          <div class="osd-top"><span class="nm">01_东门主入口高速球机</span><span class="spacer"></span><span class="enc">H.265 · 4K</span></div>
+          <div class="osd-actions"><button class="b" title="单画面">⛶</button><button class="b close" title="关闭">✕</button></div>
+          <div class="osd-bottom"><span class="time">2026-11-17 11:05:00</span><span class="gb">GB:000101</span></div>
+        </div>
+        <div class="tile">
+          <div class="video g2"></div>
+          <div class="osd-top"><span class="nm">02_南侧周界球机</span><span class="spacer"></span><span class="enc">H.265 · 4K</span></div>
+          <div class="osd-actions"><button class="b" title="单画面">⛶</button><button class="b close" title="关闭">✕</button></div>
+          <div class="osd-bottom"><span class="time">2026-11-17 11:05:00</span><span class="gb">GB:000102</span></div>
+        </div>
+        <div class="tile">
+          <div class="video g3"></div>
+          <div class="osd-top"><span class="nm">04_变电站双光谱热成像</span><span class="spacer"></span><span class="enc">H.265 · 4K</span></div>
+          <div class="osd-actions"><button class="b" title="单画面">⛶</button><button class="b close" title="关闭">✕</button></div>
+          <div class="osd-bottom"><span class="time">2026-11-17 11:05:00</span><span class="gb">GB:000201</span></div>
+        </div>
+        <div class="tile">
+          <div class="video g4"></div>
+          <div class="osd-top"><span class="nm">05_智能仓储月台球机</span><span class="spacer"></span><span class="enc">H.265 · 4K</span></div>
+          <div class="osd-actions"><button class="b" title="单画面">⛶</button><button class="b close" title="关闭">✕</button></div>
+          <div class="osd-bottom"><span class="time">2026-11-17 11:05:00</span><span class="gb">GB:000202</span></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ---------- 右：遥测云台 ---------- -->
+    <aside class="right-panel">
+      <div class="ctrl-head">
+        <span class="title">云台控制 <span class="tag">PTZ</span></span>
+        <button class="reset" title="归位">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+        </button>
+      </div>
+      <div class="target-line">
+        <span class="dot ok"></span><span><b>01_东门主入口高速球机</b></span>
+      </div>
+
+      <!-- 仅保留：摇杆 + 速度 -->
+      <div class="section" style="border-bottom:none">
+        <div class="section-title">无级矢量摇杆 <span style="color:var(--muted);font-weight:400">拖拽控方向与速度</span></div>
+        <div class="joystick-row">
+          <div class="joystick">
+            <div class="ring"></div>
+            <div class="ring2"></div>
+            <div class="cross"></div>
+            <span class="lbl up">UP</span>
+            <span class="lbl dn">DN</span>
+            <span class="lbl l">L</span>
+            <span class="lbl r">R</span>
+            <div class="knob"></div>
+          </div>
+          <div class="joystick-side">
+            <div class="jstat">
+              <div class="row"><span class="k">水平 Pan</span><span class="v" data-pan>--</span></div>
+              <div class="row"><span class="k">俯仰 Tilt</span><span class="v" data-tilt>--</span></div>
+              <div class="row"><span class="k">转速</span><span class="v acc" data-spd>0/8</span></div>
+            </div>
+            <div class="step-btns">
+              <button title="点动左转">◀</button>
+              <button class="on" title="连续转动">连续</button>
+              <button title="点动右转">▶</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="speed">
+          <div class="head"><span>基座速度</span><span class="val">5 级</span></div>
+          <div class="slider"><div class="fill"></div><div class="thumb"></div></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ======================= 状态栏 ======================= -->
+  <footer class="statusbar">
+    <span><span class="dot ok"></span> 已连接</span>
+    <span class="mono">2×2</span>
+    <span>选中 <span class="mono">01_东门主入口高速球机</span></span>
+    <span class="spacer"></span>
+    <span class="mono">H.265 · 30fps</span>
+    <span class="mono">GB:000101</span>
+  </footer>
+</div>
+
+<script src="theme.js"></script>
+</body>
+</html>

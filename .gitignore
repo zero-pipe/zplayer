@@ -30,3 +30,6 @@ ui_*.h
 *.exp
 *.pdb
 *.ilk
+
+#design
+docs/design/*.png

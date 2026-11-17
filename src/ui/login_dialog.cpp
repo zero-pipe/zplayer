@@ -1,9 +1,12 @@
 #include "ui/login_dialog.h"
+#include "ui/icon_field.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
 #include "app/SessionManager.h"
 
 #include <QCheckBox>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
@@ -16,21 +19,12 @@
 
 namespace zp {
 
-namespace {
-QLabel *fieldLabel(const QString &text, QWidget *parent)
-{
-    auto *l = new QLabel(text, parent);
-    l->setObjectName(QStringLiteral("FieldLabel"));
-    return l;
-}
-} // namespace
-
 LoginDialog::LoginDialog(QWidget *parent)
     : QDialog(parent)
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground, true);
-    setWindowTitle(tr("登录 - ZeroPlayer"));
+    setWindowTitle(tr("登录 - ZeroEngine"));
     setObjectName(QStringLiteral("LoginDialog"));
     buildUi();
 }
@@ -46,12 +40,12 @@ void LoginDialog::buildUi()
 
     auto *card = new QFrame(root);
     card->setObjectName(QStringLiteral("LoginCard"));
-    card->setFixedSize(880, 520);
+    card->setFixedSize(860, 520);
 
     auto *shadow = new QGraphicsDropShadowEffect(card);
-    shadow->setBlurRadius(48);
-    shadow->setColor(QColor(0, 0, 0, 160));
-    shadow->setOffset(0, 12);
+    shadow->setBlurRadius(56);
+    shadow->setColor(QColor(21, 60, 120, 60));
+    shadow->setOffset(0, 14);
     card->setGraphicsEffect(shadow);
 
     auto *center = new QHBoxLayout(root);
@@ -67,44 +61,31 @@ void LoginDialog::buildUi()
     // ---- Brand panel ----
     auto *brand = new QWidget(card);
     brand->setObjectName(QStringLiteral("BrandPanel"));
-    brand->setFixedWidth(400);
+    brand->setFixedWidth(430);
 
     auto *bv = new QVBoxLayout(brand);
-    bv->setContentsMargins(40, 48, 40, 32);
-    bv->setSpacing(14);
+    bv->setContentsMargins(42, 44, 42, 36);
+    bv->setSpacing(0);
 
-    auto *logoRow = new QHBoxLayout();
-    auto *logo = new QLabel(brand);
-    logo->setPixmap(icons::appLogo(44));
-    logo->setFixedSize(44, 44);
-    auto *name = new QLabel(QStringLiteral("ZeroPlayer"), brand);
+    auto *hero = new QLabel(brand);
+    hero->setPixmap(icons::brandHero(190));
+    hero->setFixedSize(190, 190);
+    bv->addWidget(hero);
+    bv->addSpacing(26);
+
+    auto *name = new QLabel(QStringLiteral("ZeroEngine"), brand);
     name->setObjectName(QStringLiteral("BrandName"));
-    logoRow->addWidget(logo);
-    logoRow->addSpacing(10);
-    logoRow->addWidget(name);
-    logoRow->addStretch(1);
-    bv->addLayout(logoRow);
+    bv->addWidget(name);
 
-    auto *tagline = new QLabel(tr("跨平台安防视频客户端"), brand);
-    tagline->setObjectName(QStringLiteral("BrandTagline"));
-    bv->addWidget(tagline);
+    auto *sub = new QLabel(tr("智能物联 · 视觉引擎"), brand);
+    sub->setObjectName(QStringLiteral("BrandSub"));
+    bv->addSpacing(8);
+    bv->addWidget(sub);
 
-    bv->addSpacing(18);
-    const QStringList feats = {
-        tr("· 组织目录  ·  多宫格实时预览"),
-        tr("· 云台控制  ·  预置位联动"),
-        tr("· 国标 GB28181 / ONVIF 平台接入"),
-    };
-    for (const QString &f : feats) {
-        auto *fl = new QLabel(f, brand);
-        fl->setObjectName(QStringLiteral("BrandFeature"));
-        bv->addWidget(fl);
-    }
     bv->addStretch(1);
-
-    auto *ver = new QLabel(tr("v2.0  ·  powered by QtAV"), brand);
-    ver->setObjectName(QStringLiteral("BrandVersion"));
-    bv->addWidget(ver);
+    auto *foot = new QLabel(tr("Intelligent IoT Vision Engine"), brand);
+    foot->setObjectName(QStringLiteral("BrandFoot"));
+    bv->addWidget(foot);
 
     cardLay->addWidget(brand);
 
@@ -112,66 +93,72 @@ void LoginDialog::buildUi()
     auto *form = new QWidget(card);
     form->setObjectName(QStringLiteral("FormPanel"));
     auto *fv = new QVBoxLayout(form);
-    fv->setContentsMargins(44, 28, 44, 28);
-    fv->setSpacing(8);
+    fv->setContentsMargins(52, 40, 52, 40);
+    fv->setSpacing(0);
 
     auto *closeRow = new QHBoxLayout();
     closeRow->addStretch(1);
+    const ThemeTokens t = ThemeManager::instance().tokens();
     auto *closeBtn = new QToolButton(form);
-    closeBtn->setObjectName(QStringLiteral("WinClose"));
-    closeBtn->setText(QString::fromUtf8("✕"));
-    closeBtn->setFixedSize(28, 28);
+    closeBtn->setObjectName(QStringLiteral("FormClose"));
+    closeBtn->setIcon(QIcon(icons::glyph(icons::Close, t.muted, 16)));
+    closeBtn->setIconSize(QSize(16, 16));
+    closeBtn->setFixedSize(32, 32);
     closeBtn->setCursor(Qt::PointingHandCursor);
     connect(closeBtn, &QToolButton::clicked, this, &QDialog::reject);
     closeRow->addWidget(closeBtn);
     fv->addLayout(closeRow);
 
-    auto *title = new QLabel(tr("登录到平台"), form);
+    auto *title = new QLabel(tr("欢迎回来"), form);
     title->setObjectName(QStringLiteral("FormTitle"));
+    fv->addSpacing(8);
     fv->addWidget(title);
 
-    auto *subtitle = new QLabel(tr("使用您的平台账号登录以加载组织与设备"), form);
+    auto *subtitle = new QLabel(tr("登录以接入您的物联视觉平台"), form);
     subtitle->setObjectName(QStringLiteral("FormSubtitle"));
+    fv->addSpacing(8);
     fv->addWidget(subtitle);
+    fv->addSpacing(28);
+
+    m_user = new IconField(form);
+    m_user->setLeadPixmap(icons::glyph(icons::User, t.muted, 20));
+    m_user->setPlaceholder(tr("用户名"));
+    fv->addWidget(m_user);
+    fv->addSpacing(12);
+
+    m_pass = new IconField(form);
+    m_pass->setLeadPixmap(icons::glyph(icons::Lock, t.muted, 20));
+    m_pass->setPlaceholder(tr("密码"));
+    m_pass->setEchoPassword(true);
+    fv->addWidget(m_pass);
     fv->addSpacing(14);
 
-    fv->addWidget(fieldLabel(tr("服务器地址"), form));
-    m_server = new QLineEdit(form);
-    m_server->setObjectName(QStringLiteral("LoginInput"));
-    m_server->setPlaceholderText(QStringLiteral("http://127.0.0.1:18080"));
-    fv->addWidget(m_server);
-    fv->addSpacing(6);
-
-    fv->addWidget(fieldLabel(tr("用户名"), form));
-    m_user = new QLineEdit(form);
-    m_user->setObjectName(QStringLiteral("LoginInput"));
-    m_user->setPlaceholderText(tr("请输入用户名"));
-    fv->addWidget(m_user);
-    fv->addSpacing(6);
-
-    fv->addWidget(fieldLabel(tr("密码"), form));
-    m_pass = new QLineEdit(form);
-    m_pass->setObjectName(QStringLiteral("LoginInput"));
-    m_pass->setPlaceholderText(tr("请输入密码"));
-    m_pass->setEchoMode(QLineEdit::Password);
-    fv->addWidget(m_pass);
-    fv->addSpacing(10);
-
     auto *optRow = new QHBoxLayout();
-    m_remember = new QCheckBox(tr("记住密码"), form);
+    m_remember = new QCheckBox(tr("记住登录"), form);
     m_offline = new QCheckBox(tr("离线演示"), form);
-    m_offline->setToolTip(tr("勾选后使用内置示例数据，不连接服务器"));
+
+    auto *serverBtn = new QToolButton(form);
+    serverBtn->setObjectName(QStringLiteral("ServerCfg"));
+    serverBtn->setText(tr("服务器设置"));
+    serverBtn->setIcon(QIcon(icons::glyph(icons::Gear, t.text2, 16)));
+    serverBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    serverBtn->setCursor(Qt::PointingHandCursor);
+    connect(serverBtn, &QToolButton::clicked, this, &LoginDialog::openServerSettings);
+
     optRow->addWidget(m_remember);
     optRow->addStretch(1);
+    optRow->addWidget(serverBtn);
+    optRow->addSpacing(6);
     optRow->addWidget(m_offline);
     fv->addLayout(optRow);
+    fv->addSpacing(16);
 
     m_error = new QLabel(QString(), form);
     m_error->setObjectName(QStringLiteral("ErrorLabel"));
     m_error->setWordWrap(true);
     fv->addWidget(m_error);
 
-    m_loginBtn = new QPushButton(tr("登  录"), form);
+    m_loginBtn = new QPushButton(tr("登 录"), form);
     m_loginBtn->setObjectName(QStringLiteral("LoginButton"));
     m_loginBtn->setCursor(Qt::PointingHandCursor);
     m_loginBtn->setDefault(true);
@@ -179,23 +166,65 @@ void LoginDialog::buildUi()
     fv->addStretch(1);
 
     connect(m_loginBtn, &QPushButton::clicked, this, &LoginDialog::submit);
-    connect(m_pass, &QLineEdit::returnPressed, this, &LoginDialog::submit);
+    connect(m_pass, &IconField::returnPressed, this, &LoginDialog::submit);
 
     cardLay->addWidget(form, 1);
 
-    // Prefill from persisted preferences.
+    syncFromPrefs();
+}
+
+void LoginDialog::syncFromPrefs()
+{
     const auto prefs = SessionManager::instance().loadLoginPrefs();
-    m_server->setText(prefs.baseUrl);
+    m_baseUrl = prefs.baseUrl.isEmpty() ? QStringLiteral("http://127.0.0.1:18080") : prefs.baseUrl;
     m_user->setText(prefs.username);
     m_pass->setText(prefs.password);
     m_remember->setChecked(prefs.remember);
     m_offline->setChecked(prefs.offlineDemo);
-    if (m_server->text().isEmpty()) {
-        m_server->setText(QStringLiteral("http://127.0.0.1:18080"));
+}
+
+void LoginDialog::openServerSettings()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("服务器设置"));
+    dlg.setMinimumWidth(400);
+
+    auto *edit = new QLineEdit(m_baseUrl, &dlg);
+    edit->setPlaceholderText(QStringLiteral("http://127.0.0.1:18080"));
+
+    auto *alias = new QLineEdit(SessionManager::instance().serverAlias(), &dlg);
+    alias->setPlaceholderText(tr("可选，例如：总部平台"));
+
+    auto *form = new QFormLayout();
+    form->setLabelAlignment(Qt::AlignLeft);
+    form->addRow(tr("平台地址"), edit);
+    form->addRow(tr("备注名称"), alias);
+
+    auto *hint = new QLabel(tr("配置保存在本机，下次登录自动使用"), &dlg);
+    hint->setStyleSheet(QStringLiteral("color:%1;font-size:12px;")
+                        .arg(ThemeManager::instance().tokens().muted.name()));
+
+    auto *btns = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dlg);
+    btns->button(QDialogButtonBox::Save)->setText(tr("保存"));
+    btns->button(QDialogButtonBox::Cancel)->setText(tr("取消"));
+    connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    auto *vl = new QVBoxLayout(&dlg);
+    vl->setContentsMargins(20, 20, 20, 16);
+    vl->setSpacing(12);
+    vl->addLayout(form);
+    vl->addWidget(hint);
+    vl->addWidget(btns);
+
+    if (dlg.exec() == QDialog::Accepted) {
+        m_baseUrl = edit->text().trimmed();
+        SessionManager::instance().setBaseUrl(m_baseUrl);
+        SessionManager::instance().setServerAlias(alias->text().trimmed());
     }
 }
 
-QString LoginDialog::baseUrl() const { return m_server->text().trimmed(); }
+QString LoginDialog::baseUrl() const { return m_baseUrl; }
 QString LoginDialog::username() const { return m_user->text().trimmed(); }
 QString LoginDialog::password() const { return m_pass->text(); }
 bool LoginDialog::offlineDemo() const { return m_offline->isChecked(); }
@@ -211,7 +240,7 @@ void LoginDialog::submit()
     showError(QString());
     if (!m_offline->isChecked()) {
         if (baseUrl().isEmpty()) {
-            showError(tr("请填写服务器地址"));
+            showError(tr("请先设置服务器地址"));
             return;
         }
         if (username().isEmpty()) {
@@ -235,8 +264,7 @@ void LoginDialog::submit()
 void LoginDialog::setBusy(bool busy)
 {
     m_loginBtn->setEnabled(!busy);
-    m_loginBtn->setText(busy ? tr("登录中…") : tr("登  录"));
-    m_server->setEnabled(!busy);
+    m_loginBtn->setText(busy ? tr("登录中…") : tr("登 录"));
     m_user->setEnabled(!busy);
     m_pass->setEnabled(!busy);
     m_remember->setEnabled(!busy);

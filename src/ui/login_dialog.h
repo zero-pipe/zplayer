@@ -13,14 +13,15 @@ QT_END_NAMESPACE
 
 namespace zp {
 
+class IconField;
+
+// Brand-split login dialog. Server URL is configured in a settings sheet (kept
+// out of the main form), persisted to QSettings.
 class LoginDialog : public QDialog {
     Q_OBJECT
 public:
     explicit LoginDialog(QWidget *parent = nullptr);
 
-    // The app injects how to perform authentication. The handler receives the
-    // submitted credentials; on success it should call accept() results via the
-    // dialog's callbacks. Because login is async, this is invoked on click.
     using AuthHandler = std::function<void(const QString &baseUrl, const QString &user,
                                            const QString &password, bool offline)>;
     void setAuthHandler(AuthHandler handler);
@@ -42,14 +43,16 @@ protected:
 private:
     void submit();
     void buildUi();
+    void openServerSettings();
+    void syncFromPrefs();
 
     AuthHandler m_handler;
     bool m_dragging = false;
     QPoint m_dragOffset;
 
-    QLineEdit *m_server = nullptr;
-    QLineEdit *m_user = nullptr;
-    QLineEdit *m_pass = nullptr;
+    QString m_baseUrl;
+    IconField *m_user = nullptr;
+    IconField *m_pass = nullptr;
     QCheckBox *m_remember = nullptr;
     QCheckBox *m_offline = nullptr;
     QPushButton *m_loginBtn = nullptr;

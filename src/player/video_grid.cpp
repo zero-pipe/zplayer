@@ -32,6 +32,7 @@ VideoGrid::VideoGrid(QWidget *parent)
 
     m_gridHost = new QWidget(this);
     m_gridHost->setObjectName(QStringLiteral("GridHost"));
+    m_gridHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_grid = new QGridLayout(m_gridHost);
     m_grid->setContentsMargins(8, 8, 8, 8);
     m_grid->setSpacing(6);
@@ -153,7 +154,14 @@ void VideoGrid::rebuildLayout()
             m_tiles[i]->show();
         }
     }
-    // Normalize column/row stretch.
+    // Normalize column/row stretch. Reset any stale stretch from a previous
+    // layout first (e.g. 1+5 sets 3 rows; switching to 2x2 must clear row 2).
+    for (int c = 0; c < 8; ++c) {
+        m_grid->setColumnStretch(c, 0);
+    }
+    for (int r = 0; r < 8; ++r) {
+        m_grid->setRowStretch(r, 0);
+    }
     int maxCol = 0, maxRow = 0;
     for (const Slot &s : layoutSlots) {
         maxCol = qMax(maxCol, s.col + s.colSpan);
