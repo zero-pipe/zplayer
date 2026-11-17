@@ -179,6 +179,19 @@ void PlayerWindow::buildUi()
 
     wt->addStretch(1);
 
+    // Collapse/expand the right-hand PTZ panel.
+    auto *ptzToggle = new QToolButton(wsToolbar);
+    ptzToggle->setObjectName(QStringLiteral("LayoutBtn"));
+    ptzToggle->setCheckable(true);
+    ptzToggle->setChecked(true);
+    ptzToggle->setCursor(Qt::PointingHandCursor);
+    ptzToggle->setText(tr("云台"));
+    ptzToggle->setToolTip(tr("显示/隐藏云台面板"));
+    connect(ptzToggle, &QToolButton::toggled, this, [this](bool on) {
+        if (m_ptz) m_ptz->setVisible(on);
+    });
+    wt->addWidget(ptzToggle);
+
     rootLay->addWidget(wsToolbar);
 
     // ---------------- Body: 3 columns ----------------

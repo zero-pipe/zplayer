@@ -123,8 +123,9 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     snapBtn->setToolTip(tr("抓图"));
     snapBtn->setCursor(Qt::PointingHandCursor);
     connect(snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
-    fl->addWidget(snapBtn);
+    // Right-align the actions (matches common OS/desktop placement).
     fl->addStretch(1);
+    fl->addWidget(snapBtn);
 
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(1, 1, 1, 1);
