@@ -91,11 +91,6 @@ void PlayerWindow::buildUi()
     tb->addWidget(logo);
     tb->addWidget(appName);
 
-    tb->addSpacing(6);
-    m_groupChip = new QLabel(tr("组织目录"), topBar);
-    m_groupChip->setObjectName(QStringLiteral("GroupChip"));
-    tb->addWidget(m_groupChip);
-
     tb->addStretch(1);
 
     // Status: online channels
@@ -166,41 +161,22 @@ void PlayerWindow::buildUi()
 
     m_layoutGroup = new QButtonGroup(this);
     m_layoutGroup->setExclusive(true);
+    // Clear text labels so the split count is obvious at a glance.
+    static const char *kLayoutLabels[] = {"1", "4", "9", "16", "1+5"};
     for (int i = 0; i < 5; ++i) {
         auto *b = new QToolButton(wsToolbar);
         b->setObjectName(QStringLiteral("LayoutBtn"));
         b->setCheckable(true);
         b->setCursor(Qt::PointingHandCursor);
         b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
-        b->setIcon(QIcon(icons::glyph(
-            i == 0 ? icons::Grid1 : (i == 1 ? icons::Grid4 : icons::Grid9),
-            ThemeManager::instance().tokens().text2, 16)));
-        b->setIconSize(QSize(16, 16));
+        b->setText(QString::fromLatin1(kLayoutLabels[i]));
         m_layoutGroup->addButton(b, i);
         wt->addWidget(b);
-        if (i == 0 || i == 1 || i == 2) {
-            // group 1/4/9 as icon buttons; 4x4 and 1+5 keep text
-        }
     }
-    // Give text labels to the irregular layouts so they're distinguishable.
-    if (auto *b = m_layoutGroup->button(3)) b->setText(QStringLiteral("16"));
-    if (auto *b = m_layoutGroup->button(4)) b->setText(QStringLiteral("1+5"));
+    if (auto *b = m_layoutGroup->button(2)) b->setChecked(true);  // default 3x3
     connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
             this, &PlayerWindow::onLayoutButtonClicked);
 
-    wt->addSpacing(4);
-    auto *vsep = new QWidget(wsToolbar);
-    vsep->setFixedSize(1, 20);
-    vsep->setStyleSheet(QStringLiteral("background:%1;").arg(ThemeManager::instance().tokens().border.name()));
-    wt->addWidget(vsep);
-    wt->addSpacing(4);
-
-    m_search = new QLineEdit(wsToolbar);
-    m_search->setObjectName(QStringLiteral("SearchBox"));
-    m_search->setPlaceholderText(tr("搜索通道…"));
-    m_search->setClearButtonEnabled(true);
-    m_search->setFixedWidth(200);
-    wt->addWidget(m_search);
     wt->addStretch(1);
 
     rootLay->addWidget(wsToolbar);
@@ -242,13 +218,6 @@ void PlayerWindow::buildUi()
     connect(m_tree, &DeviceTreeView::channelActivated, this, &PlayerWindow::onChannelActivated);
     connect(m_tree, &DeviceTreeView::childrenNeeded, this, [this](const QString &parentId) {
         m_api->fetchChildren(parentId);
-    });
-    connect(m_search, &QLineEdit::textChanged, m_tree, [this](const QString &t) {
-        Q_UNUSED(t)
-        // The tree filters itself; mirror the text into its line edit.
-        if (auto *le = m_tree->findChild<QLineEdit *>(QStringLiteral("SearchBox"))) {
-            le->setText(m_search->text());
-        }
     });
 
     connect(m_grid, &VideoGrid::activeChannelChanged, this, &PlayerWindow::onActiveChannelChanged);
@@ -302,7 +271,6 @@ void PlayerWindow::onChannelActivated(const ChannelRef &ch, const QString &name,
     if (!ch.isValid()) {
         return;
     }
-    m_groupChip->setText(name);
     m_channelNames.insert(ch.key(), name);
     m_channelPtz.insert(ch.key(), ptzCapable);
 

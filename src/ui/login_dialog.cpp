@@ -135,7 +135,6 @@ void LoginDialog::buildUi()
 
     auto *optRow = new QHBoxLayout();
     m_remember = new QCheckBox(tr("记住登录"), form);
-    m_offline = new QCheckBox(tr("离线演示"), form);
 
     auto *serverBtn = new QToolButton(form);
     serverBtn->setObjectName(QStringLiteral("ServerCfg"));
@@ -148,8 +147,6 @@ void LoginDialog::buildUi()
     optRow->addWidget(m_remember);
     optRow->addStretch(1);
     optRow->addWidget(serverBtn);
-    optRow->addSpacing(6);
-    optRow->addWidget(m_offline);
     fv->addLayout(optRow);
     fv->addSpacing(16);
 
@@ -180,7 +177,6 @@ void LoginDialog::syncFromPrefs()
     m_user->setText(prefs.username);
     m_pass->setText(prefs.password);
     m_remember->setChecked(prefs.remember);
-    m_offline->setChecked(prefs.offlineDemo);
 }
 
 void LoginDialog::openServerSettings()
@@ -227,7 +223,7 @@ void LoginDialog::openServerSettings()
 QString LoginDialog::baseUrl() const { return m_baseUrl; }
 QString LoginDialog::username() const { return m_user->text().trimmed(); }
 QString LoginDialog::password() const { return m_pass->text(); }
-bool LoginDialog::offlineDemo() const { return m_offline->isChecked(); }
+bool LoginDialog::offlineDemo() const { return false; }
 bool LoginDialog::rememberPassword() const { return m_remember->isChecked(); }
 
 void LoginDialog::setAuthHandler(AuthHandler handler)
@@ -238,23 +234,21 @@ void LoginDialog::setAuthHandler(AuthHandler handler)
 void LoginDialog::submit()
 {
     showError(QString());
-    if (!m_offline->isChecked()) {
-        if (baseUrl().isEmpty()) {
-            showError(tr("请先设置服务器地址"));
-            return;
-        }
-        if (username().isEmpty()) {
-            showError(tr("请填写用户名"));
-            return;
-        }
-        if (password().isEmpty()) {
-            showError(tr("请填写密码"));
-            return;
-        }
+    if (baseUrl().isEmpty()) {
+        showError(tr("请先设置服务器地址"));
+        return;
+    }
+    if (username().isEmpty()) {
+        showError(tr("请填写用户名"));
+        return;
+    }
+    if (password().isEmpty()) {
+        showError(tr("请填写密码"));
+        return;
     }
     setBusy(true);
     if (m_handler) {
-        m_handler(baseUrl(), username(), password(), m_offline->isChecked());
+        m_handler(baseUrl(), username(), password(), false);
     } else {
         setBusy(false);
         showError(tr("内部错误：未设置登录处理器"));
@@ -268,7 +262,6 @@ void LoginDialog::setBusy(bool busy)
     m_user->setEnabled(!busy);
     m_pass->setEnabled(!busy);
     m_remember->setEnabled(!busy);
-    m_offline->setEnabled(!busy);
 }
 
 void LoginDialog::showError(const QString &message)

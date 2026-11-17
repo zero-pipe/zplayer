@@ -34,11 +34,12 @@ PtzPanel::PtzPanel(QWidget *parent)
     head->setFixedHeight(52);
     head->setStyleSheet(QStringLiteral("border-bottom:1px solid %1;").arg(t.divider.name()));
 
-    // ---- Target line ----
-    m_target = new QLabel(tr("未选择通道"), this);
+    // ---- Target line (hidden until a channel is selected) ----
+    m_target = new QLabel(this);
     m_target->setObjectName(QStringLiteral("TargetLabel"));
     m_target->setWordWrap(true);
     m_target->setContentsMargins(16, 10, 16, 10);
+    m_target->setVisible(false);
 
     // ---- Joystick + readout ----
     auto *stickRow = new QHBoxLayout();
@@ -148,14 +149,17 @@ void PtzPanel::setTarget(const ChannelRef &ch, const QString &name, bool ptzCapa
 
     const ThemeTokens t = ThemeManager::instance().tokens();
     if (!ch.isValid()) {
-        m_target->setText(tr("未选择通道"));
-        m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12px;").arg(t.text2.name()));
+        // No target: leave the line blank (panel simply stays disabled).
+        m_target->setText(QString());
+        m_target->setVisible(false);
     } else if (ptzCapable) {
         m_target->setText(name.isEmpty() ? ch.channelId : name);
         m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12.5px;font-weight:600;").arg(t.accent.name()));
+        m_target->setVisible(true);
     } else {
         m_target->setText(tr("%1 · 不支持云台").arg(name.isEmpty() ? ch.channelId : name));
         m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12px;").arg(t.danger.name()));
+        m_target->setVisible(true);
     }
     updateEnabled();
 }

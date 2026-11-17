@@ -64,8 +64,6 @@ private:
     PtzPanel *m_ptz = nullptr;
     Toast *m_toast = nullptr;
 
-    QLabel *m_groupChip = nullptr;
-    QLineEdit *m_search = nullptr;
     QButtonGroup *m_layoutGroup = nullptr;
 
     QHash<QString, QString> m_channelNames;   // ch.key() -> name

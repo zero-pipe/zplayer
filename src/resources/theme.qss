@@ -111,8 +111,9 @@ QCheckBox::indicator {
 }
 QCheckBox::indicator:hover { border-color: %accent%; }
 QCheckBox::indicator:checked {
-    background: %accent%;
+    background: %bgPanel%;
     border-color: %accent%;
+    image: url(:/resources/check.svg);
 }
 
 /* ---------------- Player window ---------------- */
@@ -122,21 +123,13 @@ QWidget#RootArea { background: %bgRoot%; }
 
 QWidget#TopBar {
     background: %bgPanel%;
-    border-bottom: 1px solid %divider%;
+    border-bottom: 1px solid %borderStrong%;
 }
 QWidget#WsToolbar {
     background: %bgPanel%;
-    border-bottom: 1px solid %divider%;
+    border-bottom: 1px solid %borderStrong%;
 }
 QLabel#AppName { color: %text%; font-size: 15.5px; font-weight: 800; letter-spacing: 0.3px; }
-QLabel#GroupChip {
-    color: %accent%;
-    background: %accentSoft%;
-    border-radius: 14px;
-    padding: 5px 12px;
-    font-size: 12.5px;
-    font-weight: 600;
-}
 
 QLineEdit#SearchBox {
     background: %bgInput%;
@@ -150,14 +143,20 @@ QLineEdit#SearchBox:focus { border-color: %accent%; background: %bgPanel%; }
 
 QToolButton#LayoutBtn {
     background: transparent;
-    border: 1px solid transparent;
+    border: 1px solid %border%;
     border-radius: 8px;
-    color: %muted%;
+    color: %text2%;
+    font-size: 12px;
+    font-weight: 700;
     min-width: 40px;
     min-height: 30px;
 }
-QToolButton#LayoutBtn:hover { color: %text2%; background: %bgHover%; }
-QToolButton#LayoutBtn:checked { background: %accent%; color: #FFFFFF; }
+QToolButton#LayoutBtn:hover { color: %accent%; background: %bgHover%; border-color: %accentSoft2%; }
+QToolButton#LayoutBtn:checked {
+    background: %accentSoft%;
+    border-color: %accent%;
+    color: %accent%;
+}
 
 QToolButton#ToolChip {
     background: %bgPanel%;
@@ -200,8 +199,8 @@ QMenu::separator { height: 1px; background: %divider%; margin: 5px 8px; }
 /* ---------------- Panels ---------------- */
 
 QWidget#SidePanel { background: %bgPanel%; }
-QWidget#LeftPanel { border-right: 1px solid %divider%; }
-QWidget#RightPanel { border-left: 1px solid %divider%; }
+QWidget#LeftPanel { border-right: 1px solid %borderStrong%; }
+QWidget#RightPanel { border-left: 1px solid %borderStrong%; }
 
 QLabel#PanelTitle { color: %text%; font-size: 12.5px; font-weight: 700; }
 
@@ -222,7 +221,7 @@ QTreeView#DeviceTree::item:selected {
 }
 QTreeView#DeviceTree::branch { background: transparent; }
 
-QSplitter#BodySplitter::handle { background: %divider%; }
+QSplitter#BodySplitter::handle { background: %borderStrong%; }
 
 /* ---------------- Video grid & tiles ---------------- */
 
@@ -231,14 +230,14 @@ QWidget#GridEmpty { background: transparent; }
 
 QWidget#VideoTile {
     background: %videoBg%;
-    border: 1px solid %border%;
+    border: 1px solid %borderStrong%;
     border-radius: 12px;
 }
 QWidget#VideoTile[selected="true"] {
-    border: 1px solid %accent%;
+    border: 2px solid %accent%;
     background: %accentSoft%;
 }
-QWidget#VideoTile[selected="false"]:hover { border-color: %borderStrong%; }
+QWidget#VideoTile[selected="false"]:hover { border-color: %accentSoft2%; }
 
 QWidget#TileHeader {
     background: %bgPanel%;

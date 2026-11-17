@@ -54,7 +54,6 @@ private:
     IconField *m_user = nullptr;
     IconField *m_pass = nullptr;
     QCheckBox *m_remember = nullptr;
-    QCheckBox *m_offline = nullptr;
     QPushButton *m_loginBtn = nullptr;
     QLabel *m_error = nullptr;
 };

@@ -52,14 +52,14 @@ ThemeTokens ThemeTokens::dark()
     ThemeTokens t;
     t.name = QStringLiteral("dark");
 
-    t.bgRoot     = c("#10151C");
-    t.bgPanel    = c("#171E28");
-    t.bgElevated = c("#1D2631");
-    t.bgInput    = c("#121923");
-    t.bgHover    = c("#1F2A37");
-    t.border       = c("#2A3644");
-    t.borderStrong = c("#3A4A5E");
-    t.divider      = c("#202935");
+    t.bgRoot     = c("#1A212B");
+    t.bgPanel    = c("#212A36");
+    t.bgElevated = c("#2A3542");
+    t.bgInput    = c("#1C242F");
+    t.bgHover    = c("#2C3947");
+    t.border       = c("#39485A");
+    t.borderStrong = c("#4B5D72");
+    t.divider      = c("#2B3644");
 
     t.text  = c("#E6EDF3");
     t.text2 = c("#9AA7B6");
@@ -77,7 +77,7 @@ ThemeTokens ThemeTokens::dark()
     t.danger      = c("#F85149");
     t.dangerSoft  = QColor(248, 81, 73, 31);
 
-    t.videoBg = c("#0C121A");
+    t.videoBg = c("#121A24");
     return t;
 }
 
