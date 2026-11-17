@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <QEvent>
+#include <QStyle>
 #include <QPropertyAnimation>
 #include <QGraphicsOpacityEffect>
 

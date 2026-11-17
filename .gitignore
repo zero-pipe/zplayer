@@ -10,6 +10,10 @@
 config.log
 Makefile*
 *.pro.autosave
+.vscode/
+
+# runtime artifacts
+*.log
 
 # objects
 *.o

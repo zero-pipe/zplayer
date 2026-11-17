@@ -253,7 +253,7 @@ QToolButton#TileBtn {
     padding: 1px 5px;
 }
 QToolButton#TileBtn:hover { background: #2F81F7; border-color: #2F81F7; color: #FFFFFF; }
-QToolButton#TileBtn#TileClose:hover { background: #F85149; border-color: #F85149; }
+QToolButton#TileBtn[role="close"]:hover { background: #F85149; border-color: #F85149; }
 
 QWidget#TileOverlay { background: #0B0F14; }
 QLabel#OverlayText { color: #9AA7B6; font-size: 13px; }

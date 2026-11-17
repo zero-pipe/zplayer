@@ -4,44 +4,78 @@
 #include <QWidget>
 #include <QVector>
 #include <QUrl>
+#include "platform/platform_api.h"
 
 QT_BEGIN_NAMESPACE
 class QGridLayout;
+class QStackedLayout;
 QT_END_NAMESPACE
 
 namespace zp {
 
 class VideoTile;
 
-// Split-screen container: arranges VideoTile cells in a rows x cols grid.
+// Split-screen container. Manages a slot-based grid so irregular security
+// layouts (e.g. 1 big + 5 small) are expressible.
 class VideoGrid : public QWidget {
     Q_OBJECT
 public:
+    enum Layout { L1x1, L2x2, L3x3, L4x4, L1p5 };
+
     explicit VideoGrid(QWidget *parent = nullptr);
     ~VideoGrid() override;
 
-    void setGridSize(int rows, int cols);
-    int rows() const { return m_rows; }
-    int cols() const { return m_cols; }
+    void setLayoutKind(Layout kind);
+    Layout layoutKind() const { return m_kind; }
 
-    void openStream(const QString &deviceId, const QString &name, bool ptzCapable, const QUrl &url);
-    void closeStream(const QString &deviceId);
+    // Open (or re-focus) a stream in the grid.
+    void openStream(const zp::ChannelRef &ch, const QString &name,
+                    bool ptzCapable, const QUrl &url);
+    void closeStream(const zp::ChannelRef &ch);
+    void stopAll();
+
+    bool contains(const zp::ChannelRef &ch) const;
+    int tileCount() const;
+
+    // Maximize a channel into a 1x1 layout (single view).
+    void setSingleChannel(const zp::ChannelRef &ch);
+
+    // Focus an existing channel's tile (no playback changes).
+    void focusChannel(const zp::ChannelRef &ch);
+    // Show a connecting placeholder for a channel before its stream URL arrives.
+    void showLoadingPlaceholder(const zp::ChannelRef &ch, const QString &name);
+    // Mark a channel's tile failed / back to connecting.
+    void markFailed(const zp::ChannelRef &ch, const QString &message);
+    void markConnecting(const zp::ChannelRef &ch);
 
 signals:
-    void activeDeviceChanged(const QString &deviceId, bool ptzCapable);
+    void activeChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
+    void streamClosed(const zp::ChannelRef &ch);
+    void retryRequested(const zp::ChannelRef &ch);
+    void maximizeRequested(const zp::ChannelRef &ch);
+    void layoutChanged(int index);
 
 private:
-    void relayout();
-    void selectIndex(int index);
-    int indexOf(const QString &deviceId) const;
-    int firstEmptyIndex() const;
-    void emitActive();
+    struct Slot { int row, col, rowSpan, colSpan; };
+    static QVector<Slot> slotsFor(Layout kind);
 
-    int m_rows = 2;
-    int m_cols = 2;
+    void rebuildLayout();
+    void addTileAt(VideoTile *tile, int index);
+    void selectIndex(int index);
+    void emitActive();
+    int indexOf(const zp::ChannelRef &ch) const;
+    int firstEmptyIndex() const;
+    VideoTile *createTile(const zp::ChannelRef &ch, const QString &name, bool ptz);
+    void updateEmptyState();
+
+    Layout m_kind = L2x2;
     int m_activeIndex = -1;
-    QGridLayout *m_layout = nullptr;
     QVector<VideoTile *> m_tiles;
+
+    QStackedLayout *m_stack = nullptr;
+    QWidget *m_gridHost = nullptr;
+    QGridLayout *m_grid = nullptr;
+    QWidget *m_empty = nullptr;
 };
 
 } // namespace zp

@@ -119,7 +119,7 @@ void LoginDialog::buildUi()
     closeRow->addStretch(1);
     auto *closeBtn = new QToolButton(form);
     closeBtn->setObjectName(QStringLiteral("WinClose"));
-    closeBtn->setText(QStringLiteral("✕"));
+    closeBtn->setText(QString::fromUtf8("✕"));
     closeBtn->setFixedSize(28, 28);
     closeBtn->setCursor(Qt::PointingHandCursor);
     connect(closeBtn, &QToolButton::clicked, this, &QDialog::reject);

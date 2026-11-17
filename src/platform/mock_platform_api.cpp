@@ -89,8 +89,8 @@ void MockPlatformApi::fetchChildren(const QString &parentId)
     QTimer::singleShot(120, this, [this, parentId]() {
         QList<DeviceNode> nodes;
         if (parentId.isEmpty()) {
-            nodes << makeGroup(QStringLiteral("gA"), QStringLiteral("园区 A"))
-                  << makeGroup(QStringLiteral("gB"), QStringLiteral("园区 B"));
+            nodes << makeGroup(QStringLiteral("gA"), QString::fromUtf8("园区 A"))
+                  << makeGroup(QStringLiteral("gB"), QString::fromUtf8("园区 B"));
         } else {
             nodes = channelsFor(parentId);
         }

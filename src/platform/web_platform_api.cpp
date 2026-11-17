@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QVariant>
 #include <QUrlQuery>
 
 namespace zp {
