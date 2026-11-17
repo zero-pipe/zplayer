@@ -14,7 +14,6 @@ SOURCES += \
     ui/icon_field.cpp \
     ui/login_dialog.cpp \
     ui/device_tree_view.cpp \
-    ui/ptz_joystick.cpp \
     ui/ptz_panel.cpp \
     ui/video_settings_dialog.cpp
 
@@ -35,7 +34,6 @@ HEADERS += \
     ui/icon_field.h \
     ui/login_dialog.h \
     ui/device_tree_view.h \
-    ui/ptz_joystick.h \
     ui/ptz_panel.h \
     ui/video_settings_dialog.h
 

@@ -280,28 +280,58 @@ QLabel#TargetLabel { color: %text2%; font-size: 12px; }
 QLabel#TargetLabel[state="ok"] { color: %success%; }
 QLabel#TargetLabel[state="bad"] { color: %danger%; }
 
-QToolButton#PtzCenter {
-    background: %accentSoft%;
-    border: 1px solid %accent%;
-    border-radius: 9px;
-    color: %accent%;
-    font-size: 12px;
-    font-weight: 600;
-    min-width: 42px;
-    min-height: 36px;
-}
-QToolButton#PtzCenter:hover { background: %accentSoft2%; }
-QToolButton#PtzCenter:disabled { color: %muted%; border-color: %border%; background: %bgInput%; }
-
-QToolButton#StepBtn {
+/* PTZ directional pad */
+QToolButton#PtzDirBtn {
     background: %bgInput%;
     border: 1px solid %border%;
-    border-radius: 8px;
+    border-radius: 9px;
     color: %text2%;
-    min-height: 30px;
+    font-size: 15px;
+    font-weight: 600;
+    min-width: 42px;
+    min-height: 42px;
 }
-QToolButton#StepBtn:hover { border-color: %accent%; color: %accent%; }
-QToolButton#StepBtn:checked { background: %accentSoft%; border-color: %accent%; color: %accent%; }
+QToolButton#PtzDirBtn:hover { border-color: %accent%; color: %accent%; background: %bgHover%; }
+QToolButton#PtzDirBtn:pressed { background: %accentSoft%; border-color: %accent%; color: %accent%; }
+QToolButton#PtzDirBtn:disabled { color: %muted%; border-color: %border%; background: %bgInput%; }
+
+/* PTZ tab bar (预置位 / 巡航 / 守望) */
+QTabBar#PtzTabs { background: transparent; }
+QTabBar#PtzTabs::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: %text2%;
+    padding: 7px 14px;
+    font-size: 12.5px;
+}
+QTabBar#PtzTabs::tab:hover { color: %accent%; }
+QTabBar#PtzTabs::tab:selected { color: %accent%; border-bottom: 2px solid %accent%; font-weight: 600; }
+
+/* Preset list */
+QListWidget#PresetList {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 9px;
+    outline: none;
+    padding: 4px;
+}
+QListWidget#PresetList::item {
+    color: %text2%;
+    padding: 7px 10px;
+    border-radius: 6px;
+}
+QListWidget#PresetList::item:hover { background: %bgHover%; color: %text%; }
+QListWidget#PresetList::item:selected { background: %accentSoft%; color: %accent%; }
+
+QToolButton#GhostBtn {
+    background: transparent;
+    border: 1px solid %border%;
+    border-radius: 9px;
+    color: %text2%;
+    padding: 6px 12px;
+}
+QToolButton#GhostBtn:hover { border-color: %accent%; color: %accent%; }
 
 QPushButton#GhostBtn {
     background: transparent;

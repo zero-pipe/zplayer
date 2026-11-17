@@ -232,6 +232,24 @@ void PlayerWindow::buildUi()
     });
 
     connect(m_ptz, &PtzPanel::commandIssued, this, &PlayerWindow::onPtzCommand);
+    connect(m_ptz, &PtzPanel::presetQuery, this, [this](const zp::ChannelRef &ch) {
+        m_api->queryPresets(ch);
+    });
+    connect(m_ptz, &PtzPanel::presetCall, this, [this](const zp::ChannelRef &ch, int id) {
+        m_api->callPreset(ch, id);
+    });
+    connect(m_ptz, &PtzPanel::presetAdd, this, [this](const zp::ChannelRef &ch, int id) {
+        m_api->addPreset(ch, id);
+    });
+    connect(m_ptz, &PtzPanel::presetDelete, this, [this](const zp::ChannelRef &ch, int id) {
+        m_api->deletePreset(ch, id);
+    });
+    connect(m_api, &IPlatformApi::presetsReady, m_ptz, [this](const zp::ChannelRef &ch,
+                                                             const QList<zp::PresetInfo> &list) {
+        if (ch.key() == m_active.key()) {
+            m_ptz->setPresets(list);
+        }
+    });
 
     statusBar()->showMessage(tr("已登录：%1").arg(m_session.username));
 }
