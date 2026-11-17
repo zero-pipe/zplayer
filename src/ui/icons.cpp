@@ -226,6 +226,77 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
     return pm;
 }
 
+QPixmap ptzArrow(int direction, const QColor &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const qreal s = size;
+    // Rounded chevron pointing up in a 24-unit design space, rotated to the
+    // requested direction (0 = up, clockwise). Chevrons read uniformly and stay
+    // soft/rounded for all 8 directions, unlike solid triangles.
+    p.translate(s * 0.5, s * 0.5);
+    p.rotate(direction * 45.0);
+    const qreal k = s / 24.0;
+    p.scale(k, k);
+
+    QPainterPath chevron;
+    chevron.moveTo(-5.0, 1.6);
+    chevron.lineTo(0.0, -3.6);
+    chevron.lineTo(5.0, 1.6);
+
+    QPen pen(color, 2.6);
+    pen.setJoinStyle(Qt::RoundJoin);
+    pen.setCapStyle(Qt::RoundCap);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(chevron);
+    return pm;
+}
+
+QPixmap ptzStop(const QColor &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const qreal s = size;
+    QRectF r(s * 0.30, s * 0.30, s * 0.40, s * 0.40);
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    p.drawRoundedRect(r, s * 0.08, s * 0.08);
+    return pm;
+}
+
+QPixmap ptzZoom(bool zoomIn, const QColor &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const qreal s = size;
+
+    // Soft disc background.
+    p.setPen(Qt::NoPen);
+    QColor disc = color;
+    disc.setAlpha(28);
+    p.setBrush(disc);
+    p.drawEllipse(QRectF(0, 0, s, s));
+
+    // Plus / minus strokes, centered.
+    QPen pen(color, s * 0.11);
+    pen.setCapStyle(Qt::RoundCap);
+    p.setPen(pen);
+    const qreal cx = s * 0.5, cy = s * 0.5, arm = s * 0.20;
+    p.drawLine(QPointF(cx - arm, cy), QPointF(cx + arm, cy));
+    if (zoomIn) {
+        p.drawLine(QPointF(cx, cy - arm), QPointF(cx, cy + arm));
+    }
+    return pm;
+}
+
 QPixmap brandHero(int size)
 {
     const ThemeTokens t = tokens();

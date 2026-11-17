@@ -24,6 +24,14 @@ enum Glyph {
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 
+// PTZ directional arrows: filled rounded triangles pointing in 8 directions
+// (0 = up, clockwise). Not font glyphs, so they stay crisp and even-weight.
+QPixmap ptzArrow(int direction /*0..7, 0=up clockwise*/, const QColor &color, int size = 20);
+// PTZ stop: a rounded square.
+QPixmap ptzStop(const QColor &color, int size = 20);
+// PTZ zoom: a "+" / "−" centered inside a soft rounded disc.
+QPixmap ptzZoom(bool zoomIn, const QColor &color, int size = 20);
+
 // The large hexagon hero logo for the login brand panel.
 QPixmap brandHero(int size);
 

@@ -12,6 +12,7 @@ class QLabel;
 class QToolButton;
 class QListWidget;
 class QStackedWidget;
+class QPixmap;
 QT_END_NAMESPACE
 
 namespace zp {
@@ -35,7 +36,7 @@ signals:
     void presetDelete(const zp::ChannelRef &ch, int presetId);
 
 private:
-    QToolButton *makeDirButton(QWidget *parent, const QString &glyph,
+    QToolButton *makeDirButton(QWidget *parent, const QPixmap &icon,
                                PtzCommand::Type type, const QString &tip);
     void updateEnabled();
     void refreshPresets();

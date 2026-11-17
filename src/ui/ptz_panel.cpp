@@ -63,27 +63,26 @@ PtzPanel::PtzPanel(QWidget *parent)
     dp->setSpacing(6);
 
     using T = PtzCommand::Type;
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("↖"), T::UpLeft,    tr("左上")), 0, 0);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("▲"), T::Up,        tr("上")),   0, 1);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("↗"), T::UpRight,   tr("右上")), 0, 2);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("◀"), T::Left,      tr("左")),   1, 0);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("■"), T::Stop,      tr("停止")), 1, 1);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("▶"), T::Right,     tr("右")),   1, 2);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("↙"), T::DownLeft,  tr("左下")), 2, 0);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("▼"), T::Down,      tr("下")),   2, 1);
-    dp->addWidget(makeDirButton(m_dpadHost, QString::fromUtf8("↘"), T::DownRight, tr("右下")), 2, 2);
+    const QColor ic = t.text2;
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(7, ic), T::UpLeft,    tr("左上")), 0, 0);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(0, ic), T::Up,        tr("上")),   0, 1);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(1, ic), T::UpRight,   tr("右上")), 0, 2);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(6, ic), T::Left,      tr("左")),   1, 0);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzStop(ic),     T::Stop,      tr("停止")), 1, 1);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(2, ic), T::Right,     tr("右")),   1, 2);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(5, ic), T::DownLeft,  tr("左下")), 2, 0);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(4, ic), T::Down,      tr("下")),   2, 1);
+    dp->addWidget(makeDirButton(m_dpadHost, icons::ptzArrow(3, ic), T::DownRight, tr("右下")), 2, 2);
     ctlRow->addWidget(m_dpadHost);
 
-    // Zoom column (+ / -)
+    // Zoom column (+ / -), top-aligned with the d-pad. The magnifier disc icons
+    // make the meaning clear without a text label.
     m_zoomHost = new QWidget(body);
     auto *zv = new QVBoxLayout(m_zoomHost);
     zv->setContentsMargins(0, 0, 0, 0);
     zv->setSpacing(6);
-    auto zoomTitle = new QLabel(tr("变倍"), m_zoomHost);
-    zoomTitle->setObjectName(QStringLiteral("SectionTitle"));
-    zv->addWidget(zoomTitle);
-    zv->addWidget(makeDirButton(m_zoomHost, QString::fromUtf8("＋"), T::ZoomIn,  tr("放大")));
-    zv->addWidget(makeDirButton(m_zoomHost, QString::fromUtf8("－"), T::ZoomOut, tr("缩小")));
+    zv->addWidget(makeDirButton(m_zoomHost, icons::ptzZoom(true, ic),  T::ZoomIn,  tr("放大")));
+    zv->addWidget(makeDirButton(m_zoomHost, icons::ptzZoom(false, ic), T::ZoomOut, tr("缩小")));
     zv->addStretch(1);
     ctlRow->addWidget(m_zoomHost);
 
@@ -194,12 +193,13 @@ PtzPanel::PtzPanel(QWidget *parent)
     updateEnabled();
 }
 
-QToolButton *PtzPanel::makeDirButton(QWidget *parent, const QString &glyph,
+QToolButton *PtzPanel::makeDirButton(QWidget *parent, const QPixmap &icon,
                                      PtzCommand::Type type, const QString &tip)
 {
     auto *b = new QToolButton(parent);
     b->setObjectName(QStringLiteral("PtzDirBtn"));
-    b->setText(glyph);
+    b->setIcon(QIcon(icon));
+    b->setIconSize(icon.size() / icon.devicePixelRatio());
     b->setToolTip(tip);
     b->setCursor(Qt::PointingHandCursor);
     b->setAutoRepeat(false);
