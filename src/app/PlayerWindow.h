@@ -48,6 +48,7 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private slots:
+    void openSettings();
     void onChildrenReady(const QString &parentId, const QList<DeviceNode> &nodes);
     void onChannelActivated(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
     void onPlayStarted(const zp::ChannelRef &ch, const QUrl &url, const QString &transport);

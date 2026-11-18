@@ -63,8 +63,10 @@ private:
     }
 
     // Dev only: grab a widget to a PNG after it has laid out (ZP_SHOT=path).
+    // A modal dialog (e.g. settings) takes precedence so it can be inspected.
     QWidget *shotTarget() const
     {
+        if (QWidget *modal = QApplication::activeModalWidget()) return modal;
         if (m_player) return m_player;
         if (m_login) return m_login;
         return nullptr;

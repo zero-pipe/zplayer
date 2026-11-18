@@ -24,6 +24,9 @@ public:
     SettingsDialog(const VideoSettings &video, const QString &themeName,
                    QWidget *parent = nullptr);
 
+    // Select a category by index (0 = 视频, 1 = 外观, 2 = 关于).
+    void setPage(int index);
+
 signals:
     void videoSettingsChanged(const zp::VideoSettings &settings);
     void themeChanged(const QString &name);

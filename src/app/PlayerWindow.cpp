@@ -28,6 +28,7 @@
 #include <QSizeGrip>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -71,6 +72,11 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     });
     addAction(openAct);
 
+    auto *settingsAct = new QAction(this);
+    settingsAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));
+    connect(settingsAct, &QAction::triggered, this, &PlayerWindow::openSettings);
+    addAction(settingsAct);
+
     buildUi();
 
     // Frameless windows lose the native resize border; a floating grip in the
@@ -85,6 +91,12 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     m_grid->setAnalysisService(m_analysis);
     if (IFrameAnalyzer *stats = createDebugStatsAnalyzer()) {
         m_analysis->setAnalyzer(stats);   // ZP_ANALYZE=<file> — pipeline smoke test
+    }
+
+    // Dev: ZP_SETTINGS=1 opens the settings dialog shortly after start, so UI
+    // can be captured headlessly (see ZP_SHOT in main.cpp).
+    if (!qEnvironmentVariableIsEmpty("ZP_SETTINGS")) {
+        QTimer::singleShot(500, this, &PlayerWindow::openSettings);
     }
 
     connect(m_api, &IPlatformApi::childrenReady, this, &PlayerWindow::onChildrenReady);
@@ -175,19 +187,7 @@ void PlayerWindow::buildUi()
     settingsBtn->setIconSize(QSize(18, 18));
     settingsBtn->setCursor(Qt::PointingHandCursor);
     settingsBtn->setToolTip(tr("设置"));
-    connect(settingsBtn, &QToolButton::clicked, this, [this]() {
-        SettingsDialog dlg(m_grid ? m_grid->videoSettings() : VideoSettings(),
-                           ThemeManager::instance().presetName(), this);
-        connect(&dlg, &SettingsDialog::videoSettingsChanged, this,
-                [this](const VideoSettings &s) {
-                    if (m_grid) m_grid->setVideoSettings(s);
-                });
-        connect(&dlg, &SettingsDialog::themeChanged, this, [this](const QString &name) {
-            ThemeManager::instance().setPreset(name);
-            SessionManager::instance().setTheme(name);
-        });
-        dlg.exec();
-    });
+    connect(settingsBtn, &QToolButton::clicked, this, &PlayerWindow::openSettings);
     tb->addWidget(settingsBtn);
 
     tb->addSpacing(4);
@@ -381,6 +381,24 @@ void PlayerWindow::buildUi()
     });
 
     statusBar()->showMessage(tr("已登录：%1").arg(m_session.username));
+}
+
+void PlayerWindow::openSettings()
+{
+    SettingsDialog dlg(m_grid ? m_grid->videoSettings() : VideoSettings(),
+                       ThemeManager::instance().presetName(), this);
+    if (qEnvironmentVariable("ZP_SETTINGS") == QLatin1String("about")) {
+        dlg.setPage(2);   // dev: capture the about page headlessly
+    }
+    connect(&dlg, &SettingsDialog::videoSettingsChanged, this,
+            [this](const VideoSettings &s) {
+                if (m_grid) m_grid->setVideoSettings(s);
+            });
+    connect(&dlg, &SettingsDialog::themeChanged, this, [this](const QString &name) {
+        ThemeManager::instance().setPreset(name);
+        SessionManager::instance().setTheme(name);
+    });
+    dlg.exec();
 }
 
 void PlayerWindow::setActiveLayoutButton(int index)
