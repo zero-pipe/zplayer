@@ -241,6 +241,8 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_set_option_string(m_holder->h, "hwdec", "auto-safe");
         mpv_initialize(m_holder->h);
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);
+        mpv_observe_property(m_holder->h, 0, "duration", MPV_FORMAT_DOUBLE);
+        mpv_observe_property(m_holder->h, 0, "speed", MPV_FORMAT_DOUBLE);
         mpv_set_wakeup_callback(m_holder->h, mpvWakeup, this);
         applyVideoSettings();  // push defaults before the first loadfile
     }
@@ -380,6 +382,58 @@ double MpvMediaPlayer::currentTimePos() const
     return pos;
 }
 
+// ---------------------------------------------------------------------------
+// Playback control (seek / speed / timeline)
+// ---------------------------------------------------------------------------
+bool MpvMediaPlayer::seek(double seconds)
+{
+    if (!m_holder || !m_holder->h || seconds < 0.0) {
+        return false;
+    }
+    // Writing time-pos performs an exact (keyframe-accurate) seek, which is
+    // what evidence / fast-forward needs (relative seeks would drift).
+    double pos = seconds;
+    return mpv_set_property(m_holder->h, "time-pos", MPV_FORMAT_DOUBLE, &pos) >= 0;
+}
+
+void MpvMediaPlayer::setSpeed(double speed)
+{
+    if (!m_holder || !m_holder->h) {
+        return;
+    }
+    double v = qBound(0.01, speed, 100.0);
+    mpv_set_property(m_holder->h, "speed", MPV_FORMAT_DOUBLE, &v);
+}
+
+double MpvMediaPlayer::speed() const
+{
+    if (!m_holder || !m_holder->h) {
+        return 1.0;
+    }
+    double v = 1.0;
+    if (mpv_get_property(m_holder->h, "speed", MPV_FORMAT_DOUBLE, &v) < 0) {
+        return 1.0;
+    }
+    return v;
+}
+
+double MpvMediaPlayer::position() const
+{
+    return currentTimePos();
+}
+
+double MpvMediaPlayer::duration() const
+{
+    if (!m_holder || !m_holder->h) {
+        return -1.0;
+    }
+    double d = -1.0;
+    if (mpv_get_property(m_holder->h, "duration", MPV_FORMAT_DOUBLE, &d) < 0) {
+        return -1.0;
+    }
+    return d;
+}
+
 // Map the engine-neutral settings onto libmpv properties. Most of these are
 // live properties, so they take effect on the current stream immediately and
 // persist into the next loadfile().
@@ -483,7 +537,25 @@ void MpvMediaPlayer::handleEvent(void *ev)
         // read at load time, and an external subtitle must be re-added.
         applyVideoSettings();
         emit started();
+        emit durationChanged(duration());
+        emit speedChanged(speed());
         break;
+    case MPV_EVENT_PROPERTY_CHANGE: {
+        auto *pc = static_cast<mpv_event_property *>(event->data);
+        if (!pc || !pc->name || pc->format != MPV_FORMAT_DOUBLE || !pc->data) {
+            break;
+        }
+        const double value = *static_cast<double *>(pc->data);
+        const QByteArray name(pc->name);
+        if (name == QByteArrayLiteral("time-pos")) {
+            emit positionChanged(value);
+        } else if (name == QByteArrayLiteral("duration")) {
+            emit durationChanged(value);
+        } else if (name == QByteArrayLiteral("speed")) {
+            emit speedChanged(value);
+        }
+        break;
+    }
     case MPV_EVENT_PLAYBACK_RESTART:
         if (m_state == MediaState::Opening) {
             setState(MediaState::Playing);

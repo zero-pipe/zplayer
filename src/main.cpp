@@ -15,8 +15,60 @@
 #include <QTimer>
 #include <QWidget>
 #include <QDialog>
+#include <QDateTime>
+#include <QFile>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QTextStream>
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// Dev only: ZP_LOG=<file> mirrors every qDebug/qInfo/qWarning into a file.
+// The app is a GUI-subsystem binary, so on Windows nothing written by Qt's
+// default handler reaches a redirected stderr; this is the only way to see
+// what the media engine / analyzer actually reported when launched from a
+// shell or a shortcut.
+// ---------------------------------------------------------------------------
+QFile *g_logFile = nullptr;
+QMutex g_logMutex;
+
+void fileMessageHandler(QtMsgType type, const QMessageLogContext &, const QString &msg)
+{
+    const char *level = "info";
+    switch (type) {
+    case QtDebugMsg: level = "debug"; break;
+    case QtInfoMsg: level = "info"; break;
+    case QtWarningMsg: level = "warn"; break;
+    case QtCriticalMsg: level = "crit"; break;
+    case QtFatalMsg: level = "fatal"; break;
+    }
+    QMutexLocker lock(&g_logMutex);
+    if (!g_logFile) {
+        return;
+    }
+    QTextStream ts(g_logFile);
+    ts.setCodec("UTF-8");
+    ts << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
+       << " [" << level << "] " << msg << '\n';
+    ts.flush();
+}
+
+void installFileLogger()
+{
+    const QString path = qEnvironmentVariable("ZP_LOG");
+    if (path.isEmpty() || g_logFile) {
+        return;
+    }
+    // Leaked on purpose: the handler may still fire while Qt itself unwinds.
+    g_logFile = new QFile(path);
+    if (!g_logFile->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        delete g_logFile;
+        g_logFile = nullptr;
+        return;
+    }
+    qInstallMessageHandler(fileMessageHandler);
+}
 
 // Drives the login -> player -> logout cycle.
 class AppController : public QObject {
@@ -180,6 +232,8 @@ private:
 
 int main(int argc, char *argv[])
 {
+    installFileLogger();
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("zero-player"));
     app.setOrganizationName(QStringLiteral("zero"));

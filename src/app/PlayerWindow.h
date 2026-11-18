@@ -20,6 +20,7 @@ class VideoGrid;
 class PtzPanel;
 class Toast;
 class AnalysisService;
+class IFrameAnalyzer;
 
 class PlayerWindow : public QMainWindow {
     Q_OBJECT
@@ -81,6 +82,7 @@ private:
     PtzPanel *m_ptz = nullptr;
     Toast *m_toast = nullptr;
     AnalysisService *m_analysis = nullptr;   // per-window AI scheduler
+    IFrameAnalyzer *m_detector = nullptr;    // owned; YOLO analyzer (may be null)
 
     QButtonGroup *m_layoutGroup = nullptr;
 

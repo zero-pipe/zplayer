@@ -7,13 +7,16 @@
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
 #include "player/video_grid.h"
+#include "player/video_tile.h"
 #include "analysis/analysis_service.h"
+#include "analysis/yolo_detector.h"
 
 #include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDebug>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -77,6 +80,21 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     connect(settingsAct, &QAction::triggered, this, &PlayerWindow::openSettings);
     addAction(settingsAct);
 
+    // Quick toggle for AI fast-forward on the active tile (mirrors the tile's
+    // own AI button). Only meaningful for local / recorded playback.
+    auto *aiAct = new QAction(this);
+    aiAct->setShortcut(QKeySequence(QStringLiteral("A")));
+    connect(aiAct, &QAction::triggered, this, [this]() {
+        VideoTile *t = m_grid ? m_grid->activeTile() : nullptr;
+        if (!t) {
+            return;
+        }
+        const bool on = !t->aiSkipEnabled();
+        t->setAiSkipEnabled(on);
+        toastInfo(on ? tr("AI 快放：开（无人时自动跳过）") : tr("AI 快放：关"));
+    });
+    addAction(aiAct);
+
     buildUi();
 
     // Frameless windows lose the native resize border; a floating grip in the
@@ -91,7 +109,45 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     m_grid->setAnalysisService(m_analysis);
     if (IFrameAnalyzer *stats = createDebugStatsAnalyzer()) {
         m_analysis->setAnalyzer(stats);   // ZP_ANALYZE=<file> — pipeline smoke test
+    } else {
+        // Real detector: YOLOv8n / YOLO11n via ONNX Runtime. Absent a model,
+        // analysis stays idle and the UI simply shows no boxes.
+        QString modelPath, classesPath, findErr;
+        if (findDefaultYoloModel(&modelPath, &classesPath, &findErr)) {
+            auto *det = new YoloDetector();
+            QString loadErr;
+            if (det->load(modelPath, classesPath, &loadErr)) {
+                m_detector = det;
+                m_analysis->setAnalyzer(det);
+                qInfo().noquote() << "[ai] detector ready:" << modelPath
+                                  << "backend=" << det->backendName();
+            } else {
+                delete det;
+                toastError(tr("AI 模型加载失败：%1").arg(loadErr));
+            }
+        } else {
+            qInfo().noquote() << "[ai] detector disabled:" << findErr;
+        }
     }
+
+    connect(m_grid, &VideoGrid::evidenceExportRequested, this,
+            [this](const zp::ChannelRef &ch) {
+                VideoTile *tile = m_grid->tileFor(ch);
+                if (!tile) {
+                    return;
+                }
+                const QString dir = QFileDialog::getExistingDirectory(
+                    this, tr("选择证据导出目录"));
+                if (dir.isEmpty()) {
+                    return;
+                }
+                QString err;
+                if (tile->exportEvidence(dir, &err)) {
+                    toastSuccess(tr("证据已导出：%1").arg(dir));
+                } else {
+                    toastError(tr("导出失败：%1").arg(err));
+                }
+            });
 
     // Dev: ZP_SETTINGS=1 opens the settings dialog shortly after start, so UI
     // can be captured headlessly (see ZP_SHOT in main.cpp).
@@ -120,6 +176,14 @@ PlayerWindow::~PlayerWindow()
     if (m_grid) {
         m_grid->stopAll();
     }
+    if (m_analysis) {
+        // Stop the worker (joins the thread) before the detector it may be
+        // using is destroyed.
+        delete m_analysis;
+        m_analysis = nullptr;
+    }
+    delete m_detector;
+    m_detector = nullptr;
 }
 
 void PlayerWindow::buildUi()

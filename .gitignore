@@ -42,3 +42,6 @@ ui_*.h
 # mpv SDK: keep the (small) import library so the app links without the
 # 184 MB runtime DLL set; the bin/x64 DLLs stay untracked on purpose.
 !/3rdpart/mpv-sdk/lib/**/*.lib
+/3rdpart/models
+/3rdpart/onnxruntime
+/3rdpart/onnxruntime-1.15.1

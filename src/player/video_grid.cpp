@@ -11,6 +11,41 @@
 
 namespace zp {
 
+void VideoGrid::setAnalysisService(AnalysisService *service)
+{
+    m_analysis = service;
+    if (!service) {
+        return;
+    }
+    // Deliver each result to the tile that owns the source channel.
+    connect(service, &AnalysisService::resultReady, this,
+            [this](const zp::ChannelRef &ref, const zp::AnalysisResult &result) {
+                const int idx = indexOf(ref);
+                if (idx >= 0 && m_tiles.value(idx)) {
+                    m_tiles[idx]->setAnalysisResult(result);
+                }
+            });
+    for (VideoTile *t : m_tiles) {
+        if (t && t->player()) {
+            service->attach(t->player(), t->channel());
+        }
+    }
+}
+
+VideoTile *VideoGrid::tileFor(const zp::ChannelRef &ch) const
+{
+    const int idx = indexOf(ch);
+    return idx >= 0 ? m_tiles.value(idx) : nullptr;
+}
+
+VideoTile *VideoGrid::activeTile() const
+{
+    if (m_activeIndex >= 0 && m_activeIndex < m_tiles.size()) {
+        return m_tiles.value(m_activeIndex);
+    }
+    return nullptr;
+}
+
 VideoGrid::VideoGrid(QWidget *parent)
     : QWidget(parent)
 {
@@ -191,6 +226,8 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
     connect(tile, &VideoTile::retryRequested, this, &VideoGrid::retryRequested);
     connect(tile, &VideoTile::maximizeRequested, this, &VideoGrid::maximizeRequested);
     connect(tile, &VideoTile::snapshotTaken, this, &VideoGrid::snapshotTaken);
+    connect(tile, &VideoTile::evidenceExportRequested, this,
+            &VideoGrid::evidenceExportRequested);
 
     // Route this tile's frames to the shared analysis service. Bookkeeping is
     // released from destroyed() rather than an explicit delete path: tiles are

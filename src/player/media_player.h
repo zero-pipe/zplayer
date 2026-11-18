@@ -156,6 +156,25 @@ public:
     void setVideoSettings(const VideoSettings &settings) { m_settings = settings; applyVideoSettings(); }
     VideoSettings videoSettings() const { return m_settings; }
 
+    // ---- Playback control (seek / speed / position) ----
+    //
+    // Live streams have no meaningful duration, so UI must branch on
+    // supportsPlaybackControl() and treat duration() <= 0 as unknown. These are
+    // non-pure with inert defaults so legacy backends keep compiling unchanged.
+    virtual bool supportsPlaybackControl() const { return false; }
+
+    // Seek to an absolute media position in seconds. Returns false when the
+    // seek was not dispatched.
+    virtual bool seek(double /*seconds*/) { return false; }
+
+    // Playback rate (1.0 = normal). Values <= 0 are clamped away.
+    virtual void setSpeed(double /*speed*/) {}
+    virtual double speed() const { return 1.0; }
+
+    // Media timeline, in seconds. position() == -1 when unknown.
+    virtual double position() const { return -1.0; }
+    virtual double duration() const { return -1.0; }
+
     // Capture the current video frame to an image file. Returns true if the
     // request was dispatched (some engines, e.g. mpv, write asynchronously).
     // Default implementation grabs the renderer widget; engines may override
@@ -194,6 +213,13 @@ signals:
     void paused();
     void stopped();
     void failed(const QString &message);
+
+    // Playback timeline. positionChanged fires several times per second while
+    // playing; durationChanged when the engine learns/knows the media length
+    // (-1 while unknown). speedChanged after setSpeed() takes effect.
+    void positionChanged(double seconds);
+    void durationChanged(double seconds);
+    void speedChanged(double speed);
 
 protected:
     // Backends override to push m_settings into their engine. Called by

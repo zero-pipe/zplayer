@@ -3,6 +3,8 @@ SOURCES += \
     app/PlayerWindow.cpp \
     app/SessionManager.cpp \
     analysis/analysis_service.cpp \
+    analysis/yolo_detector.cpp \
+    analysis/evidence.cpp \
     platform/platform_http_client.cpp \
     platform/web_platform_api.cpp \
     platform/mock_platform_api.cpp \
@@ -12,6 +14,7 @@ SOURCES += \
     player/video_grid.cpp \
     ui/theme.cpp \
     ui/icons.cpp \
+    ui/analysis_overlay.cpp \
     ui/toast.cpp \
     ui/icon_field.cpp \
     ui/login_dialog.cpp \
@@ -25,6 +28,8 @@ HEADERS += \
     app/SessionManager.h \
     analysis/analyzer.h \
     analysis/analysis_service.h \
+    analysis/yolo_detector.h \
+    analysis/evidence.h \
     platform/platform_api.h \
     platform/platform_http_client.h \
     platform/web_platform_api.h \
@@ -36,6 +41,7 @@ HEADERS += \
     player/video_grid.h \
     ui/theme.h \
     ui/icons.h \
+    ui/analysis_overlay.h \
     ui/toast.h \
     ui/icon_field.h \
     ui/login_dialog.h \

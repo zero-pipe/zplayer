@@ -78,6 +78,12 @@ echo Deploying Qt runtime + libmpv + dependencies...
 if exist "%QT_BIN%\Qt5OpenGL.dll" copy /y "%QT_BIN%\Qt5OpenGL.dll" "%OUTBIN%" >nul
 REM libmpv + its runtime dependency DLLs (ffmpeg, libass, ...).
 if exist "%MPV_SDK%\bin\x64" copy /y "%MPV_SDK%\bin\x64\*.dll" "%OUTBIN%" >nul
+REM ONNX Runtime (DirectML) + the bundled YOLO model, so AI works from out/.
+if exist "%ROOT%3rdpart\onnxruntime\bin\*.dll" copy /y "%ROOT%3rdpart\onnxruntime\bin\*.dll" "%OUTBIN%" >nul
+if exist "%ROOT%3rdpart\models" (
+    if not exist "%OUTBIN%\models" mkdir "%OUTBIN%\models"
+    xcopy /y /q "%ROOT%3rdpart\models\*" "%OUTBIN%\models\" >nul
+)
 
 popd >nul
 echo.

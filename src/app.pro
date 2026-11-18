@@ -24,6 +24,17 @@ exists($$MPV_SDK_DIR/mpv-sdk.pri) {
     warning("mpv-sdk not found at $$MPV_SDK_DIR; media engine will be unavailable")
 }
 
+# ONNX Runtime (default on): local inference for the AI analyzer. The bundled
+# package is the DirectML build; the analyzer falls back to the CPU EP when no
+# D3D12 device is usable.
+isEmpty(ORT_SDK_DIR): ORT_SDK_DIR = $$clean_path($$PWD/../3rdpart/onnxruntime)
+exists($$ORT_SDK_DIR/onnxruntime.pri) {
+    include($$ORT_SDK_DIR/onnxruntime.pri)
+    DEFINES += ZP_WITH_ORT
+} else {
+    warning("onnxruntime SDK not found at $$ORT_SDK_DIR; AI analysis disabled")
+}
+
 # QtAV SDK (opt-in)
 with_qtav {
     isEmpty(QTAV_SDK_DIR): QTAV_SDK_DIR = $$clean_path($$PWD/../3rdpart/qtav-sdk)

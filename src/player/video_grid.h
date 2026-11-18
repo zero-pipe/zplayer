@@ -56,8 +56,13 @@ public:
     VideoSettings videoSettings() const { return m_settings; }
 
     // Route every tile's frames to the given service (null = no analysis).
-    // Tiles created later are attached automatically.
-    void setAnalysisService(AnalysisService *service) { m_analysis = service; }
+    // Tiles created later are attached automatically, and each result is
+    // delivered to the owning tile for overlay/evidence.
+    void setAnalysisService(AnalysisService *service);
+
+    // Tile lookup for window-level actions (AI toggle, evidence export).
+    VideoTile *tileFor(const zp::ChannelRef &ch) const;
+    VideoTile *activeTile() const;
 
 signals:
     void activeChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
@@ -66,6 +71,7 @@ signals:
     void maximizeRequested(const zp::ChannelRef &ch);
     void layoutChanged(int index);
     void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
+    void evidenceExportRequested(const zp::ChannelRef &ch);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };

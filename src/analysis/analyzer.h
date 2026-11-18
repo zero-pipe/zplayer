@@ -23,6 +23,7 @@ namespace zp {
 struct AnalysisBox {
     QRectF rect;            // normalized, origin top-left of the video area
     int classId = -1;       // analyzer-defined class id
+    QString label;          // display label, already localized by the analyzer
     float score = 0.f;      // confidence 0..1
     int trackId = -1;       // stable id from the tracker, -1 = untracked
 };
