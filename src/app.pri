@@ -6,6 +6,7 @@ SOURCES += \
     platform/web_platform_api.cpp \
     platform/mock_platform_api.cpp \
     player/media_factory.cpp \
+    player/frame_grabber.cpp \
     player/video_tile.cpp \
     player/video_grid.cpp \
     ui/theme.cpp \
@@ -27,6 +28,7 @@ HEADERS += \
     platform/mock_platform_api.h \
     player/media_player.h \
     player/media_factory.h \
+    player/frame_grabber.h \
     player/video_tile.h \
     player/video_grid.h \
     ui/theme.h \

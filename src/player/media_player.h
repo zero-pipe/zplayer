@@ -81,6 +81,38 @@ enum class MediaState {
     Failed
 };
 
+// ---------------------------------------------------------------------------
+// Frame tap (AI / analysis hook)
+//
+// A backend that owns its render pipeline (libmpv over OpenGL) can hand every
+// rendered frame to an IVideoFrameSink while the GL context is current. This is
+// the single extension point local inference is built on: analyzers receive a
+// GPU texture and decide themselves whether to run on it, downscale it, or read
+// it back to CPU.
+//
+// Contract:
+//   * Called on the renderer thread (for QOpenGLWidget: the GUI thread), inside
+//     the widget's paint, with the render context current.
+//   * The texture is owned by the backend and is only valid during the call.
+//     Sinks that need to keep the pixels must copy (GPU copy, PBO readback, ...).
+//   * Sinks must be cheap: no blocking, no synchronous inference. Queue work.
+//   * A sink may install itself on any number of players at once.
+// ---------------------------------------------------------------------------
+struct VideoFrame {
+    unsigned int textureId = 0;   // GL_TEXTURE_2D holding the composited frame
+    int width = 0;                // texture size in device pixels
+    int height = 0;
+    double pts = -1.0;            // seconds, media time (-1 = unknown)
+    quint64 serial = 0;           // monotonically increasing per player
+    quint64 playerId = 0;         // IMediaPlayer::playerId() of the source
+};
+
+class IVideoFrameSink {
+public:
+    virtual ~IVideoFrameSink() = default;
+    virtual void onVideoFrame(const VideoFrame &frame) = 0;
+};
+
 // The drawable surface a renderer occupies inside the UI.
 class IMediaRenderer {
 public:
@@ -94,8 +126,14 @@ public:
 class IMediaPlayer : public QObject {
     Q_OBJECT
 public:
-    explicit IMediaPlayer(QObject *parent = nullptr) : QObject(parent) {}
+    explicit IMediaPlayer(QObject *parent = nullptr)
+        : QObject(parent), m_playerId(nextPlayerId()) {}
     ~IMediaPlayer() override = default;
+
+    // Process-wide unique id. Analysis results coming back from a frame sink
+    // are tagged with it, so one shared analyzer can route them to the right
+    // tile without holding a pointer to the player.
+    quint64 playerId() const { return m_playerId; }
 
     // The renderer owned by this player. The caller inserts widget() into its
     // layout; the player renders into it.
@@ -134,6 +172,17 @@ public:
         return false;
     }
 
+    // ---- Frame tap ----
+    // Install (or clear, with nullptr) the sink that receives every rendered
+    // frame. Backends without a GPU frame path simply ignore it; check
+    // supportsFrameTap() to branch in UI code. Pass a sink object owned by the
+    // caller; it must outlive the player or be cleared before destruction.
+    void setFrameSink(IVideoFrameSink *sink) { m_frameSink = sink; }
+    IVideoFrameSink *frameSink() const { return m_frameSink; }
+
+    // True when onVideoFrame() will actually be called for this backend.
+    virtual bool supportsFrameTap() const { return false; }
+
     virtual MediaState state() const = 0;
 
     // Human-readable backend name for diagnostics ("QtAV", "libmpv", ...).
@@ -152,6 +201,15 @@ protected:
     virtual void applyVideoSettings() {}
 
     VideoSettings m_settings;
+    IVideoFrameSink *m_frameSink = nullptr;
+
+private:
+    static quint64 nextPlayerId()
+    {
+        static quint64 s_next = 0;
+        return ++s_next;
+    }
+    quint64 m_playerId = 0;
 };
 
 } // namespace zp

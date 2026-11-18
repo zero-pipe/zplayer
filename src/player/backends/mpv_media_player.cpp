@@ -6,6 +6,7 @@
 
 #include <QOpenGLWidget>
 #include <QOpenGLContext>
+#include <QOpenGLExtraFunctions>
 #include <QOpenGLFunctions>
 #include <QMetaObject>
 #include <QByteArray>
@@ -13,10 +14,26 @@
 
 #include <cstring>
 
+// Desktop-GL / GLES3 framebuffer targets used by glBindFramebuffer when
+// presenting the frame texture. Defined locally where the platform headers
+// are the ES2 subset.
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#endif
+
 namespace zp {
 
 // ---------------------------------------------------------------------------
 // The QOpenGLWidget that hosts the mpv render context.
+//
+// mpv renders into a framebuffer object that WE own, whose color attachment is
+// a texture we keep a handle to. That is what makes the frame tap possible (and
+// later, zero-copy GPU interop): the texture id is ours, not QOpenGLWidget's
+// private one. After mpv renders, the texture is blitted to the widget's
+// default FBO for display.
 // ---------------------------------------------------------------------------
 class MpvMediaPlayer::Renderer : public QOpenGLWidget, public IMediaRenderer {
 public:
@@ -51,10 +68,17 @@ public:
         if (!m_gl) {
             return;
         }
-        mpv_opengl_fbo mpfbo{
-            static_cast<int>(defaultFramebufferObject()),
-            static_cast<int>(width() * devicePixelRatioF()),
-            static_cast<int>(height() * devicePixelRatioF()), 0};
+        const int w = static_cast<int>(width() * devicePixelRatioF());
+        const int h = static_cast<int>(height() * devicePixelRatioF());
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        ensureRenderTarget(w, h);
+
+        QOpenGLFunctions *f = QOpenGLContext::currentContext()->functions();
+        f->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+
+        mpv_opengl_fbo mpfbo{static_cast<int>(m_fbo), w, h, 0};
         int flip_y{1};
         mpv_render_param params[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &mpfbo},
@@ -62,6 +86,30 @@ public:
             {MPV_RENDER_PARAM_INVALID, nullptr}
         };
         mpv_render_context_render(m_gl, params);
+
+        // mpv may leave another framebuffer bound after rendering; make sure
+        // the frame FBO is the one both drawn into and read from below.
+        f->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+        f->glViewport(0, 0, w, h);
+
+        // ---- Frame tap: the frame is complete and still in our texture. ----
+        if (IVideoFrameSink *sink = m_owner->frameSink()) {
+            VideoFrame frame;
+            frame.textureId = m_tex;
+            frame.width = w;
+            frame.height = h;
+            frame.pts = m_owner->currentTimePos();
+            frame.serial = ++m_frameSerial;
+            frame.playerId = m_owner->playerId();
+            sink->onVideoFrame(frame);
+        }
+
+        // ---- Present: blit our texture onto the widget's default FBO. ----
+        f->glBindFramebuffer(GL_READ_FRAMEBUFFER, m_fbo);
+        f->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, defaultFramebufferObject());
+        QOpenGLContext::currentContext()->extraFunctions()->glBlitFramebuffer(
+            0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        f->glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
     }
 
     void maybeUpdate()
@@ -80,6 +128,15 @@ public:
     {
         if (m_gl) {
             makeCurrent();
+            QOpenGLFunctions *f = context()->functions();
+            if (m_fbo) {
+                f->glDeleteFramebuffers(1, &m_fbo);
+                m_fbo = 0;
+            }
+            if (m_tex) {
+                f->glDeleteTextures(1, &m_tex);
+                m_tex = 0;
+            }
             mpv_render_context_free(m_gl);
             m_gl = nullptr;
             doneCurrent();
@@ -88,7 +145,44 @@ public:
 
     ~Renderer() override { releaseGl(); }
 
+    // GL texture that holds the most recent frame (0 before the first paint).
+    unsigned int frameTexture() const { return m_tex; }
+
 private:
+    // (Re)allocate the FBO + texture when the widget size changes.
+    void ensureRenderTarget(int w, int h)
+    {
+        if (m_fbo && m_tex && m_texW == w && m_texH == h) {
+            return;
+        }
+        QOpenGLFunctions *f = context()->functions();
+        if (!m_fbo) {
+            f->glGenFramebuffers(1, &m_fbo);
+        }
+        if (!m_tex) {
+            f->glGenTextures(1, &m_tex);
+        }
+        f->glBindTexture(GL_TEXTURE_2D, m_tex);
+        f->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
+                        GL_UNSIGNED_BYTE, nullptr);
+        f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        f->glBindTexture(GL_TEXTURE_2D, 0);
+
+        f->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+        f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                  m_tex, 0);
+        f->glViewport(0, 0, w, h);
+        f->glClearColor(0.f, 0.f, 0.f, 1.f);
+        f->glClear(GL_COLOR_BUFFER_BIT);
+        f->glBindFramebuffer(GL_FRAMEBUFFER, defaultFramebufferObject());
+
+        m_texW = w;
+        m_texH = h;
+    }
+
     static void *getProcAddress(void *, const char *name)
     {
         QOpenGLContext *ctx = QOpenGLContext::currentContext();
@@ -107,6 +201,11 @@ private:
 
     MpvMediaPlayer *m_owner = nullptr;
     mpv_render_context *m_gl = nullptr;
+    unsigned int m_fbo = 0;       // our render target
+    unsigned int m_tex = 0;       // its color attachment (frame texture)
+    int m_texW = 0;
+    int m_texH = 0;
+    quint64 m_frameSerial = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -258,8 +357,7 @@ void MpvMediaPlayer::setVolume(int volume)
 
 // Native snapshot: let mpv write the current decoded frame ("video" = no OSD
 // or subtitles). Asynchronous — the file appears shortly after this returns.
-bool MpvMediaPlayer::grabSnapshot(const QString &filePath)
-{
+bool MpvMediaPlayer::grabSnapshot(const QString &filePath){
     if (!m_holder || !m_holder->h || filePath.isEmpty()) {
         return false;
     }
@@ -268,6 +366,18 @@ bool MpvMediaPlayer::grabSnapshot(const QString &filePath)
     QByteArray path = local.toUtf8();
     const char *cmd[] = {"screenshot-to-file", path.constData(), "video", nullptr};
     return mpv_command(m_holder->h, cmd) >= 0;
+}
+
+double MpvMediaPlayer::currentTimePos() const
+{
+    if (!m_holder || !m_holder->h) {
+        return -1.0;
+    }
+    double pos = -1.0;
+    if (mpv_get_property(m_holder->h, "time-pos", MPV_FORMAT_DOUBLE, &pos) < 0) {
+        return -1.0;
+    }
+    return pos;
 }
 
 // Map the engine-neutral settings onto libmpv properties. Most of these are

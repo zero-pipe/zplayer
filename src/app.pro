@@ -1,6 +1,6 @@
 TEMPLATE = app
 TARGET = zero-player
-CONFIG += c++11
+CONFIG += c++17
 CONFIG -= app_bundle
 
 QT += core gui widgets opengl network

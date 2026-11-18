@@ -29,6 +29,10 @@ public:
     // Handle a command-line media target (local file / direct URL).
     void openDirect(const QUrl &url);
 
+    // Open a local video file on demand. This is the same rendering/analysis
+    // path as a live channel: analysis code never needs to know the difference.
+    void openLocalFile(const QString &path);
+
     // Dev helper: fill the grid with N demo tiles (for layout verification).
     void fillDemo(const QUrl &url, int count);
     void setDemoLayout(int index);
@@ -39,6 +43,8 @@ signals:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private slots:
     void onChildrenReady(const QString &parentId, const QList<DeviceNode> &nodes);

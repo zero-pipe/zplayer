@@ -8,13 +8,19 @@
 #include "ui/settings_dialog.h"
 #include "player/video_grid.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QEvent>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -46,6 +52,23 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     setWindowTitle(QStringLiteral("Zero AI Player"));
     resize(1440, 880);
     setMinimumSize(1024, 640);
+    setAcceptDrops(true);
+
+    // Local on-demand playback entry: Ctrl+O opens a recording. Dropping a file
+    // on the window does the same. Both land in the normal grid path, so AI
+    // analysis treats a file exactly like a live channel.
+    auto *openAct = new QAction(this);
+    openAct->setShortcut(QKeySequence::Open);
+    connect(openAct, &QAction::triggered, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(
+            this, tr("打开视频文件"),
+            QString(),
+            tr("视频文件 (*.mp4 *.mkv *.ts *.mov *.avi *.flv *.wmv *.m4v);;所有文件 (*.*)"));
+        if (!path.isEmpty()) {
+            openLocalFile(path);
+        }
+    });
+    addAction(openAct);
 
     buildUi();
 
@@ -576,6 +599,54 @@ void PlayerWindow::openDirect(const QUrl &url)
     const QString name = url.fileName().isEmpty() ? url.toString() : url.fileName();
     m_grid->openStream(ref, name, false, url);
     toastInfo(tr("直接播放：%1").arg(name));
+}
+
+void PlayerWindow::openLocalFile(const QString &path)
+{
+    const QFileInfo fi(path);
+    if (!fi.exists() || !fi.isFile()) {
+        toastError(tr("文件不存在：%1").arg(path));
+        return;
+    }
+    const QString abs = fi.absoluteFilePath();
+    ChannelRef ref;
+    ref.deviceId = QStringLiteral("_file");
+    ref.channelId = abs;   // one tile per distinct file
+    if (m_grid->contains(ref)) {
+        m_grid->focusChannel(ref);
+        return;
+    }
+    m_grid->openStream(ref, fi.fileName(), false, QUrl::fromLocalFile(abs));
+    toastInfo(tr("打开文件：%1").arg(fi.fileName()));
+}
+
+void PlayerWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    const QMimeData *mime = event->mimeData();
+    if (!mime || !mime->hasUrls()) {
+        return;
+    }
+    for (const QUrl &u : mime->urls()) {
+        if (u.isLocalFile()) {
+            event->acceptProposedAction();
+            return;
+        }
+    }
+}
+
+void PlayerWindow::dropEvent(QDropEvent *event)
+{
+    const QMimeData *mime = event->mimeData();
+    if (!mime || !mime->hasUrls()) {
+        return;
+    }
+    for (const QUrl &u : mime->urls()) {
+        if (u.isLocalFile()) {
+            openLocalFile(u.toLocalFile());
+            event->acceptProposedAction();
+            return;
+        }
+    }
 }
 
 void PlayerWindow::fillDemo(const QUrl &url, int count)

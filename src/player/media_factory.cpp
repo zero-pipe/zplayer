@@ -1,4 +1,5 @@
 #include "player/media_factory.h"
+#include "player/frame_grabber.h"
 #include "player/media_player.h"
 
 #ifdef ZP_WITH_MPV
@@ -29,30 +30,42 @@ public:
 
 IMediaPlayer *createPlayer(MediaBackend backend)
 {
+    IMediaPlayer *player = nullptr;
+
     switch (backend) {
     case MediaBackend::QtAV:
 #ifdef ZP_WITH_QTAV
-        return new QtavMediaPlayer();
-#else
-        break;
+        player = new QtavMediaPlayer();
 #endif
+        break;
     case MediaBackend::LibMpv:
 #ifdef ZP_WITH_MPV
-        return new MpvMediaPlayer();
-#else
-        break;
+        player = new MpvMediaPlayer();
 #endif
+        break;
     case MediaBackend::Auto:
     default:
         // Primary engine is libmpv; QtAV is a legacy fallback.
 #ifdef ZP_WITH_MPV
-        return new MpvMediaPlayer();
+        player = new MpvMediaPlayer();
 #elif defined(ZP_WITH_QTAV)
-        return new QtavMediaPlayer();
+        player = new QtavMediaPlayer();
 #endif
         break;
     }
-    return new NullMediaPlayer();
+
+    if (!player) {
+        player = new NullMediaPlayer();
+    }
+
+    // Dev diagnostic: ZP_TAP=<dir> dumps one frame per player (see frame_grabber).
+    if (player->supportsFrameTap()) {
+        if (IVideoFrameSink *tap = debugFrameTap()) {
+            player->setFrameSink(tap);
+        }
+    }
+
+    return player;
 }
 
 QString resolveBackendName(MediaBackend backend)

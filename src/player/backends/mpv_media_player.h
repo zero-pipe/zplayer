@@ -26,6 +26,13 @@ public:
     MediaState state() const override { return m_state; }
     QString backendName() const override { return QStringLiteral("libmpv"); }
 
+    // libmpv renders into an FBO/texture we own, so every frame can be tapped.
+    bool supportsFrameTap() const override { return true; }
+
+    // Playback position in seconds, or -1 when unknown. Read per-frame by the
+    // renderer to stamp VideoFrame::pts; cheap (an mpv property get).
+    double currentTimePos() const;
+
 protected:
     void applyVideoSettings() override;
 
