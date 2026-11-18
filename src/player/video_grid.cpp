@@ -1,5 +1,6 @@
 #include "player/video_grid.h"
 #include "player/video_tile.h"
+#include "analysis/analysis_service.h"
 #include "ui/icons.h"
 
 #include <QGridLayout>
@@ -190,6 +191,22 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
     connect(tile, &VideoTile::retryRequested, this, &VideoGrid::retryRequested);
     connect(tile, &VideoTile::maximizeRequested, this, &VideoGrid::maximizeRequested);
     connect(tile, &VideoTile::snapshotTaken, this, &VideoGrid::snapshotTaken);
+
+    // Route this tile's frames to the shared analysis service. Bookkeeping is
+    // released from destroyed() rather than an explicit delete path: tiles are
+    // removed via deleteLater() from several places.
+    if (m_analysis) {
+        if (IMediaPlayer *player = tile->player()) {
+            m_analysis->attach(player, ch);
+            const quint64 playerId = player->playerId();
+            // Capture the service (not `this`): the grid is destroyed before
+            // the service, and this connection outlives the grid.
+            AnalysisService *svc = m_analysis;
+            connect(tile, &QObject::destroyed, svc, [svc, playerId]() {
+                svc->forget(playerId);
+            });
+        }
+    }
     return tile;
 }
 

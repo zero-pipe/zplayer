@@ -18,8 +18,11 @@ namespace zp {
 //
 // Must be called from IVideoFrameSink::onVideoFrame — that is, on the render
 // thread, with the render context current and the frame's FBO still bound.
-// ---------------------------------------------------------------------------
-QImage grabFrameToImage(const VideoFrame &frame);
+//
+// maxWidth > 0 downscales on the GPU (blit with linear filtering) before the
+// readback, so the CPU/PCIe cost stays proportional to the analysis size
+// instead of the tile size. 0 reads the frame at its native size.
+QImage grabFrameToImage(const VideoFrame &frame, int maxWidth = 0);
 
 // Dev/diagnostic helper. When the ZP_TAP=<dir> environment variable is set,
 // returns a sink that writes the first frame of every player to

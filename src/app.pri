@@ -2,6 +2,7 @@ SOURCES += \
     main.cpp \
     app/PlayerWindow.cpp \
     app/SessionManager.cpp \
+    analysis/analysis_service.cpp \
     platform/platform_http_client.cpp \
     platform/web_platform_api.cpp \
     platform/mock_platform_api.cpp \
@@ -22,6 +23,8 @@ SOURCES += \
 HEADERS += \
     app/PlayerWindow.h \
     app/SessionManager.h \
+    analysis/analyzer.h \
+    analysis/analysis_service.h \
     platform/platform_api.h \
     platform/platform_http_client.h \
     platform/web_platform_api.h \

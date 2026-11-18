@@ -15,6 +15,7 @@ QT_END_NAMESPACE
 namespace zp {
 
 class VideoTile;
+class AnalysisService;
 
 // Split-screen container. Manages a slot-based grid so irregular security
 // layouts (e.g. 1 big + 5 small) are expressible.
@@ -54,6 +55,10 @@ public:
     void setVideoSettings(const VideoSettings &settings);
     VideoSettings videoSettings() const { return m_settings; }
 
+    // Route every tile's frames to the given service (null = no analysis).
+    // Tiles created later are attached automatically.
+    void setAnalysisService(AnalysisService *service) { m_analysis = service; }
+
 signals:
     void activeChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
     void streamClosed(const zp::ChannelRef &ch);
@@ -79,6 +84,7 @@ private:
     int m_activeIndex = -1;
     QVector<VideoTile *> m_tiles;
     VideoSettings m_settings;
+    AnalysisService *m_analysis = nullptr;
 
     QStackedLayout *m_stack = nullptr;
     QWidget *m_gridHost = nullptr;

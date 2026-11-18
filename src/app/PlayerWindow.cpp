@@ -7,6 +7,7 @@
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
 #include "player/video_grid.h"
+#include "analysis/analysis_service.h"
 
 #include <QAction>
 #include <QApplication>
@@ -77,6 +78,14 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     m_sizeGrip = new QSizeGrip(this);
     m_sizeGrip->setFixedSize(16, 16);
     m_sizeGrip->raise();
+
+    // Per-window AI scheduler. Created before any tile exists so every tile
+    // created later attaches to it; one worker/analyzer serves all tiles.
+    m_analysis = new AnalysisService(this);
+    m_grid->setAnalysisService(m_analysis);
+    if (IFrameAnalyzer *stats = createDebugStatsAnalyzer()) {
+        m_analysis->setAnalyzer(stats);   // ZP_ANALYZE=<file> — pipeline smoke test
+    }
 
     connect(m_api, &IPlatformApi::childrenReady, this, &PlayerWindow::onChildrenReady);
     connect(m_api, &IPlatformApi::playStarted, this, &PlayerWindow::onPlayStarted);

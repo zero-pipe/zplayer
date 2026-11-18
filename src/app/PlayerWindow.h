@@ -19,6 +19,7 @@ class DeviceTreeView;
 class VideoGrid;
 class PtzPanel;
 class Toast;
+class AnalysisService;
 
 class PlayerWindow : public QMainWindow {
     Q_OBJECT
@@ -78,6 +79,7 @@ private:
     VideoGrid *m_grid = nullptr;
     PtzPanel *m_ptz = nullptr;
     Toast *m_toast = nullptr;
+    AnalysisService *m_analysis = nullptr;   // per-window AI scheduler
 
     QButtonGroup *m_layoutGroup = nullptr;
 

@@ -32,6 +32,10 @@ public:
     bool ptzCapable() const { return m_ptzCapable; }
     State state() const { return m_state; }
 
+    // The engine instance behind this tile. Used by the analysis service to
+    // route frames; UI code should not otherwise depend on it.
+    IMediaPlayer *player() const { return m_player; }
+
     void play(const QUrl &url);
     void stop();
     void setSelected(bool selected);
