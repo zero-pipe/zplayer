@@ -85,7 +85,8 @@ void PlayerWindow::buildUi()
     setCentralWidget(root);
 
     auto *rootLay = new QVBoxLayout(root);
-    rootLay->setContentsMargins(0, 0, 0, 0);
+    // 1px inset leaves room for the window's own border (see theme.qss).
+    rootLay->setContentsMargins(1, 1, 1, 0);
     rootLay->setSpacing(0);
 
     // ---------------- Title bar (brand + actions + window controls) ----------------

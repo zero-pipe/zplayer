@@ -120,13 +120,14 @@ QCheckBox::indicator:checked {
 
 QMainWindow#PlayerWindow { background: %bgRoot%; }
 /* Frameless window: the edge has to be drawn by us, otherwise the player
-   blends into whatever is behind it. */
-QMainWindow#PlayerWindow {
+   blends into whatever is behind it. The border lives on the central area
+   (left/right/top) and on the status bar (left/right/bottom) so the two
+   pieces join into one continuous outline. */
+QWidget#RootArea {
     background: %bgRoot%;
     border: 1px solid %borderStrong%;
+    border-bottom: none;
 }
-
-QWidget#RootArea { background: %bgRoot%; }
 
 QWidget#TitleBar {
     background: %bgPanel%;
@@ -397,6 +398,9 @@ QLabel#SpeedValue { color: %accent%; font-size: 12px; font-weight: 700; }
 QStatusBar {
     background: %bgPanel%;
     border-top: 1px solid %divider%;
+    border-left: 1px solid %borderStrong%;
+    border-right: 1px solid %borderStrong%;
+    border-bottom: 1px solid %borderStrong%;
     color: %muted%;
 }
 QStatusBar::item { border: none; }
