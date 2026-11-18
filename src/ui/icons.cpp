@@ -312,6 +312,33 @@ QPixmap ptzZoom(bool zoomIn, const QColor &color, int size)
     return pm;
 }
 
+QPixmap chevron(bool right, const QColor &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const qreal s = size;
+    p.translate(s * 0.5, s * 0.5);
+    if (!right) {
+        p.rotate(180.0);
+    }
+    p.scale(s / 24.0, s / 24.0);
+
+    QPainterPath path;
+    path.moveTo(-3.5, -6.5);
+    path.lineTo(3.5, 0.0);
+    path.lineTo(-3.5, 6.5);
+
+    QPen pen(color, 2.6);
+    pen.setJoinStyle(Qt::RoundJoin);
+    pen.setCapStyle(Qt::RoundCap);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(path);
+    return pm;
+}
+
 QPixmap brandHero(int size)
 {
     const ThemeTokens t = tokens();

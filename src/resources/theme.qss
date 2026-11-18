@@ -223,6 +223,15 @@ QTreeView#DeviceTree::branch { background: transparent; }
 
 QSplitter#BodySplitter::handle { background: %borderStrong%; }
 
+/* PTZ collapse handle tab on the panel's left edge */
+QToolButton#PtzHandle {
+    background: %bgPanel%;
+    border: none;
+    border-left: 1px solid %border%;
+    border-right: 1px solid %border%;
+}
+QToolButton#PtzHandle:hover { background: %accentSoft%; }
+
 /* ---------------- Video grid & tiles ---------------- */
 
 QWidget#VideoArea { background: %bgRoot%; }

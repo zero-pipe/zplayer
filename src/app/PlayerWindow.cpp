@@ -187,19 +187,6 @@ void PlayerWindow::buildUi()
 
     wt->addStretch(1);
 
-    // Collapse/expand the right-hand PTZ panel.
-    auto *ptzToggle = new QToolButton(wsToolbar);
-    ptzToggle->setObjectName(QStringLiteral("LayoutBtn"));
-    ptzToggle->setCheckable(true);
-    ptzToggle->setChecked(true);
-    ptzToggle->setCursor(Qt::PointingHandCursor);
-    ptzToggle->setText(tr("云台"));
-    ptzToggle->setToolTip(tr("显示/隐藏云台面板"));
-    connect(ptzToggle, &QToolButton::toggled, this, [this](bool on) {
-        if (m_ptz) m_ptz->setVisible(on);
-    });
-    wt->addWidget(ptzToggle);
-
     rootLay->addWidget(wsToolbar);
 
     // ---------------- Body: 3 columns ----------------
@@ -218,16 +205,40 @@ void PlayerWindow::buildUi()
     m_ptz->setMinimumWidth(260);
     m_ptz->setMaximumWidth(360);
 
+    // Thin collapse handle docked on the PTZ panel's left edge: click to fold
+    // the panel away, click again to bring it back. Stays visible either way.
+    auto *ptzHandle = new QToolButton(body);
+    ptzHandle->setObjectName(QStringLiteral("PtzHandle"));
+    ptzHandle->setCursor(Qt::PointingHandCursor);
+    ptzHandle->setFixedWidth(16);
+    ptzHandle->setIconSize(QSize(14, 14));
+    ptzHandle->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    auto updateHandle = [this, ptzHandle]() {
+        const bool shown = m_ptz && m_ptz->isVisible();
+        ptzHandle->setIcon(QIcon(icons::chevron(shown,
+                             ThemeManager::instance().tokens().text2, 14)));
+        ptzHandle->setToolTip(shown ? tr("收起云台面板") : tr("展开云台面板"));
+    };
+    updateHandle();
+    connect(ptzHandle, &QToolButton::clicked, this, [this, updateHandle]() {
+        const bool shown = m_ptz && m_ptz->isVisible();
+        if (m_ptz) m_ptz->setVisible(!shown);
+        updateHandle();
+    });
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, ptzHandle, updateHandle);
+
     auto *splitter = new QSplitter(Qt::Horizontal, body);
     splitter->setObjectName(QStringLiteral("BodySplitter"));
     splitter->setHandleWidth(1);
     splitter->addWidget(m_tree);
     splitter->addWidget(m_grid);
+    splitter->addWidget(ptzHandle);
     splitter->addWidget(m_ptz);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setSizes({280, 880, 300});
+    splitter->setStretchFactor(3, 0);
+    splitter->setSizes({280, 864, 16, 300});
 
     bodyLay->addWidget(splitter);
     rootLay->addWidget(body, 1);

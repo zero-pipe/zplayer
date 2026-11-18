@@ -31,6 +31,8 @@ QPixmap ptzArrow(int direction /*0..7, 0=up clockwise*/, const QColor &color, in
 QPixmap ptzStop(const QColor &color, int size = 20);
 // PTZ zoom: a "+" / "−" centered inside a soft rounded disc.
 QPixmap ptzZoom(bool zoomIn, const QColor &color, int size = 20);
+// A single rounded chevron (right = ">", left = "<"), used by collapse handles.
+QPixmap chevron(bool right, const QColor &color, int size = 16);
 
 // The large hexagon hero logo for the login brand panel.
 QPixmap brandHero(int size);
