@@ -119,15 +119,22 @@ QCheckBox::indicator:checked {
 /* ---------------- Player window ---------------- */
 
 QMainWindow#PlayerWindow { background: %bgRoot%; }
+/* Frameless window: the edge has to be drawn by us, otherwise the player
+   blends into whatever is behind it. */
+QMainWindow#PlayerWindow {
+    background: %bgRoot%;
+    border: 1px solid %borderStrong%;
+}
+
 QWidget#RootArea { background: %bgRoot%; }
 
-QWidget#TopBar {
+QWidget#TitleBar {
     background: %bgPanel%;
     border-bottom: 1px solid %borderStrong%;
 }
-QWidget#WsToolbar {
-    background: %bgPanel%;
-    border-bottom: 1px solid %borderStrong%;
+QWidget#LayoutBar {
+    background: %bgRoot%;
+    border-bottom: 1px solid %border%;
 }
 QLabel#AppName { color: %text%; font-size: 15.5px; font-weight: 800; letter-spacing: 0.3px; }
 
@@ -175,6 +182,19 @@ QToolButton#IconBtn {
     min-width: 34px; min-height: 34px;
 }
 QToolButton#IconBtn:hover { background: %bgInput%; color: %accent%; }
+
+QToolButton#WinBtn {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+}
+QToolButton#WinBtn:hover { background: %bgInput%; }
+QToolButton#WinClose {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+}
+QToolButton#WinClose:hover { background: rgba(229, 72, 77, 0.16); }
 
 QToolButton#UserBtn {
     background: %bgInput%;

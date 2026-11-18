@@ -10,11 +10,15 @@
 
 #include <QApplication>
 #include <QButtonGroup>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
+#include <QResizeEvent>
+#include <QSizeGrip>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QToolButton>
@@ -36,11 +40,20 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     , m_session(session)
 {
     setObjectName(QStringLiteral("PlayerWindow"));
-    setWindowTitle(tr("ZeroPlayer 安防客户端"));
+    // Frameless: the native title bar is dropped and replaced by the custom bar
+    // built in buildUi() (brand + theme/settings/user + window controls).
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+    setWindowTitle(QStringLiteral("Zero AI Player"));
     resize(1440, 880);
     setMinimumSize(1024, 640);
 
     buildUi();
+
+    // Frameless windows lose the native resize border; a floating grip in the
+    // bottom-right corner keeps manual resizing available.
+    m_sizeGrip = new QSizeGrip(this);
+    m_sizeGrip->setFixedSize(16, 16);
+    m_sizeGrip->raise();
 
     connect(m_api, &IPlatformApi::childrenReady, this, &PlayerWindow::onChildrenReady);
     connect(m_api, &IPlatformApi::playStarted, this, &PlayerWindow::onPlayStarted);
@@ -75,19 +88,23 @@ void PlayerWindow::buildUi()
     rootLay->setContentsMargins(0, 0, 0, 0);
     rootLay->setSpacing(0);
 
-    // ---------------- Top bar ----------------
+    // ---------------- Title bar (brand + actions + window controls) ----------------
     auto *topBar = new QWidget(root);
-    topBar->setObjectName(QStringLiteral("TopBar"));
+    topBar->setObjectName(QStringLiteral("TitleBar"));
     topBar->setFixedHeight(56);
+    m_topBar = topBar;
+    topBar->installEventFilter(this);
     auto *tb = new QHBoxLayout(topBar);
-    tb->setContentsMargins(16, 0, 16, 0);
+    tb->setContentsMargins(16, 0, 8, 0);
     tb->setSpacing(12);
 
     auto *logo = new QLabel(topBar);
     logo->setPixmap(icons::appLogo(28));
     logo->setFixedSize(28, 28);
-    auto *appName = new QLabel(QStringLiteral("ZeroEngine"), topBar);
+    logo->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    auto *appName = new QLabel(QStringLiteral("Zero AI Player"), topBar);
     appName->setObjectName(QStringLiteral("AppName"));
+    appName->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     tb->addWidget(logo);
     tb->addWidget(appName);
 
@@ -157,37 +174,42 @@ void PlayerWindow::buildUi()
     userBtn->setMenu(userMenu);
     tb->addWidget(userBtn);
 
-    rootLay->addWidget(topBar);
+    tb->addSpacing(6);
 
-    // ---------------- Workspace toolbar (layout + stream) ----------------
-    auto *wsToolbar = new QWidget(root);
-    wsToolbar->setObjectName(QStringLiteral("WsToolbar"));
-    wsToolbar->setFixedHeight(52);
-    auto *wt = new QHBoxLayout(wsToolbar);
-    wt->setContentsMargins(14, 0, 14, 0);
-    wt->setSpacing(8);
-
-    m_layoutGroup = new QButtonGroup(this);
-    m_layoutGroup->setExclusive(true);
-    // Clear text labels so the split count is obvious at a glance.
-    static const char *kLayoutLabels[] = {"1", "4", "9", "16", "1+5"};
-    for (int i = 0; i < 5; ++i) {
-        auto *b = new QToolButton(wsToolbar);
-        b->setObjectName(QStringLiteral("LayoutBtn"));
-        b->setCheckable(true);
+    // ---- Window controls: minimize / maximize-restore / close ----
+    const ThemeTokens &tk = ThemeManager::instance().tokens();
+    auto makeWinBtn = [&](icons::Glyph g, const QString &tip, const char *name) {
+        auto *b = new QToolButton(topBar);
+        b->setObjectName(QString::fromLatin1(name));
+        b->setIcon(QIcon(icons::glyph(g, tk.text2, 14)));
+        b->setIconSize(QSize(14, 14));
+        b->setFixedSize(44, 32);
         b->setCursor(Qt::PointingHandCursor);
-        b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
-        b->setText(QString::fromLatin1(kLayoutLabels[i]));
-        m_layoutGroup->addButton(b, i);
-        wt->addWidget(b);
-    }
-    if (auto *b = m_layoutGroup->button(2)) b->setChecked(true);  // default 3x3
-    connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
-            this, &PlayerWindow::onLayoutButtonClicked);
+        b->setToolTip(tip);
+        return b;
+    };
+    auto *minBtn = makeWinBtn(icons::WinMin, tr("最小化"), "WinBtn");
+    auto *maxBtn = makeWinBtn(icons::WinMax, tr("最大化"), "WinBtn");
+    auto *closeBtn = makeWinBtn(icons::Close, tr("关闭"), "WinClose");
+    m_maxBtn = maxBtn;
 
-    wt->addStretch(1);
+    connect(minBtn, &QToolButton::clicked, this, &QWidget::showMinimized);
+    connect(maxBtn, &QToolButton::clicked, this, &PlayerWindow::toggleMaximize);
+    connect(closeBtn, &QToolButton::clicked, this, &QWidget::close);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this, minBtn, maxBtn,
+                                                                          closeBtn]() {
+        updateWindowButtons();
+        const ThemeTokens &t = ThemeManager::instance().tokens();
+        minBtn->setIcon(QIcon(icons::glyph(icons::WinMin, t.text2, 14)));
+        closeBtn->setIcon(QIcon(icons::glyph(icons::Close, t.text2, 14)));
+    });
 
-    rootLay->addWidget(wsToolbar);
+    tb->addSpacing(4);
+    tb->addWidget(minBtn);
+    tb->addWidget(maxBtn);
+    tb->addWidget(closeBtn);
+
+    rootLay->addWidget(topBar);
 
     // ---------------- Body: 3 columns ----------------
     auto *body = new QWidget(root);
@@ -199,7 +221,41 @@ void PlayerWindow::buildUi()
     m_tree->setMinimumWidth(240);
     m_tree->setMaximumWidth(420);
 
-    m_grid = new VideoGrid(body);
+    // Middle column: a slim split-layout bar above the video grid.
+    auto *centerCol = new QWidget(body);
+    auto *centerLay = new QVBoxLayout(centerCol);
+    centerLay->setContentsMargins(0, 0, 0, 0);
+    centerLay->setSpacing(0);
+
+    auto *layoutBar = new QWidget(centerCol);
+    layoutBar->setObjectName(QStringLiteral("LayoutBar"));
+    layoutBar->setFixedHeight(44);
+    auto *lb = new QHBoxLayout(layoutBar);
+    lb->setContentsMargins(12, 0, 12, 0);
+    lb->setSpacing(8);
+
+    m_layoutGroup = new QButtonGroup(this);
+    m_layoutGroup->setExclusive(true);
+    // Clear text labels so the split count is obvious at a glance.
+    static const char *kLayoutLabels[] = {"1", "4", "9", "16", "1+5"};
+    for (int i = 0; i < 5; ++i) {
+        auto *b = new QToolButton(layoutBar);
+        b->setObjectName(QStringLiteral("LayoutBtn"));
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
+        b->setText(QString::fromLatin1(kLayoutLabels[i]));
+        m_layoutGroup->addButton(b, i);
+        lb->addWidget(b);
+    }
+    if (auto *b = m_layoutGroup->button(2)) b->setChecked(true);  // default 3x3
+    connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+            this, &PlayerWindow::onLayoutButtonClicked);
+    lb->addStretch(1);
+
+    m_grid = new VideoGrid(centerCol);
+    centerLay->addWidget(layoutBar);
+    centerLay->addWidget(m_grid, 1);
 
     m_ptz = new PtzPanel(body);
     m_ptz->setMinimumWidth(260);
@@ -231,7 +287,7 @@ void PlayerWindow::buildUi()
     splitter->setObjectName(QStringLiteral("BodySplitter"));
     splitter->setHandleWidth(1);
     splitter->addWidget(m_tree);
-    splitter->addWidget(m_grid);
+    splitter->addWidget(centerCol);
     splitter->addWidget(ptzHandle);
     splitter->addWidget(m_ptz);
     splitter->setStretchFactor(0, 0);
@@ -301,6 +357,105 @@ void PlayerWindow::setActiveLayoutButton(int index)
     }
 }
 
+void PlayerWindow::toggleMaximize()
+{
+    if (isMaximized()) {
+        setWindowState(windowState() & ~Qt::WindowMaximized);
+    } else {
+        m_restoreGeom = geometry();
+        showMaximized();
+    }
+    updateWindowButtons();
+}
+
+void PlayerWindow::updateWindowButtons()
+{
+    if (!m_maxBtn) {
+        return;
+    }
+    const ThemeTokens &t = ThemeManager::instance().tokens();
+    m_maxBtn->setIcon(QIcon(icons::glyph(isMaximized() ? icons::WinRestore : icons::WinMax,
+                                         t.text2, 14)));
+    m_maxBtn->setToolTip(isMaximized() ? tr("向下还原") : tr("最大化"));
+}
+
+void PlayerWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    if (m_sizeGrip) {
+        m_sizeGrip->move(width() - m_sizeGrip->width() - 2,
+                         height() - m_sizeGrip->height() - 2);
+        m_sizeGrip->setVisible(!isMaximized());
+        m_sizeGrip->raise();
+    }
+}
+
+bool PlayerWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched != m_topBar) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+
+    switch (event->type()) {
+    case QEvent::MouseButtonPress: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() != Qt::LeftButton) {
+            break;
+        }
+        m_dragging = true;
+        m_pressGlobal = me->globalPos();
+        m_dragOffset = me->globalPos() - frameGeometry().topLeft();
+        return true;
+    }
+    case QEvent::MouseButtonDblClick: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton) {
+            m_dragging = false;
+            toggleMaximize();
+            return true;
+        }
+        break;
+    }
+    case QEvent::MouseMove: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (!m_dragging || !(me->buttons() & Qt::LeftButton)) {
+            break;
+        }
+        const QPoint g = me->globalPos();
+        if (isMaximized()) {
+            // Dragging a maximized window first restores it, keeping the cursor
+            // at the same relative spot along the title bar.
+            if ((g - m_pressGlobal).manhattanLength() < QApplication::startDragDistance()) {
+                return true;
+            }
+            const QRect ng = m_restoreGeom.isValid() ? m_restoreGeom
+                                                     : QRect(QPoint(0, 0), size());
+            const qreal rx = width() > 0 ? qreal(m_pressGlobal.x()) / width() : 0.5;
+            const qreal ry = m_topBar ? qreal(m_pressGlobal.y() - frameGeometry().top())
+                                            / qMax(1, m_topBar->height())
+                                      : 0.5;
+            setWindowState(windowState() & ~Qt::WindowMaximized);
+            resize(ng.size());
+            const QPoint tl(g.x() - int(ng.width() * rx),
+                            g.y() - int(m_topBar ? m_topBar->height() * ry : 0));
+            move(tl);
+            m_dragOffset = g - tl;
+            updateWindowButtons();
+        } else {
+            move(g - m_dragOffset);
+        }
+        return true;
+    }
+    case QEvent::MouseButtonRelease:
+        m_dragging = false;
+        break;
+    default:
+        break;
+    }
+
+    return QMainWindow::eventFilter(watched, event);
+}
+
 void PlayerWindow::onLayoutButtonClicked(int index)
 {
     if (index < 0 || index >= 5) {
@@ -363,10 +518,10 @@ void PlayerWindow::onActiveChannelChanged(const ChannelRef &ch, const QString &n
     m_active = ch;
     m_ptz->setTarget(ch, name, ptzCapable);
     if (ch.isValid()) {
-        setWindowTitle(tr("ZeroPlayer — %1").arg(name));
+        setWindowTitle(QStringLiteral("Zero AI Player — %1").arg(name));
         statusBar()->showMessage(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));
     } else {
-        setWindowTitle(tr("ZeroPlayer 安防客户端"));
+        setWindowTitle(QStringLiteral("Zero AI Player"));
     }
 }
 

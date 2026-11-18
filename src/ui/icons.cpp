@@ -236,6 +236,21 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.cubicTo(10.5, 19.0, 15.0, 19.5, 18.5, 17.0);
         path.cubicTo(12.5, 17.5, 9.5, 11.5, 14.5, 3.5);
         break;
+    case WinMin:
+        path.moveTo(7, 12);
+        path.lineTo(17, 12);
+        break;
+    case WinMax:
+        path.addRoundedRect(QRectF(7, 7, 10, 10), 1.5, 1.5);
+        break;
+    case WinRestore: {
+        // Back window (partial outline) + front window.
+        path.moveTo(9, 7);
+        path.lineTo(17, 7);
+        path.lineTo(17, 15);
+        path.addRoundedRect(QRectF(7, 9, 8, 8), 1.5, 1.5);
+        break;
+    }
     }
     strokePath(p, path, color, w);
     return pm;

@@ -10,6 +10,7 @@ class QLabel;
 class QLineEdit;
 class QToolButton;
 class QButtonGroup;
+class QSizeGrip;
 QT_END_NAMESPACE
 
 namespace zp {
@@ -35,6 +36,10 @@ public:
 signals:
     void logoutRequested();
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+
 private slots:
     void onChildrenReady(const QString &parentId, const QList<DeviceNode> &nodes);
     void onChannelActivated(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
@@ -56,6 +61,10 @@ private:
     void toastSuccess(const QString &text);
     void toastError(const QString &text);
 
+    // Frameless custom title bar helpers.
+    void toggleMaximize();
+    void updateWindowButtons();
+
     IPlatformApi *m_api = nullptr;
     Session m_session;
 
@@ -65,6 +74,15 @@ private:
     Toast *m_toast = nullptr;
 
     QButtonGroup *m_layoutGroup = nullptr;
+
+    // Custom (frameless) title bar state.
+    QWidget *m_topBar = nullptr;
+    QToolButton *m_maxBtn = nullptr;
+    QSizeGrip *m_sizeGrip = nullptr;
+    bool m_dragging = false;
+    QPoint m_pressGlobal;
+    QPoint m_dragOffset;
+    QRect m_restoreGeom;
 
     QHash<QString, QString> m_channelNames;   // ch.key() -> name
     QHash<QString, bool> m_channelPtz;

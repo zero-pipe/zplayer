@@ -24,7 +24,7 @@ LoginDialog::LoginDialog(QWidget *parent)
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground, true);
-    setWindowTitle(tr("登录 - ZeroEngine"));
+    setWindowTitle(tr("登录 - Zero AI Player"));
     setObjectName(QStringLiteral("LoginDialog"));
     buildUi();
 }
@@ -73,7 +73,7 @@ void LoginDialog::buildUi()
     bv->addWidget(hero);
     bv->addSpacing(26);
 
-    auto *name = new QLabel(QStringLiteral("ZeroEngine"), brand);
+    auto *name = new QLabel(QStringLiteral("Zero AI Player"), brand);
     name->setObjectName(QStringLiteral("BrandName"));
     bv->addWidget(name);
 
