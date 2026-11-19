@@ -25,6 +25,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QDebug>
+#include <QSignalBlocker>
 #include <QEvent>
 #include <QRegExp>
 
@@ -519,6 +520,28 @@ void VideoTile::buildControlBar()
         emit statusMessage(m_channel, on ? tr("画质锐化：开") : tr("画质锐化：关"));
     });
 
+    // Voice denoising: rnnoise through the engine's audio filter chain.
+    m_denoiseBtn = makeBtn(tr("语音降噪"));
+    m_denoiseBtn->setCheckable(true);
+    m_denoiseBtn->setToolTip(tr("rnnoise 实时降噪：抑制风噪/机械底噪，突出人声"));
+    m_denoiseBtn->setEnabled(m_player && m_player->supportsDenoise());
+    connect(m_denoiseBtn, &QToolButton::toggled, this, [this](bool on) {
+        if (!m_player) {
+            return;
+        }
+        if (on && !m_player->setDenoise(true)) {
+            // Missing model / filter: revert without re-entering this handler.
+            const QSignalBlocker blocker(m_denoiseBtn);
+            m_denoiseBtn->setChecked(false);
+            emit statusMessage(m_channel, tr("语音降噪不可用（缺少 rnnoise 模型）"));
+            return;
+        }
+        if (!on) {
+            m_player->setDenoise(false);
+        }
+        emit statusMessage(m_channel, on ? tr("语音降噪：开") : tr("语音降噪：关"));
+    });
+
     // ---- right group 3: search & evidence ----
     m_scanBtn = makeBtn(tr("智能检索"));
     m_scanBtn->setCheckable(true);
@@ -562,6 +585,7 @@ void VideoTile::buildControlBar()
     addSep();
     row->addWidget(m_zoomBtn);
     row->addWidget(m_sharpenBtn);
+    row->addWidget(m_denoiseBtn);
     addSep();
     row->addWidget(m_scanBtn);
     row->addWidget(m_snapBtn);
@@ -1073,6 +1097,13 @@ void VideoTile::setSharpenEnabled(bool on)
 {
     if (m_sharpenBtn) {
         m_sharpenBtn->setChecked(on);
+    }
+}
+
+void VideoTile::setDenoiseEnabled(bool on)
+{
+    if (m_denoiseBtn) {
+        m_denoiseBtn->setChecked(on);
     }
 }
 

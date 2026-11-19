@@ -196,6 +196,14 @@ public:
     virtual bool supportsShader() const { return false; }
     virtual void setShader(const QString & /*filePath*/) {}
 
+    // ---- Voice denoising (rnnoise) ----
+    // Engines with an audio filter chain (mpv: lavfi arnndn) can suppress
+    // background noise in speech. Returns false when unsupported or when the
+    // model is missing; denoiseEnabled() reports the engine's actual state.
+    virtual bool supportsDenoise() const { return false; }
+    virtual bool setDenoise(bool /*on*/) { return false; }
+    virtual bool denoiseEnabled() const { return false; }
+
     // Capture the current video frame to an image file. Returns true if the
     // request was dispatched (some engines, e.g. mpv, write asynchronously).
     // Default implementation grabs the renderer widget; engines may override

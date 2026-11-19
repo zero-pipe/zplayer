@@ -12,6 +12,10 @@
 #include <QByteArray>
 #include <QDebug>
 #include <QTimer>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QStringList>
 
 #include <cstring>
 
@@ -251,6 +255,11 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_observe_property(m_holder->h, 0, "video-params/aspect", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "osd-dimensions", MPV_FORMAT_NODE);
         mpv_set_wakeup_callback(m_holder->h, mpvWakeup, this);
+        // Dev diagnostics: forward mpv's own log when tracing is on, so audio
+        // filter / shader problems are visible in the ZP_LOG file.
+        if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
+            mpv_request_log_messages(m_holder->h, "info");
+        }
         applyVideoSettings();  // push defaults before the first loadfile
     }
 
@@ -554,6 +563,93 @@ void MpvMediaPlayer::setShader(const QString &filePath)
 }
 
 // ---------------------------------------------------------------------------
+// Voice denoising (rnnoise through mpv's lavfi arnndn filter)
+// ---------------------------------------------------------------------------
+namespace {
+
+// Model lookup: ZP_RNNOISE_MODEL, then models/rnnoise next to the app or in
+// the source tree (bd = balanced quality model from the arnndn-model set).
+QString findDenoiseModel()
+{
+    const QString env = qEnvironmentVariable("ZP_RNNOISE_MODEL");
+    if (!env.isEmpty() && QFileInfo::exists(env)) {
+        return env;
+    }
+    QStringList dirs;
+    const QString app = QCoreApplication::applicationDirPath();
+    if (!app.isEmpty()) {
+        dirs << app + QStringLiteral("/models/rnnoise")
+             << app + QStringLiteral("/../3rdpart/models/rnnoise")
+             << app + QStringLiteral("/../../3rdpart/models/rnnoise")
+             << app + QStringLiteral("/3rdpart/models/rnnoise");
+    }
+    dirs << QStringLiteral("3rdpart/models/rnnoise");
+    for (const QString &dir : dirs) {
+        for (const char *name : {"bd.rnnn", "std.rnnn", "cb.rnnn", "mp.rnnn"}) {
+            const QString path = QDir(dir).filePath(QString::fromLatin1(name));
+            if (QFileInfo::exists(path)) {
+                return path;
+            }
+        }
+    }
+    return QString();
+}
+
+} // namespace
+
+bool MpvMediaPlayer::setDenoise(bool on)
+{
+    if (!m_holder || !m_holder->h) {
+        return false;
+    }
+    if (!on) {
+        mpv_set_property_string(m_holder->h, "af", "");
+        m_denoise = false;
+        return true;
+    }
+
+    const QString model = findDenoiseModel();
+    if (model.isEmpty()) {
+        return false;
+    }
+    QString p = model;
+    p.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    // avfilter's graph parser needs ':' escaped, and the single quotes keep the
+    // value together: arnndn=m='F\:/path/model.rnnn' (verified with ffmpeg).
+    p.replace(QLatin1String(":"), QLatin1String("\\:"));
+    const QString spec = QStringLiteral("lavfi=[arnndn=m='%1']").arg(p);
+    if (mpv_set_property_string(m_holder->h, "af", spec.toUtf8().constData()) < 0) {
+        return false;
+    }
+    if (denoiseEnabled()) {
+        m_denoise = true;
+        if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
+            qInfo().noquote() << "[audio] denoise on:" << spec;
+        }
+        return true;
+    }
+    mpv_set_property_string(m_holder->h, "af", "");
+    if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
+        qInfo().noquote() << "[audio] denoise rejected for model" << model;
+    }
+    return false;
+}
+
+bool MpvMediaPlayer::denoiseEnabled() const
+{
+    if (!m_holder || !m_holder->h) {
+        return false;
+    }
+    char *af = mpv_get_property_string(m_holder->h, "af");
+    if (!af) {
+        return false;
+    }
+    const bool on = QByteArray(af).contains("arnndn");
+    mpv_free(af);
+    return on;
+}
+
+// ---------------------------------------------------------------------------
 // Playback control (seek / speed / timeline)
 // ---------------------------------------------------------------------------
 bool MpvMediaPlayer::seek(double seconds)
@@ -772,6 +868,14 @@ void MpvMediaPlayer::handleEvent(void *ev)
             emit started();
         }
         break;
+    case MPV_EVENT_LOG_MESSAGE: {
+        auto *lm = static_cast<mpv_event_log_message *>(event->data);
+        if (lm && lm->text) {
+            qInfo().noquote() << "[mpv]" << lm->level << QString::fromUtf8(lm->prefix ? lm->prefix : "")
+                              << QString::fromUtf8(lm->text).trimmed();
+        }
+        break;
+    }
     case MPV_EVENT_END_FILE: {
         auto *ef = static_cast<mpv_event_end_file *>(event->data);
         if (ef && ef->reason == MPV_END_FILE_REASON_ERROR) {

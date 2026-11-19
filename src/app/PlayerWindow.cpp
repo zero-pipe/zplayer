@@ -848,6 +848,14 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
             }
         }
     }
+    // ZP_DENOISE=1: enable rnnoise voice denoising on every demo tile.
+    if (qEnvironmentVariableIsSet("ZP_DENOISE")) {
+        for (VideoTile *t : m_grid->tiles()) {
+            if (t) {
+                t->setDenoiseEnabled(true);
+            }
+        }
+    }
     // ZP_SCAN=1: kick off the smart-timeline scan on the first tile once the
     // media length is known (dev/headless testing).
     if (qEnvironmentVariableIsSet("ZP_SCAN")) {

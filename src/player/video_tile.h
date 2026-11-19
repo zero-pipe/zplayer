@@ -87,6 +87,7 @@ public:
     QRectF roiRect() const { return m_roi; }
     void setZoomEnabled(bool on);           // same as clicking 放大
     void setSharpenEnabled(bool on);        // same as clicking 超分
+    void setDenoiseEnabled(bool on);        // same as clicking 语音降噪
 
     // ---- Smart timeline ----
     // Fast offline pass over the file at high playback speed, recording when
@@ -177,6 +178,7 @@ private:
     QToolButton *m_ocrBtn = nullptr;
     QToolButton *m_zoomBtn = nullptr;
     QToolButton *m_sharpenBtn = nullptr;
+    QToolButton *m_denoiseBtn = nullptr;
     double m_duration = -1.0;
     bool m_scrubbing = false;
     bool m_hasPlayed = false;   // a stream has been shown (keep last frame)

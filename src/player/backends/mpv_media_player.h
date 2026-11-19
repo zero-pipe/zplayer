@@ -44,6 +44,12 @@ public:
     bool supportsShader() const override { return true; }
     void setShader(const QString &filePath) override;
 
+    // Voice denoising through mpv's audio filter chain (lavfi arnndn, which is
+    // the rnnoise algorithm; the model comes from models/rnnoise/*.rnnn).
+    bool supportsDenoise() const override { return true; }
+    bool setDenoise(bool on) override;
+    bool denoiseEnabled() const override;
+
     // Playback position in seconds, or -1 when unknown. Read per-frame by the
     // renderer to stamp VideoFrame::pts; cheap (an mpv property get).
     double currentTimePos() const;
@@ -92,6 +98,7 @@ private:
     int m_fboH = 0;
     QRectF m_crop;               // active crop, tile-normalized (empty = none)
     bool m_cropApplied = false;  // pushed to mpv already
+    bool m_denoise = false;      // audio denoise filter active
 };
 
 } // namespace zp

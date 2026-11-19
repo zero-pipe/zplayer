@@ -44,4 +44,3 @@ ui_*.h
 !/3rdpart/mpv-sdk/lib/**/*.lib
 /3rdpart/models
 /3rdpart/onnxruntime
-/3rdpart/onnxruntime-1.15.1

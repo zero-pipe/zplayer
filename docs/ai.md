@@ -113,6 +113,7 @@ mpv 原生支持加载自定义 GLSL 着色器（`glsl-shaders`），几乎不�
 | 证据导出 | `analysis/evidence.cpp` | 检测事件汇总为 report.html / report.json + 截图 |
 | 智能时间轴 | `analysis/timeline.*`、`ui/timeline_slider.*` | 8x 快扫全片，人物片段画在进度条上，点击色块跳转 |
 | AI 快放 | `player/video_tile.cpp` | 无人物时按 8x 跳过，检测到人恢复 1x（本地/回放场景） |
+| 语音降噪 | `player/backends/mpv_media_player.cpp` | rnnoise 算法经 mpv/lavfi `arnndn` 滤镜实时降噪；模型 `models/rnnoise/*.rnnn`（默认 bd.rnnn，`ZP_RNNOISE_MODEL` 可覆盖），控制条「语音降噪」开关 |
 
 **运行依赖**：`out/` 下需带 `models/yolo11n.onnx`、`models/coco.names`、`models/ocr/*` 与 `onnxruntime.dll`、`DirectML.dll`（`build.bat` 自动拷贝）。
 
@@ -122,4 +123,4 @@ mpv 原生支持加载自定义 GLSL 着色器（`glsl-shaders`），几乎不�
 - 阶段三的 CUDA-OpenGL 零拷贝（需 NVIDIA 卡 + CUDA 版 ORT/TensorRT，当前构建机为 Intel 核显，无法实现与验证）；
 - OCR 模型在 DirectML EP 上会卡死，暂走 CPU（`ZP_OCR_DML=1` 可复现）；
 - 智能时间轴的离线解码目前复用播放链路驱动，独立 `IOfflineDecoder` 的无播放扫描待后续；
-- 语音降噪（rnnoise / DeepFilterNet）未接入。
+- DeepFilterNet 未接入（rnnoise 已接入，见下表）。
