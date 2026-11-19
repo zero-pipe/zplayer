@@ -261,8 +261,14 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
 
 MpvMediaPlayer::~MpvMediaPlayer()
 {
-    // The renderer (if still alive) owns its GL context and frees it in its
-    // destructor. If the tile already destroyed it, m_renderer is null here.
+    // Order matters: mpv_render_context_free() talks to the mpv core, so the
+    // render context has to go before the handle is terminated. The widget
+    // owns that context, hence the renderer is destroyed first. (Freeing the
+    // context after mpv_terminate_destroy() corrupts the heap and the process
+    // dies with a fast-fail, which is exactly what happened when a tile was
+    // replaced while playing.)
+    delete m_renderer;
+    m_renderer = nullptr;
     if (m_holder) {
         if (m_holder->h) {
             mpv_set_wakeup_callback(m_holder->h, nullptr, nullptr);
@@ -270,7 +276,6 @@ MpvMediaPlayer::~MpvMediaPlayer()
         }
         delete m_holder;
     }
-    delete m_renderer;
 }
 
 IMediaRenderer *MpvMediaPlayer::renderer()
