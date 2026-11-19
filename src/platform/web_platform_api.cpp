@@ -7,6 +7,8 @@
 #include <QVariant>
 #include <QUrlQuery>
 
+#include <memory>
+
 namespace zp {
 
 namespace {
@@ -62,6 +64,7 @@ void WebPlatformApi::login(const QString &baseUrl, const QString &username,
     m_http->setBaseUrl(baseUrl);
     m_http->clearToken();
     m_username = username;
+    m_channelDevices.clear();
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("username"), username);
@@ -121,7 +124,64 @@ void WebPlatformApi::fetchChildren(const QString &parentId)
                 emit childrenReady(parentId, {}); // unblock UI in any case
                 return;
             }
-            emit childrenReady(parentId, parseNodes(data));
+
+            QList<DeviceNode> nodes = parseNodes(data);
+
+            // The group tree reports the *organization* code in parentDeviceId
+            // for channel leaves, but /play/start needs the real parent GB
+            // device id. Resolve it via /common/channel/one (keyed by the tree
+            // row id) and patch the ChannelRef before handing nodes to the UI.
+            QHash<QString, QString> rowIds; // GB channel id -> tree row id
+            if (data.isArray()) {
+                for (const QJsonValue &v : data.toArray()) {
+                    const QJsonObject o = v.toObject();
+                    if (o.value(QStringLiteral("type")).toInt(0) != 1) {
+                        continue;
+                    }
+                    const QString gbChannelId = o.value(QStringLiteral("deviceId")).toString();
+                    const QString rowId = o.value(QStringLiteral("id")).toVariant().toString();
+                    if (!gbChannelId.isEmpty() && !rowId.isEmpty()) {
+                        rowIds.insert(gbChannelId, rowId);
+                    }
+                }
+            }
+
+            auto pending = std::make_shared<int>(0);
+            for (int i = 0; i < nodes.size(); ++i) {
+                if (!nodes.at(i).isChannel()) {
+                    continue;
+                }
+                const QString gbChannelId = nodes.at(i).ref.channelId;
+                if (m_channelDevices.contains(gbChannelId)) {
+                    nodes[i].ref.deviceId = m_channelDevices.value(gbChannelId);
+                    continue;
+                }
+                const QString rowId = rowIds.value(gbChannelId);
+                if (rowId.isEmpty()) {
+                    continue;
+                }
+                ++*pending;
+                QUrlQuery cq;
+                cq.addQueryItem(QStringLiteral("id"), rowId);
+                m_http->getJson(QStringLiteral("/api/v1/common/channel/one"), cq,
+                    [this, parentId, nodes, pending, i, gbChannelId](
+                        bool ok2, const QJsonValue &data2, const QString &, int) mutable {
+                        if (ok2) {
+                            const QString deviceId = data2.toObject()
+                                    .value(QStringLiteral("deviceId")).toString();
+                            if (!deviceId.isEmpty()) {
+                                m_channelDevices.insert(gbChannelId, deviceId);
+                                nodes[i].ref.deviceId = deviceId;
+                            }
+                        }
+                        if (--*pending == 0) {
+                            emit childrenReady(parentId, nodes);
+                        }
+                    });
+            }
+            if (*pending == 0) {
+                emit childrenReady(parentId, nodes);
+            }
         });
 }
 

@@ -70,9 +70,29 @@ void DeviceTreeView::setRootNodes(const QList<DeviceNode> &nodes)
     m_model->clear();
     m_model->setHorizontalHeaderLabels({tr("组织目录")});
     m_parentMap.clear();
-    for (const DeviceNode &n : nodes) {
-        appendNode(nullptr, n);
+
+    // Industry convention: always show a synthetic "根资源组" root so the
+    // directory is never empty, matching the web platform's tree.
+    auto *root = new QStandardItem(tr("根资源组"));
+    root->setEditable(false);
+    root->setData(QStringLiteral("root"), RoleId);
+    root->setData(QStringLiteral("group"), RoleType);
+    root->setData(true, RoleLoaded);
+    root->setData(false, RoleLoading);
+    root->setIcon(icons::folder(true));
+    m_model->appendRow(root);
+
+    if (nodes.isEmpty()) {
+        auto *empty = new QStandardItem(tr("（暂无组织）"));
+        empty->setEditable(false);
+        empty->setForeground(QColor(0x5F, 0x6B, 0x7A));
+        root->appendRow(empty);
+    } else {
+        for (const DeviceNode &n : nodes) {
+            appendNode(root, n);
+        }
     }
+    m_view->setExpanded(root->index(), true);
 }
 
 void DeviceTreeView::appendNode(QStandardItem *parentItem, const DeviceNode &node)

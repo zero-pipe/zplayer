@@ -612,10 +612,9 @@ void PlayerWindow::onLayoutButtonClicked(int index)
 void PlayerWindow::onChildrenReady(const QString &parentId, const QList<DeviceNode> &nodes)
 {
     if (parentId.isEmpty()) {
+        // The tree always shows a synthetic "根资源组" root, so an empty
+        // catalog is still a navigable directory — no error toast needed.
         m_tree->setRootNodes(nodes);
-        if (nodes.isEmpty()) {
-            toastError(tr("未获取到组织目录"));
-        }
     } else {
         m_tree->addChildren(parentId, nodes);
     }

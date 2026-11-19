@@ -148,6 +148,14 @@ void LoginDialog::buildUi()
     optRow->addStretch(1);
     optRow->addWidget(serverBtn);
     fv->addLayout(optRow);
+
+    // Shows the server the next login will use, so saving the sheet is visible.
+    m_serverHint = new QLabel(form);
+    m_serverHint->setObjectName(QStringLiteral("ServerHint"));
+    m_serverHint->setStyleSheet(QStringLiteral("color:%1;font-size:12px;")
+                                .arg(t.muted.name()));
+    fv->addSpacing(4);
+    fv->addWidget(m_serverHint);
     fv->addSpacing(16);
 
     m_error = new QLabel(QString(), form);
@@ -177,6 +185,18 @@ void LoginDialog::syncFromPrefs()
     m_user->setText(prefs.username);
     m_pass->setText(prefs.password);
     m_remember->setChecked(prefs.remember);
+    updateServerHint();
+}
+
+void LoginDialog::updateServerHint()
+{
+    if (!m_serverHint) {
+        return;
+    }
+    const QString alias = SessionManager::instance().serverAlias();
+    m_serverHint->setText(alias.isEmpty()
+            ? tr("当前平台：%1").arg(m_baseUrl)
+            : tr("当前平台：%1（%2）").arg(alias, m_baseUrl));
 }
 
 void LoginDialog::openServerSettings()
@@ -215,8 +235,12 @@ void LoginDialog::openServerSettings()
 
     if (dlg.exec() == QDialog::Accepted) {
         m_baseUrl = edit->text().trimmed();
+        if (m_baseUrl.isEmpty()) {
+            m_baseUrl = QStringLiteral("http://127.0.0.1:18080");
+        }
         SessionManager::instance().setBaseUrl(m_baseUrl);
         SessionManager::instance().setServerAlias(alias->text().trimmed());
+        updateServerHint();
     }
 }
 

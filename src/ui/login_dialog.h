@@ -45,6 +45,7 @@ private:
     void buildUi();
     void openServerSettings();
     void syncFromPrefs();
+    void updateServerHint();
 
     AuthHandler m_handler;
     bool m_dragging = false;
@@ -56,6 +57,7 @@ private:
     QCheckBox *m_remember = nullptr;
     QPushButton *m_loginBtn = nullptr;
     QLabel *m_error = nullptr;
+    QLabel *m_serverHint = nullptr;
 };
 
 } // namespace zp
