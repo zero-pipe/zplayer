@@ -10,6 +10,7 @@
 #include <QOpenGLFunctions>
 #include <QMetaObject>
 #include <QByteArray>
+#include <QDebug>
 #include <QTimer>
 
 #include <cstring>
@@ -91,6 +92,8 @@ public:
         // the frame FBO is the one both drawn into and read from below.
         f->glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
         f->glViewport(0, 0, w, h);
+
+        m_owner->noteRenderSize(w, h);
 
         // ---- Frame tap: the frame is complete and still in our texture. ----
         if (IVideoFrameSink *sink = m_owner->frameSink()) {
@@ -428,6 +431,116 @@ QRectF MpvMediaPlayer::videoRectNormalized(int fboW, int fboH) const
     return full;
 }
 
+void MpvMediaPlayer::noteRenderSize(int fboW, int fboH)
+{
+    m_fboW = fboW;
+    m_fboH = fboH;
+    // A crop requested before the first frame could not be mapped to video
+    // pixels yet; retry on every paint until it lands (cheap, and it stops
+    // once applied).
+    if (!m_crop.isEmpty() && !m_cropApplied) {
+        applyCrop();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Zoom to ROI + GPU shaders
+// ---------------------------------------------------------------------------
+bool MpvMediaPlayer::setVideoCrop(const QRectF &rect)
+{
+    if (!m_holder || !m_holder->h) {
+        return false;
+    }
+    m_crop = rect.normalized();
+    m_cropApplied = false;
+    if (m_crop.isEmpty()) {
+        mpv_set_property_string(m_holder->h, "video-crop", "");
+        return true;
+    }
+    return applyCrop();
+}
+
+// Maps the tile-normalized crop rect into video pixels and pushes it to mpv.
+// Safe to call repeatedly; returns true once the property was set.
+bool MpvMediaPlayer::applyCrop()
+{
+    if (!m_holder || !m_holder->h || m_crop.isEmpty()) {
+        return false;
+    }
+    if (m_fboW <= 0 || m_fboH <= 0) {
+        return false;   // no frame seen yet; noteRenderSize() retries
+    }
+
+    // Without any video parameters the placement is still unknown (the full
+    // rect is only the placeholder), and cropping against it would pick the
+    // wrong region. Wait for video-params; noteRenderSize() retries.
+    if (m_videoRectPx.isEmpty() && m_aspect <= 0.0) {
+        return false;
+    }
+
+    // Placement must be computed WITHOUT the crop applied: once cropping is
+    // live, osd-dimensions describes the cropped picture, so re-deriving the
+    // rect from it would feed the mapping its own output. The aspect ratio is
+    // crop-independent, so the uncropped letterbox rect comes from aspect
+    // alone; osd-dimensions is only a fallback for exotic cases (rotation).
+    QRectF vr;
+    if (m_aspect > 0.0) {
+        const double boxAspect = double(m_fboW) / m_fboH;
+        if (m_aspect >= boxAspect) {
+            const double h = boxAspect / m_aspect;
+            vr = QRectF(0.0, (1.0 - h) * 0.5, 1.0, h);
+        } else {
+            const double w = m_aspect / boxAspect;
+            vr = QRectF((1.0 - w) * 0.5, 0.0, w, 1.0);
+        }
+    } else {
+        vr = videoRectNormalized(m_fboW, m_fboH);
+    }
+    if (vr.width() <= 0.0 || vr.height() <= 0.0) {
+        return false;
+    }
+
+    // The crop property is in source-video pixels, independent of window size.
+    int64_t vw = 0, vh = 0;
+    if (mpv_get_property(m_holder->h, "width", MPV_FORMAT_INT64, &vw) < 0
+        || mpv_get_property(m_holder->h, "height", MPV_FORMAT_INT64, &vh) < 0
+        || vw <= 0 || vh <= 0) {
+        return false;
+    }
+
+    QRectF rel((m_crop.x() - vr.x()) / vr.width(),
+               (m_crop.y() - vr.y()) / vr.height(),
+               m_crop.width() / vr.width(),
+               m_crop.height() / vr.height());
+    rel = rel.intersected(QRectF(0.0, 0.0, 1.0, 1.0));
+    if (rel.width() <= 0.01 || rel.height() <= 0.01) {
+        return false;
+    }
+    const int x = qBound(0, int(rel.x() * vw), int(vw) - 16);
+    const int y = qBound(0, int(rel.y() * vh), int(vh) - 16);
+    const int w = qBound(16, int(rel.width() * vw), int(vw) - x);
+    const int h = qBound(16, int(rel.height() * vh), int(vh) - y);
+    const QByteArray spec = QStringLiteral("%1x%2+%3+%4").arg(w).arg(h).arg(x).arg(y)
+                                .toUtf8();
+    if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
+        qInfo().noquote() << "[crop] roi=" << m_crop << "videoRect=" << vr
+                          << "video=" << vw << "x" << vh << "spec=" << spec;
+    }
+    if (mpv_set_property_string(m_holder->h, "video-crop", spec.constData()) < 0) {
+        return false;
+    }
+    m_cropApplied = true;
+    return true;
+}
+
+void MpvMediaPlayer::setShader(const QString &filePath)
+{
+    if (!m_holder || !m_holder->h) {
+        return;
+    }
+    mpv_set_property_string(m_holder->h, "glsl-shaders", filePath.toUtf8().constData());
+}
+
 // ---------------------------------------------------------------------------
 // Playback control (seek / speed / timeline)
 // ---------------------------------------------------------------------------
@@ -589,6 +702,11 @@ void MpvMediaPlayer::handleEvent(void *ev)
         emit started();
         emit durationChanged(duration());
         emit speedChanged(speed());
+        // Video size and placement are new; re-derive the crop against them.
+        if (!m_crop.isEmpty()) {
+            m_cropApplied = false;
+            applyCrop();
+        }
         break;
     case MPV_EVENT_PROPERTY_CHANGE: {
         auto *pc = static_cast<mpv_event_property *>(event->data);

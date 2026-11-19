@@ -9,6 +9,7 @@
 #include "player/video_grid.h"
 #include "player/video_tile.h"
 #include "analysis/analysis_service.h"
+#include "analysis/ocr_detector.h"
 #include "analysis/yolo_detector.h"
 
 #include <QAction>
@@ -130,6 +131,27 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
         }
     }
 
+    // OCR (scene text) is optional: present only when the PP-OCR models ship
+    // alongside the detector. Tiles enable it per-tile via their 文字 button.
+    {
+        QString detPath, recPath, dictPath, ocrFindErr;
+        if (findDefaultOcrModels(&detPath, &recPath, &dictPath, &ocrFindErr)) {
+            auto *ocrDet = new OcrDetector();
+            QString loadErr;
+            if (ocrDet->load(detPath, recPath, dictPath, &loadErr)) {
+                m_ocr = ocrDet;
+                m_grid->setOcrAnalyzer(ocrDet);
+                qInfo().noquote() << "[ai] ocr ready:" << detPath
+                                  << "backend=" << ocrDet->backendName();
+            } else {
+                delete ocrDet;
+                qInfo().noquote() << "[ai] ocr load failed:" << loadErr;
+            }
+        } else {
+            qInfo().noquote() << "[ai] ocr disabled:" << ocrFindErr;
+        }
+    }
+
     connect(m_grid, &VideoGrid::evidenceExportRequested, this,
             [this](const zp::ChannelRef &ch) {
                 VideoTile *tile = m_grid->tileFor(ch);
@@ -184,6 +206,8 @@ PlayerWindow::~PlayerWindow()
     }
     delete m_detector;
     m_detector = nullptr;
+    delete m_ocr;
+    m_ocr = nullptr;
 }
 
 void PlayerWindow::buildUi()
@@ -748,6 +772,46 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
         ref.channelId = QStringLiteral("ch%1").arg(i);
         m_grid->openStream(ref, tr("演示通道 %1").arg(i + 1), true, url);
     }
+
+    // Dev hooks so the AI/OCR path can be exercised without mouse input:
+    //   ZP_OCR=1          -> enable text recognition on every demo tile
+    //   ZP_ROI="x,y,w,h"  -> frame that analysis region (tile-normalized 0..1)
+    if (qEnvironmentVariableIsSet("ZP_OCR")) {
+        for (VideoTile *t : m_grid->tiles()) {
+            if (t) {
+                t->setOcrEnabled(true);
+            }
+        }
+    }
+    const QString roiSpec = qEnvironmentVariable("ZP_ROI");
+    if (!roiSpec.isEmpty()) {
+        const QStringList parts = roiSpec.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        if (parts.size() == 4) {
+            const QRectF roi(parts[0].toDouble(), parts[1].toDouble(),
+                             parts[2].toDouble(), parts[3].toDouble());
+            for (VideoTile *t : m_grid->tiles()) {
+                if (t) {
+                    t->setRoiRect(roi);
+                }
+            }
+        }
+    }
+    // ZP_ZOOM=1: zoom every demo tile to its ROI; ZP_SHARPEN=1: GPU sharpening.
+    if (qEnvironmentVariableIsSet("ZP_ZOOM")) {
+        for (VideoTile *t : m_grid->tiles()) {
+            if (t) {
+                t->setZoomEnabled(true);
+            }
+        }
+    }
+    if (qEnvironmentVariableIsSet("ZP_SHARPEN")) {
+        for (VideoTile *t : m_grid->tiles()) {
+            if (t) {
+                t->setSharpenEnabled(true);
+            }
+        }
+    }
+
     toastInfo(tr("已填充 %1 路演示通道").arg(count));
 }
 

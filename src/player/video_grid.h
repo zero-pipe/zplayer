@@ -16,6 +16,7 @@ namespace zp {
 
 class VideoTile;
 class AnalysisService;
+class IFrameAnalyzer;
 
 // Split-screen container. Manages a slot-based grid so irregular security
 // layouts (e.g. 1 big + 5 small) are expressible.
@@ -60,9 +61,14 @@ public:
     // delivered to the owning tile for overlay/evidence.
     void setAnalysisService(AnalysisService *service);
 
+    // Analyzer used by tiles that turn on OCR (not owned; may be null when the
+    // OCR models are absent, in which case the toggle simply does nothing).
+    void setOcrAnalyzer(IFrameAnalyzer *analyzer) { m_ocrAnalyzer = analyzer; }
+
     // Tile lookup for window-level actions (AI toggle, evidence export).
     VideoTile *tileFor(const zp::ChannelRef &ch) const;
     VideoTile *activeTile() const;
+    const QVector<VideoTile *> &tiles() const { return m_tiles; }
 
 signals:
     void activeChannelChanged(const zp::ChannelRef &ch, const QString &name, bool ptzCapable);
@@ -91,6 +97,7 @@ private:
     QVector<VideoTile *> m_tiles;
     VideoSettings m_settings;
     AnalysisService *m_analysis = nullptr;
+    IFrameAnalyzer *m_ocrAnalyzer = nullptr;
 
     QStackedLayout *m_stack = nullptr;
     QWidget *m_gridHost = nullptr;

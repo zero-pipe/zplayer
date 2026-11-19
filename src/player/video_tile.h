@@ -74,6 +74,13 @@ public:
     bool exportEvidence(const QString &outDir, QString *error = nullptr);
     int evidenceEventCount() const { return m_evidence.size(); }
 
+    // ---- Dev/test hooks (see ZP_OCR / ZP_ROI in PlayerWindow::fillDemo) ----
+    void setOcrEnabled(bool on);            // same as clicking 文字
+    void setRoiRect(const QRectF &roi);     // normalized to the tile frame
+    QRectF roiRect() const { return m_roi; }
+    void setZoomEnabled(bool on);           // same as clicking 放大
+    void setSharpenEnabled(bool on);        // same as clicking 超分
+
 signals:
     void clickedTile(const zp::ChannelRef &ch);
     void closeRequested(const zp::ChannelRef &ch);
@@ -84,6 +91,10 @@ signals:
     // User pressed the evidence button; the window picks a folder, then calls
     // exportEvidence() and reports the result.
     void evidenceExportRequested(const zp::ChannelRef &ch);
+    // ROI changed (normalized to the tile frame; empty = cleared).
+    void roiChanged(const zp::ChannelRef &ch, const QRectF &roi);
+    // Per-tile OCR analysis toggled.
+    void ocrToggled(const zp::ChannelRef &ch, bool on);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
@@ -133,9 +144,19 @@ private:
     QToolButton *m_speedBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
+    QToolButton *m_roiBtn = nullptr;
+    QToolButton *m_ocrBtn = nullptr;
+    QToolButton *m_zoomBtn = nullptr;
+    QToolButton *m_sharpenBtn = nullptr;
     double m_duration = -1.0;
     int m_speedIndex = 0;
     bool m_scrubbing = false;
+
+    // ROI selection (normalized to the video widget).
+    bool m_roiMode = false;       // waiting for / receiving a drag
+    bool m_draggingRoi = false;
+    QPointF m_roiStart;
+    QRectF m_roi;
 
     // AI fast-forward state.
     bool m_aiSkip = false;

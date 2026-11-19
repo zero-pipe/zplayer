@@ -26,12 +26,21 @@ public:
 
     void setLabelsVisible(bool visible);
 
+    // Region of interest, normalized to the whole tile frame (not to the
+    // video area). Drawn as a dashed frame so the user sees what the analyzer
+    // is restricted to. An empty rect hides it.
+    void setRoi(const QRectF &roi);
+    // Live rubber band while the user drags a new ROI.
+    void setRoiDraft(const QRectF &draft);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
 
 private:
     QVector<AnalysisBox> m_boxes;
     QRectF m_videoRect = QRectF(0.0, 0.0, 1.0, 1.0);
+    QRectF m_roi;
+    QRectF m_roiDraft;
     bool m_labels = true;
 };
 

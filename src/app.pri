@@ -4,6 +4,7 @@ SOURCES += \
     app/SessionManager.cpp \
     analysis/analysis_service.cpp \
     analysis/byte_tracker.cpp \
+    analysis/ocr_detector.cpp \
     analysis/yolo_detector.cpp \
     analysis/evidence.cpp \
     platform/platform_http_client.cpp \
@@ -11,6 +12,7 @@ SOURCES += \
     platform/mock_platform_api.cpp \
     player/media_factory.cpp \
     player/frame_grabber.cpp \
+    player/shaders.cpp \
     player/video_tile.cpp \
     player/video_grid.cpp \
     ui/theme.cpp \
@@ -30,6 +32,7 @@ HEADERS += \
     analysis/analyzer.h \
     analysis/analysis_service.h \
     analysis/byte_tracker.h \
+    analysis/ocr_detector.h \
     analysis/yolo_detector.h \
     analysis/evidence.h \
     platform/platform_api.h \
@@ -39,6 +42,7 @@ HEADERS += \
     player/media_player.h \
     player/media_factory.h \
     player/frame_grabber.h \
+    player/shaders.h \
     player/video_tile.h \
     player/video_grid.h \
     ui/theme.h \

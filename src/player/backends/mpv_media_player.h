@@ -37,6 +37,12 @@ public:
     double position() const override;
     double duration() const override;
 
+    // Zoom to a tile-normalized rect (ROI inspection) and GPU sharpening.
+    bool supportsVideoCrop() const override { return true; }
+    bool setVideoCrop(const QRectF &rect) override;
+    bool supportsShader() const override { return true; }
+    void setShader(const QString &filePath) override;
+
     // Playback position in seconds, or -1 when unknown. Read per-frame by the
     // renderer to stamp VideoFrame::pts; cheap (an mpv property get).
     double currentTimePos() const;
@@ -46,6 +52,10 @@ public:
     // Derived from mpv's `osd-dimensions` (authoritative, accounts for
     // rotation and aspect) with a `video-params/aspect` fallback.
     QRectF videoRectNormalized(int fboW, int fboH) const;
+
+    // The renderer reports its current target size so crop mapping can convert
+    // a tile-normalized rect into video pixels.
+    void noteRenderSize(int fboW, int fboH);
 
 protected:
     void applyVideoSettings() override;
@@ -58,6 +68,7 @@ private:
     struct MpvHolder;
     void setState(MediaState s);
     void handleEvent(void *event);
+    bool applyCrop();            // push m_crop to mpv (retries until possible)
     void loadPending();          // loadfile once the render context is ready
     void onRenderReady();        // called by the Renderer after GL init
     void applyExternalSubtitle(); // sub-add the configured external subtitle file
@@ -76,6 +87,10 @@ private:
     // Video placement, maintained from mpv property events.
     QRectF m_videoRectPx;        // osd-dimensions, in render-target pixels
     double m_aspect = 0.0;       // display aspect of the picture (0 = unknown)
+    int m_fboW = 0;              // last render-target size (device pixels)
+    int m_fboH = 0;
+    QRectF m_crop;               // active crop, tile-normalized (empty = none)
+    bool m_cropApplied = false;  // pushed to mpv already
 };
 
 } // namespace zp

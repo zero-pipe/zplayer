@@ -82,7 +82,7 @@ REM ONNX Runtime (DirectML) + the bundled YOLO model, so AI works from out/.
 if exist "%ROOT%3rdpart\onnxruntime\bin\*.dll" copy /y "%ROOT%3rdpart\onnxruntime\bin\*.dll" "%OUTBIN%" >nul
 if exist "%ROOT%3rdpart\models" (
     if not exist "%OUTBIN%\models" mkdir "%OUTBIN%\models"
-    xcopy /y /q "%ROOT%3rdpart\models\*" "%OUTBIN%\models\" >nul
+    xcopy /y /q /e "%ROOT%3rdpart\models\*" "%OUTBIN%\models\" >nul
 )
 
 popd >nul

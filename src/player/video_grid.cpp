@@ -229,6 +229,32 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
     connect(tile, &VideoTile::evidenceExportRequested, this,
             &VideoGrid::evidenceExportRequested);
 
+    // ROI / OCR are per-tile analysis controls; forward them to the service
+    // with the tile's player id.
+    connect(tile, &VideoTile::roiChanged, this,
+            [this](const zp::ChannelRef &ch, const QRectF &roi) {
+                if (!m_analysis) {
+                    return;
+                }
+                if (VideoTile *t = tileFor(ch)) {
+                    if (IMediaPlayer *p = t->player()) {
+                        m_analysis->setRoi(p->playerId(), roi);
+                    }
+                }
+            });
+    connect(tile, &VideoTile::ocrToggled, this,
+            [this](const zp::ChannelRef &ch, bool on) {
+                if (!m_analysis) {
+                    return;
+                }
+                if (VideoTile *t = tileFor(ch)) {
+                    if (IMediaPlayer *p = t->player()) {
+                        m_analysis->setSourceAnalyzer(p->playerId(),
+                                                      on ? m_ocrAnalyzer : nullptr);
+                    }
+                }
+            });
+
     // Route this tile's frames to the shared analysis service. Bookkeeping is
     // released from destroyed() rather than an explicit delete path: tiles are
     // removed via deleteLater() from several places.

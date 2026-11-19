@@ -83,6 +83,7 @@ private:
     Toast *m_toast = nullptr;
     AnalysisService *m_analysis = nullptr;   // per-window AI scheduler
     IFrameAnalyzer *m_detector = nullptr;    // owned; YOLO analyzer (may be null)
+    IFrameAnalyzer *m_ocr = nullptr;         // owned; scene-text OCR (may be null)
 
     QButtonGroup *m_layoutGroup = nullptr;
 

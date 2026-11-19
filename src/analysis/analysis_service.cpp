@@ -59,6 +59,26 @@ void AnalysisService::setTargetFps(double fps)
     m_targetFps = qMax(0.0, fps);
 }
 
+void AnalysisService::setRoi(quint64 playerId, const QRectF &roi)
+{
+    QMutexLocker lock(&m_mutex);
+    if (roi.isEmpty()) {
+        m_rois.remove(playerId);
+    } else {
+        m_rois.insert(playerId, roi.normalized());
+    }
+}
+
+void AnalysisService::setSourceAnalyzer(quint64 playerId, IFrameAnalyzer *analyzer)
+{
+    QMutexLocker lock(&m_mutex);
+    if (analyzer) {
+        m_sourceAnalyzers.insert(playerId, analyzer);
+    } else {
+        m_sourceAnalyzers.remove(playerId);
+    }
+}
+
 void AnalysisService::attach(IMediaPlayer *player, const ChannelRef &ref)
 {
     if (!player || !player->supportsFrameTap()) {
@@ -85,6 +105,8 @@ void AnalysisService::forget(quint64 playerId)
     {
         QMutexLocker lock(&m_mutex);
         m_refs.remove(playerId);
+        m_rois.remove(playerId);
+        m_sourceAnalyzers.remove(playerId);
     }
     m_lastAcceptedMs.remove(playerId);
 }
@@ -94,6 +116,8 @@ void AnalysisService::detachAll()
     {
         QMutexLocker lock(&m_mutex);
         m_refs.clear();
+        m_rois.clear();
+        m_sourceAnalyzers.clear();
     }
     m_lastAcceptedMs.clear();
 }
@@ -112,11 +136,13 @@ void AnalysisService::onVideoFrame(const VideoFrame &frame)
     if (m_targetFps <= 0.0) {
         return;
     }
+    QRectF roi;
     {
         QMutexLocker lock(&m_mutex);
-        if (!m_analyzer) {
+        if (!m_analyzer && !m_sourceAnalyzers.contains(frame.playerId)) {
             return;   // nothing to do until a model is plugged in
         }
+        roi = m_rois.value(frame.playerId);
     }
 
     // Per-source rate limit. Live frame rates are 25-60 fps; analysis wants a
@@ -129,15 +155,27 @@ void AnalysisService::onVideoFrame(const VideoFrame &frame)
     }
     last = now;
 
-    // GPU readback with crop + downscale. Cropping to the picture area first
-    // throws away the letterbox bars, so the same pixel budget buys more detail
-    // on the content and the detector never sees a shrunken picture. This is
-    // the one GPU->CPU stall on the render thread; keeping it at analysis size
-    // and a few fps is what makes it acceptable. A PBO/async path can replace
-    // it without changing callers.
-    const QImage image = grabFrameToImage(frame, m_maxWidth, frame.videoRect);
+    // Crop = the picture area, narrowed to the tile's ROI when the user has
+    // framed one. The result carries this rect so overlays map boxes back even
+    // when the analyzed area is a sub-region of the tile.
+    QRectF crop = frame.videoRect;
+    if (!roi.isEmpty()) {
+        const QRectF narrowed = crop.intersected(roi);
+        if (narrowed.width() >= 0.02 && narrowed.height() >= 0.02) {
+            crop = narrowed;
+        }
+    }
+    const QImage image = grabFrameToImage(frame, m_maxWidth, crop);
     if (image.isNull()) {
+        if (m_trace) {
+            qDebug().noquote() << "[ai] grab failed player=" << frame.playerId
+                               << "videoRect=" << frame.videoRect << "crop=" << crop;
+        }
         return;
+    }
+    if (m_trace) {
+        qDebug().noquote() << "[ai] grab player=" << frame.playerId
+                           << "img=" << image.size() << "crop=" << crop;
     }
 
     AnalysisFrame job;
@@ -145,7 +183,7 @@ void AnalysisService::onVideoFrame(const VideoFrame &frame)
     job.frameSerial = frame.serial;
     job.pts = frame.pts;
     job.image = image;
-    job.videoRect = frame.videoRect;
+    job.videoRect = crop;
 
     QMutexLocker lock(&m_mutex);
     // Fairness across tiles: keep at most one pending frame per source, so a
@@ -184,7 +222,9 @@ void AnalysisService::processLoop()
                 return;
             }
             frame = m_queue.dequeue();
-            analyzer = m_analyzer;
+            // A source with its own analyzer (e.g. OCR on one tile) overrides
+            // the shared default.
+            analyzer = m_sourceAnalyzers.value(frame.playerId, m_analyzer);
             if (analyzer) {
                 ++m_dispatched;
             }
@@ -203,29 +243,34 @@ void AnalysisService::processLoop()
         // evidence spans / AI skip ignore a single missed detection). dt comes
         // from media time when available, wall clock otherwise; a seek makes
         // the pts jump, which resets the per-track motion instead of teleporting
-        // boxes across the frame.
-        ByteTracker &tracker = m_trackers[frame.playerId];
-        double dt = 0.25;
-        const bool havePts = frame.pts >= 0.0
-                             && m_trackerLastPts.contains(frame.playerId);
-        if (havePts) {
-            dt = frame.pts - m_trackerLastPts.value(frame.playerId);
-            if (dt < 0.0 || dt > 2.0) {
-                tracker.reset();   // seek / discontinuity
-                dt = 0.25;
+        // boxes across the frame. OCR text boxes are not tracked — they are
+        // per-line readings, not physical targets.
+        const bool track = analyzer->name() != QLatin1String("ocr");
+        if (track) {
+            ByteTracker &tracker = m_trackers[frame.playerId];
+            double dt = 0.25;
+            const bool havePts = frame.pts >= 0.0
+                                 && m_trackerLastPts.contains(frame.playerId);
+            if (havePts) {
+                dt = frame.pts - m_trackerLastPts.value(frame.playerId);
+                if (dt < 0.0 || dt > 2.0) {
+                    tracker.reset();   // seek / discontinuity
+                    dt = 0.25;
+                }
             }
+            if (frame.pts >= 0.0) {
+                m_trackerLastPts.insert(frame.playerId, frame.pts);
+            }
+            tracker.update(result.boxes, dt);
         }
-        if (frame.pts >= 0.0) {
-            m_trackerLastPts.insert(frame.playerId, frame.pts);
-        }
-        tracker.update(result.boxes, dt);
 
         // Dev aid (ZP_AI_TRACE=1): one line per analyzed frame, so per-source
         // cadence and detection counts are visible in the ZP_LOG file.
         if (m_trace) {
             qDebug().noquote() << "[ai] result player=" << frame.playerId
                                << "pts=" << QString::number(frame.pts, 'f', 2)
-                               << "boxes=" << result.boxes.size();
+                               << "boxes=" << result.boxes.size()
+                               << "analyzer=" << analyzer->name();
         }
 
         // Auto-connection: receivers living in the GUI thread get this queued.

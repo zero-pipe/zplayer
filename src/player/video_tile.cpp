@@ -1,5 +1,6 @@
 #include "player/video_tile.h"
 #include "player/media_factory.h"
+#include "player/shaders.h"
 #include "ui/analysis_overlay.h"
 #include "ui/icons.h"
 
@@ -146,7 +147,102 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
         // Right-align the actions (matches common OS/desktop placement).
         fl->addStretch(1);
     }
+
+    // ROI: restrict AI analysis to the framed region (click, then drag on the
+    // picture; click again to clear).
+    m_roiBtn = new QToolButton(m_footer);
+    m_roiBtn->setObjectName(QStringLiteral("TileBtn"));
+    m_roiBtn->setText(QStringLiteral("ROI"));
+    m_roiBtn->setCheckable(true);
+    m_roiBtn->setToolTip(tr("圈选分析区域：点击后拖动框选，再点一次清除"));
+    m_roiBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_roiBtn, &QToolButton::clicked, this, [this](bool checked) {
+        if (!checked) {
+            m_roiMode = false;
+            m_roi = QRectF();
+            if (m_zoomBtn && m_zoomBtn->isChecked()) {
+                m_zoomBtn->setChecked(false);   // restores the full picture
+            }
+            if (m_zoomBtn) {
+                m_zoomBtn->setEnabled(false);
+            }
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(QRectF());
+                m_aiOverlay->setRoiDraft(QRectF());
+            }
+            if (m_video) {
+                m_video->unsetCursor();
+            }
+            emit roiChanged(m_channel, QRectF());
+            return;
+        }
+        m_roiMode = true;
+        if (m_video) {
+            m_video->setCursor(Qt::CrossCursor);
+        }
+    });
+
+    // OCR: recognize scene text on this tile (inside the ROI when one is set).
+    m_ocrBtn = new QToolButton(m_footer);
+    m_ocrBtn->setObjectName(QStringLiteral("TileBtn"));
+    m_ocrBtn->setText(tr("文字"));
+    m_ocrBtn->setCheckable(true);
+    m_ocrBtn->setToolTip(tr("文字识别（需 OCR 模型；配合 ROI 可只识别局部）"));
+    m_ocrBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_ocrBtn, &QToolButton::toggled, this, [this](bool on) {
+        emit ocrToggled(m_channel, on);
+    });
+
     fl->addWidget(snapBtn);
+    fl->addWidget(m_roiBtn);
+    fl->addWidget(m_ocrBtn);
+
+    // Zoom to ROI: fills the tile with the framed region (local magnification,
+    // the practical form of "local upscaling" for a video renderer).
+    m_zoomBtn = new QToolButton(m_footer);
+    m_zoomBtn->setObjectName(QStringLiteral("TileBtn"));
+    m_zoomBtn->setText(tr("放大"));
+    m_zoomBtn->setCheckable(true);
+    m_zoomBtn->setEnabled(false);   // needs an ROI first
+    m_zoomBtn->setToolTip(tr("放大到 ROI 区域（需先圈选）"));
+    m_zoomBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_zoomBtn, &QToolButton::toggled, this, [this](bool on) {
+        if (!m_player) {
+            return;
+        }
+        m_player->setVideoCrop(on ? m_roi : QRectF());
+        // While zoomed the visible picture IS the ROI: analysis no longer needs
+        // (and must not re-apply) the ROI crop, so hand it the whole frame.
+        // The dashed ROI frame would also be misleading over the zoomed view.
+        if (on) {
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(QRectF());
+            }
+            emit roiChanged(m_channel, QRectF());
+        } else {
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(m_roi);
+            }
+            emit roiChanged(m_channel, m_roi);
+        }
+    });
+
+    // GPU sharpening (applies to whatever is on screen, ROI zoom included).
+    m_sharpenBtn = new QToolButton(m_footer);
+    m_sharpenBtn->setObjectName(QStringLiteral("TileBtn"));
+    m_sharpenBtn->setText(tr("超分"));
+    m_sharpenBtn->setCheckable(true);
+    m_sharpenBtn->setToolTip(tr("GPU 锐化（配合 ROI 放大观看细节）"));
+    m_sharpenBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_sharpenBtn, &QToolButton::toggled, this, [this](bool on) {
+        if (!m_player) {
+            return;
+        }
+        m_player->setShader(on ? ensureSharpenShaderFile() : QString());
+    });
+
+    fl->addWidget(m_zoomBtn);
+    fl->addWidget(m_sharpenBtn);
 
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(1, 1, 1, 1);
@@ -614,12 +710,123 @@ bool VideoTile::exportEvidence(const QString &outDir, QString *error)
     return EvidenceExporter::writeReport(media, m_evidence, outDir, error);
 }
 
+void VideoTile::setOcrEnabled(bool on)
+{
+    if (m_ocrBtn) {
+        m_ocrBtn->setChecked(on);   // emits ocrToggled
+    }
+}
+
+void VideoTile::setRoiRect(const QRectF &roi)
+{
+    m_roi = roi.normalized();
+    if (m_aiOverlay) {
+        m_aiOverlay->setRoi(m_roi);
+    }
+    if (m_roiBtn) {
+        m_roiBtn->setChecked(!m_roi.isEmpty());
+    }
+    if (m_zoomBtn) {
+        m_zoomBtn->setEnabled(!m_roi.isEmpty());
+    }
+    if (m_roi.isEmpty() && m_zoomBtn && m_zoomBtn->isChecked()) {
+        m_zoomBtn->setChecked(false);
+    }
+    emit roiChanged(m_channel, m_roi);
+}
+
+void VideoTile::setZoomEnabled(bool on)
+{
+    if (m_zoomBtn) {
+        m_zoomBtn->setChecked(on);   // emits toggled -> setVideoCrop
+    }
+}
+
+void VideoTile::setSharpenEnabled(bool on)
+{
+    if (m_sharpenBtn) {
+        m_sharpenBtn->setChecked(on);
+    }
+}
+
 bool VideoTile::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_video && event->type() == QEvent::Resize && m_aiOverlay && m_video) {
         m_aiOverlay->setGeometry(m_video->rect());
         m_aiOverlay->raise();
     }
+
+    // ---- ROI rubber band ----
+    if (watched == m_video && m_roiMode && m_video) {
+        const QSizeF size = m_video->size();
+        auto normalized = [&](const QPointF &p) {
+            return QPointF(qBound(0.0, p.x() / qMax(1.0, size.width()), 1.0),
+                           qBound(0.0, p.y() / qMax(1.0, size.height()), 1.0));
+        };
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_draggingRoi = true;
+                m_roiStart = normalized(me->pos());
+                if (m_aiOverlay) {
+                    m_aiOverlay->setRoiDraft(QRectF(m_roiStart, m_roiStart));
+                }
+                return true;   // swallow: the click is a selection, not a tile click
+            }
+        } else if (event->type() == QEvent::MouseMove && m_draggingRoi) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoiDraft(
+                    QRectF(m_roiStart, normalized(me->pos())).normalized());
+            }
+            return true;
+        } else if (event->type() == QEvent::MouseButtonRelease && m_draggingRoi) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_draggingRoi = false;
+                const QRectF draft =
+                    QRectF(m_roiStart, normalized(me->pos())).normalized();
+                if (m_aiOverlay) {
+                    m_aiOverlay->setRoiDraft(QRectF());
+                }
+                // A click without a drag (a few pixels) cancels the selection.
+                if (draft.width() > 0.03 && draft.height() > 0.03) {
+                    m_roi = draft;
+                    m_roiMode = false;
+                    if (m_video) {
+                        m_video->unsetCursor();
+                    }
+                    if (m_aiOverlay) {
+                        m_aiOverlay->setRoi(m_roi);
+                    }
+                    if (m_zoomBtn) {
+                        m_zoomBtn->setEnabled(true);
+                        if (m_zoomBtn->isChecked()) {
+                            // Re-apply the zoom to the freshly framed region.
+                            if (m_player) {
+                                m_player->setVideoCrop(m_roi);
+                            }
+                        }
+                    }
+                    // While zoomed, analysis sees the whole (already cropped)
+                    // picture — see the zoom toggle above.
+                    emit roiChanged(m_channel, (m_zoomBtn && m_zoomBtn->isChecked())
+                                                   ? QRectF() : m_roi);
+                } else if (m_roiBtn) {
+                    // Nothing framed: leave selection mode so the tile is
+                    // normally clickable again. With an existing ROI the button
+                    // stays checked (ROI still active).
+                    m_roiMode = false;
+                    if (m_video) {
+                        m_video->unsetCursor();
+                    }
+                    m_roiBtn->setChecked(!m_roi.isEmpty());
+                }
+                return true;
+            }
+        }
+    }
+
     return QWidget::eventFilter(watched, event);
 }
 

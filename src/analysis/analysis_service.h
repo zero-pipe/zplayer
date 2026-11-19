@@ -46,6 +46,16 @@ public:
     void setTargetFps(double fps);
     double targetFps() const { return m_targetFps; }
 
+    // Restrict analysis of one source to a region of interest, normalized to
+    // the tile frame (0..1, origin top-left). An empty rect means the whole
+    // picture. The ROI is intersected with the picture area before the
+    // readback, so boxes stay normalized to what the analyzer actually saw.
+    void setRoi(quint64 playerId, const QRectF &roi);
+
+    // Per-source analyzer override (e.g. OCR on one tile while the others run
+    // object detection). Null restores the shared default analyzer. Not owned.
+    void setSourceAnalyzer(quint64 playerId, IFrameAnalyzer *analyzer);
+
     // GPU downscale target before readback; 0 = native tile size.
     void setMaxAnalysisWidth(int px) { m_maxWidth = px; }
     int maxAnalysisWidth() const { return m_maxWidth; }
@@ -81,6 +91,8 @@ private:
     QHash<quint64, ChannelRef> m_refs;
     IFrameAnalyzer *m_analyzer = nullptr;
     bool m_quit = false;
+    QHash<quint64, QRectF> m_rois;
+    QHash<quint64, IFrameAnalyzer *> m_sourceAnalyzers;
 
     // Worker-thread only: per-source tracker and the pts of the last frame
     // that went through it.

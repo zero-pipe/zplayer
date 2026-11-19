@@ -181,6 +181,20 @@ public:
     virtual double position() const { return -1.0; }
     virtual double duration() const { return -1.0; }
 
+    // ---- Zoom / shaders (for ROI inspection and soft upscaling) ----
+    //
+    // Video crop: show only the given part of the picture, scaled up to fill
+    // the tile. `rect` is normalized to the tile frame (the same space ROIs
+    // use); an empty rect restores the full picture. Backends without crop
+    // support return false / do nothing.
+    virtual bool supportsVideoCrop() const { return false; }
+    virtual bool setVideoCrop(const QRectF & /*rect*/) { return false; }
+
+    // GPU shader applied to the rendered picture (sharpening / upscaling).
+    // Path to a shader file the engine understands; empty disables it.
+    virtual bool supportsShader() const { return false; }
+    virtual void setShader(const QString & /*filePath*/) {}
+
     // Capture the current video frame to an image file. Returns true if the
     // request was dispatched (some engines, e.g. mpv, write asynchronously).
     // Default implementation grabs the renderer widget; engines may override

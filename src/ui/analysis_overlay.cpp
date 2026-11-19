@@ -57,15 +57,42 @@ void AnalysisOverlay::setLabelsVisible(bool visible)
     update();
 }
 
+void AnalysisOverlay::setRoi(const QRectF &roi)
+{
+    m_roi = roi.normalized();
+    update();
+}
+
+void AnalysisOverlay::setRoiDraft(const QRectF &draft)
+{
+    m_roiDraft = draft.normalized();
+    update();
+}
+
 void AnalysisOverlay::paintEvent(QPaintEvent *)
 {
-    if (m_boxes.isEmpty() || width() <= 0 || height() <= 0) {
+    if (width() <= 0 || height() <= 0) {
         return;
     }
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     const qreal w = width();
     const qreal h = height();
+
+    // ---- ROI frame (dashed; amber while dragging) ----
+    const QRectF roi = m_roiDraft.isNull() ? m_roi : m_roiDraft;
+    if (!roi.isEmpty()) {
+        const QRectF rr(roi.x() * w, roi.y() * h, roi.width() * w, roi.height() * h);
+        QPen pen(m_roiDraft.isNull() ? QColor(47, 129, 247) : QColor(255, 196, 0), 1.5,
+                 Qt::DashLine);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+        p.drawRect(rr);
+    }
+
+    if (m_boxes.isEmpty()) {
+        return;
+    }
 
     QFont f = font();
     f.setPixelSize(qMax(10, int(h * 0.035)));
