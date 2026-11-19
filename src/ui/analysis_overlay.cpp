@@ -34,9 +34,11 @@ AnalysisOverlay::AnalysisOverlay(QWidget *parent)
     setAutoFillBackground(false);
 }
 
-void AnalysisOverlay::setBoxes(const QVector<AnalysisBox> &boxes)
+void AnalysisOverlay::setBoxes(const QVector<AnalysisBox> &boxes,
+                               const QRectF &videoRect)
 {
     m_boxes = boxes;
+    m_videoRect = videoRect.isNull() ? QRectF(0.0, 0.0, 1.0, 1.0) : videoRect;
     update();
 }
 
@@ -69,8 +71,12 @@ void AnalysisOverlay::paintEvent(QPaintEvent *)
     f.setPixelSize(qMax(10, int(h * 0.035)));
 
     for (const AnalysisBox &box : m_boxes) {
-        const QRectF r(box.rect.x() * w, box.rect.y() * h,
-                       box.rect.width() * w, box.rect.height() * h);
+        // Boxes are normalized to the picture area; shift and scale them into
+        // the tile, where the picture is letterboxed inside m_videoRect.
+        const QRectF r(m_videoRect.x() * w + box.rect.x() * m_videoRect.width() * w,
+                       m_videoRect.y() * h + box.rect.y() * m_videoRect.height() * h,
+                       box.rect.width() * m_videoRect.width() * w,
+                       box.rect.height() * m_videoRect.height() * h);
         if (r.width() < 2 || r.height() < 2) {
             continue;
         }

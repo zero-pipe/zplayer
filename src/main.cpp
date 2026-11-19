@@ -16,6 +16,7 @@
 #include <QWidget>
 #include <QDialog>
 #include <QDateTime>
+#include <QDebug>
 #include <QFile>
 #include <QMutex>
 #include <QMutexLocker>
@@ -129,7 +130,13 @@ private:
         if (path.isEmpty()) {
             return;
         }
-        QTimer::singleShot(1200, this, [this, path]() {
+        // ZP_SHOT_DELAY=<ms> lets a test that waits for AI results (~1-3 s after
+        // playback starts) grab a later frame; default matches the old timing.
+        int delayMs = 1200;
+        if (!qEnvironmentVariableIsEmpty("ZP_SHOT_DELAY")) {
+            delayMs = qMax(0, qEnvironmentVariableIntValue("ZP_SHOT_DELAY"));
+        }
+        QTimer::singleShot(delayMs, this, [this, path]() {
             if (QWidget *w = shotTarget()) {
                 w->grab().save(path, "PNG");
             }

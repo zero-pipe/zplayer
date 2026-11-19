@@ -26,6 +26,7 @@ private:
 AnalysisService::AnalysisService(QObject *parent)
     : QObject(parent)
 {
+    m_trace = qEnvironmentVariableIsSet("ZP_AI_TRACE");
     m_worker = new Worker(this);
     m_worker->start();
 }
@@ -128,10 +129,13 @@ void AnalysisService::onVideoFrame(const VideoFrame &frame)
     }
     last = now;
 
-    // GPU readback with downscale. This is the one GPU->CPU stall on the
-    // render thread; keeping it at analysis size and a few fps is what makes
-    // it acceptable. A PBO/async path can replace it without changing callers.
-    const QImage image = grabFrameToImage(frame, m_maxWidth);
+    // GPU readback with crop + downscale. Cropping to the picture area first
+    // throws away the letterbox bars, so the same pixel budget buys more detail
+    // on the content and the detector never sees a shrunken picture. This is
+    // the one GPU->CPU stall on the render thread; keeping it at analysis size
+    // and a few fps is what makes it acceptable. A PBO/async path can replace
+    // it without changing callers.
+    const QImage image = grabFrameToImage(frame, m_maxWidth, frame.videoRect);
     if (image.isNull()) {
         return;
     }
@@ -141,8 +145,19 @@ void AnalysisService::onVideoFrame(const VideoFrame &frame)
     job.frameSerial = frame.serial;
     job.pts = frame.pts;
     job.image = image;
+    job.videoRect = frame.videoRect;
 
     QMutexLocker lock(&m_mutex);
+    // Fairness across tiles: keep at most one pending frame per source, so a
+    // slow analyzer cannot let one busy source fill the queue and starve the
+    // other fifteen. The freshest frame is the one worth keeping.
+    for (int i = 0; i < m_queue.size(); ++i) {
+        if (m_queue.at(i).playerId == job.playerId) {
+            m_queue.removeAt(i);
+            ++m_dropped;
+            break;
+        }
+    }
     if (m_queue.size() >= m_maxQueue) {
         // Analyzer is behind: drop the oldest, keep the freshest picture.
         m_queue.dequeue();
@@ -182,6 +197,36 @@ void AnalysisService::processLoop()
         result.playerId = frame.playerId;
         result.frameSerial = frame.frameSerial;
         result.pts = frame.pts;
+        result.videoRect = frame.videoRect;
+
+        // Track ids are what make boxes persistent across frames (and let
+        // evidence spans / AI skip ignore a single missed detection). dt comes
+        // from media time when available, wall clock otherwise; a seek makes
+        // the pts jump, which resets the per-track motion instead of teleporting
+        // boxes across the frame.
+        ByteTracker &tracker = m_trackers[frame.playerId];
+        double dt = 0.25;
+        const bool havePts = frame.pts >= 0.0
+                             && m_trackerLastPts.contains(frame.playerId);
+        if (havePts) {
+            dt = frame.pts - m_trackerLastPts.value(frame.playerId);
+            if (dt < 0.0 || dt > 2.0) {
+                tracker.reset();   // seek / discontinuity
+                dt = 0.25;
+            }
+        }
+        if (frame.pts >= 0.0) {
+            m_trackerLastPts.insert(frame.playerId, frame.pts);
+        }
+        tracker.update(result.boxes, dt);
+
+        // Dev aid (ZP_AI_TRACE=1): one line per analyzed frame, so per-source
+        // cadence and detection counts are visible in the ZP_LOG file.
+        if (m_trace) {
+            qDebug().noquote() << "[ai] result player=" << frame.playerId
+                               << "pts=" << QString::number(frame.pts, 'f', 2)
+                               << "boxes=" << result.boxes.size();
+        }
 
         // Auto-connection: receivers living in the GUI thread get this queued.
         emit resultReady(refFor(frame.playerId), result);

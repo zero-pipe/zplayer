@@ -41,6 +41,12 @@ public:
     // renderer to stamp VideoFrame::pts; cheap (an mpv property get).
     double currentTimePos() const;
 
+    // Where the picture (minus letterbox bars) sits inside a render target of
+    // the given pixel size, normalized 0..1 with the origin at the top-left.
+    // Derived from mpv's `osd-dimensions` (authoritative, accounts for
+    // rotation and aspect) with a `video-params/aspect` fallback.
+    QRectF videoRectNormalized(int fboW, int fboH) const;
+
 protected:
     void applyVideoSettings() override;
 
@@ -66,6 +72,10 @@ private:
     MediaState m_state = MediaState::Idle;
     bool m_renderReady = false;  // mpv_render_context created
     QString m_pendingUrl;        // URL waiting for the render context
+
+    // Video placement, maintained from mpv property events.
+    QRectF m_videoRectPx;        // osd-dimensions, in render-target pixels
+    double m_aspect = 0.0;       // display aspect of the picture (0 = unknown)
 };
 
 } // namespace zp

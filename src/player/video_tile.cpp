@@ -436,7 +436,7 @@ void VideoTile::updateTransportUi()
 void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
 {
     if (m_aiOverlay) {
-        m_aiOverlay->setBoxes(result.boxes);
+        m_aiOverlay->setBoxes(result.boxes, result.videoRect);
     }
     updateAiSkip(result.pts, result.boxes);
     updateEvidence(result.pts, result.boxes);

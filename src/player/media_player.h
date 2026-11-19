@@ -2,6 +2,7 @@
 #define ZP_MEDIA_PLAYER_H
 
 #include <QObject>
+#include <QRectF>
 #include <QUrl>
 #include <QWidget>
 #include <QString>
@@ -105,6 +106,11 @@ struct VideoFrame {
     double pts = -1.0;            // seconds, media time (-1 = unknown)
     quint64 serial = 0;           // monotonically increasing per player
     quint64 playerId = 0;         // IMediaPlayer::playerId() of the source
+    // Where the actual picture sits inside the texture, normalized 0..1 with
+    // the origin at the top-left. Equals the full texture when the engine
+    // cannot tell (or the picture fills it). The bars outside it are black;
+    // analyzers should crop to it and overlays map into it.
+    QRectF videoRect = QRectF(0.0, 0.0, 1.0, 1.0);
 };
 
 class IVideoFrameSink {

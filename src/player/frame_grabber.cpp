@@ -79,7 +79,7 @@ bool ensureScaleTarget(QOpenGLContext *ctx, int w, int h)
 
 } // namespace
 
-QImage grabFrameToImage(const VideoFrame &frame, int maxWidth)
+QImage grabFrameToImage(const VideoFrame &frame, int maxWidth, const QRectF &srcRect)
 {
     if (!frame.textureId || frame.width <= 0 || frame.height <= 0) {
         return QImage();
@@ -94,17 +94,37 @@ QImage grabFrameToImage(const VideoFrame &frame, int maxWidth)
     GLint srcFbo = 0;
     ef->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &srcFbo);
 
-    int outW = frame.width;
-    int outH = frame.height;
+    // ---- crop rect in framebuffer pixels ----
+    // srcRect is top-left normalized; GL rows run bottom-up, so the rect has to
+    // be flipped when it becomes a blit source region.
+    QRectF r = srcRect.normalized();
+    if (r.isEmpty() || r.width() <= 0.0 || r.height() <= 0.0) {
+        r = QRectF(0.0, 0.0, 1.0, 1.0);
+    }
+    r = r.intersected(QRectF(0.0, 0.0, 1.0, 1.0));
+    if (r.width() <= 0.0 || r.height() <= 0.0) {
+        return QImage();
+    }
+    const int cropX = qBound(0, int(r.x() * frame.width), frame.width - 1);
+    const int cropY = qBound(0, int(r.y() * frame.height), frame.height - 1);
+    const int cropW = qBound(1, int(r.width() * frame.width + 0.5), frame.width - cropX);
+    const int cropH = qBound(1, int(r.height() * frame.height + 0.5), frame.height - cropY);
+    const int glY = frame.height - (cropY + cropH);
+
+    const bool crop = cropX != 0 || cropY != 0 || cropW != frame.width
+                      || cropH != frame.height;
+
+    int outW = cropW;
+    int outH = cropH;
     bool scaled = false;
-    if (maxWidth > 0 && frame.width > maxWidth
+    if (maxWidth > 0 && cropW > maxWidth
         && ensureScaleTarget(ctx, maxWidth,
-                             qMax(1, int(frame.height * (double(maxWidth) / frame.width))))) {
+                             qMax(1, int(cropH * (double(maxWidth) / cropW))))) {
         outW = g_scale.w;
         outH = g_scale.h;
         ef->glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(srcFbo));
         ef->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_scale.fbo);
-        ef->glBlitFramebuffer(0, 0, frame.width, frame.height, 0, 0, outW, outH,
+        ef->glBlitFramebuffer(cropX, glY, cropX + cropW, glY + cropH, 0, 0, outW, outH,
                               GL_COLOR_BUFFER_BIT, GL_LINEAR);
         ef->glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(srcFbo));
         scaled = true;
@@ -122,8 +142,10 @@ QImage grabFrameToImage(const VideoFrame &frame, int maxWidth)
     f->glPixelStorei(GL_PACK_ALIGNMENT, 1);
     // The tap runs while the frame's FBO is still bound, so the current read
     // framebuffer already holds the picture — the texture id is only a
-    // validity check here.
-    f->glReadPixels(0, 0, outW, outH, GL_RGBA, GL_UNSIGNED_BYTE, img.bits());
+    // validity check here. A crop with no scaling reads the sub-rect directly.
+    const int readX = (scaled || !crop) ? 0 : cropX;
+    const int readY = (scaled || !crop) ? 0 : glY;
+    f->glReadPixels(readX, readY, outW, outH, GL_RGBA, GL_UNSIGNED_BYTE, img.bits());
     if (scaled) {
         ef->glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(srcFbo));
     }

@@ -2,6 +2,7 @@
 #define ZP_FRAME_GRABBER_H
 
 #include <QImage>
+#include <QRectF>
 #include <QString>
 
 #include "player/media_player.h"
@@ -22,7 +23,12 @@ namespace zp {
 // maxWidth > 0 downscales on the GPU (blit with linear filtering) before the
 // readback, so the CPU/PCIe cost stays proportional to the analysis size
 // instead of the tile size. 0 reads the frame at its native size.
-QImage grabFrameToImage(const VideoFrame &frame, int maxWidth = 0);
+//
+// srcRect crops the frame before scaling, normalized 0..1 with the origin at
+// the top-left (pass frame.videoRect to drop letterbox bars; pass an empty
+// rect for the whole frame).
+QImage grabFrameToImage(const VideoFrame &frame, int maxWidth = 0,
+                        const QRectF &srcRect = QRectF());
 
 // Dev/diagnostic helper. When the ZP_TAP=<dir> environment variable is set,
 // returns a sink that writes the first frame of every player to

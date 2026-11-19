@@ -8,17 +8,20 @@
 
 namespace zp {
 
-// Transparent painter laid over a tile's video surface. It draws detection
-// boxes exactly as they came back from the analyzer — normalized to the whole
-// tile frame (letterbox bars included) — so no coordinate conversion is needed
-// here. It never takes mouse events, so clicking still reaches the tile.
+// Transparent painter laid over a tile's video surface. Boxes arrive
+// normalized to the picture area (letterbox bars excluded), and `videoRect`
+// says where that area sits in the tile frame — this is the only place the two
+// spaces are combined, so nothing upstream has to know the tile size or DPI.
+// The overlay never takes mouse events, so clicking still reaches the tile.
 class AnalysisOverlay : public QWidget {
     Q_OBJECT
 public:
     explicit AnalysisOverlay(QWidget *parent = nullptr);
 
-    // Replace the drawn set. `boxes` are in normalized (0..1) tile coordinates.
-    void setBoxes(const QVector<AnalysisBox> &boxes);
+    // Replace the drawn set. `boxes` are normalized (0..1) to `videoRect`,
+    // which is itself normalized to the whole tile frame.
+    void setBoxes(const QVector<AnalysisBox> &boxes,
+                  const QRectF &videoRect = QRectF(0.0, 0.0, 1.0, 1.0));
     void clear();
 
     void setLabelsVisible(bool visible);
@@ -28,6 +31,7 @@ protected:
 
 private:
     QVector<AnalysisBox> m_boxes;
+    QRectF m_videoRect = QRectF(0.0, 0.0, 1.0, 1.0);
     bool m_labels = true;
 };
 

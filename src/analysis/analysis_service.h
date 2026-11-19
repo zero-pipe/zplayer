@@ -8,6 +8,7 @@
 #include <QWaitCondition>
 
 #include "analysis/analyzer.h"
+#include "analysis/byte_tracker.h"
 #include "platform/platform_api.h"
 #include "player/media_player.h"
 
@@ -80,6 +81,12 @@ private:
     QHash<quint64, ChannelRef> m_refs;
     IFrameAnalyzer *m_analyzer = nullptr;
     bool m_quit = false;
+
+    // Worker-thread only: per-source tracker and the pts of the last frame
+    // that went through it.
+    QHash<quint64, ByteTracker> m_trackers;
+    QHash<quint64, double> m_trackerLastPts;
+    bool m_trace = false;   // ZP_AI_TRACE=1: log one line per analyzed frame
 
     // GUI-thread only.
     QHash<quint64, qint64> m_lastAcceptedMs;

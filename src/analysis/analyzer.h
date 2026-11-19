@@ -34,6 +34,10 @@ struct AnalysisResult {
     double pts = -1.0;      // media time of the analyzed frame
     QVector<AnalysisBox> boxes;
     QString label;          // optional free-form summary (OCR text, ...)
+    // Where the analyzed picture sits in the tile frame, normalized 0..1 with
+    // the origin at the top-left (letterbox bars excluded). Boxes are relative
+    // to this rect, so an overlay maps a box to `videoRect.x + box.x * w`.
+    QRectF videoRect = QRectF(0.0, 0.0, 1.0, 1.0);
 };
 
 // One frame handed to an analyzer: a CPU image, already downscaled by the
@@ -43,6 +47,10 @@ struct AnalysisFrame {
     quint64 frameSerial = 0;
     double pts = -1.0;
     QImage image;
+    // Placement of the pictured area inside the tile frame, normalized 0..1
+    // (the service crops to it before analysis). Analyzers do not need it, but
+    // it is carried to the result so overlays can map boxes back.
+    QRectF videoRect = QRectF(0.0, 0.0, 1.0, 1.0);
 };
 
 // Implemented by concrete engines (ONNX Runtime now, TensorRT later).

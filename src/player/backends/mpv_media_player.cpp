@@ -101,6 +101,7 @@ public:
             frame.pts = m_owner->currentTimePos();
             frame.serial = ++m_frameSerial;
             frame.playerId = m_owner->playerId();
+            frame.videoRect = m_owner->videoRectNormalized(w, h);
             sink->onVideoFrame(frame);
         }
 
@@ -243,6 +244,9 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "duration", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "speed", MPV_FORMAT_DOUBLE);
+        // Picture placement inside the render target (letterbox bars).
+        mpv_observe_property(m_holder->h, 0, "video-params/aspect", MPV_FORMAT_DOUBLE);
+        mpv_observe_property(m_holder->h, 0, "osd-dimensions", MPV_FORMAT_NODE);
         mpv_set_wakeup_callback(m_holder->h, mpvWakeup, this);
         applyVideoSettings();  // push defaults before the first loadfile
     }
@@ -380,6 +384,43 @@ double MpvMediaPlayer::currentTimePos() const
         return -1.0;
     }
     return pos;
+}
+
+// ---------------------------------------------------------------------------
+// Picture placement (letterbox detection)
+// ---------------------------------------------------------------------------
+QRectF MpvMediaPlayer::videoRectNormalized(int fboW, int fboH) const
+{
+    const QRectF full(0.0, 0.0, 1.0, 1.0);
+    if (fboW <= 0 || fboH <= 0) {
+        return full;
+    }
+
+    // Preferred: mpv's own idea of the OSD/video area in render-target pixels.
+    // Guard against stale values from a previous size: anything larger than the
+    // target means the rect predates the current FBO.
+    if (!m_videoRectPx.isEmpty()) {
+        const QRectF r(m_videoRectPx.x() / fboW, m_videoRectPx.y() / fboH,
+                       m_videoRectPx.width() / fboW, m_videoRectPx.height() / fboH);
+        if (r.right() <= 1.02 && r.bottom() <= 1.02 && r.width() > 0.02
+            && r.height() > 0.02) {
+            return r.intersected(full);
+        }
+    }
+
+    // Fallback: letterbox from the display aspect ratio (panscan is off, so the
+    // picture is centered and fully visible).
+    if (m_aspect > 0.0) {
+        const double boxAspect = double(fboW) / fboH;
+        if (m_aspect >= boxAspect) {
+            const double h = boxAspect / m_aspect;   // bars top/bottom
+            return QRectF(0.0, (1.0 - h) * 0.5, 1.0, h);
+        }
+        const double w = m_aspect / boxAspect;       // bars left/right
+        return QRectF((1.0 - w) * 0.5, 0.0, w, 1.0);
+    }
+
+    return full;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +571,10 @@ void MpvMediaPlayer::handleEvent(void *ev)
     switch (event->event_id) {
     case MPV_EVENT_START_FILE:
         setState(MediaState::Opening);
+        // Properties from the previous file are stale; they will be observed
+        // again once the new video parameters are known.
+        m_videoRectPx = QRectF();
+        m_aspect = 0.0;
         break;
     case MPV_EVENT_FILE_LOADED:
         setState(MediaState::Playing);
@@ -542,17 +587,47 @@ void MpvMediaPlayer::handleEvent(void *ev)
         break;
     case MPV_EVENT_PROPERTY_CHANGE: {
         auto *pc = static_cast<mpv_event_property *>(event->data);
-        if (!pc || !pc->name || pc->format != MPV_FORMAT_DOUBLE || !pc->data) {
+        if (!pc || !pc->name || !pc->data) {
             break;
         }
-        const double value = *static_cast<double *>(pc->data);
         const QByteArray name(pc->name);
-        if (name == QByteArrayLiteral("time-pos")) {
-            emit positionChanged(value);
-        } else if (name == QByteArrayLiteral("duration")) {
-            emit durationChanged(value);
-        } else if (name == QByteArrayLiteral("speed")) {
-            emit speedChanged(value);
+        if (pc->format == MPV_FORMAT_DOUBLE) {
+            const double value = *static_cast<double *>(pc->data);
+            if (name == QByteArrayLiteral("time-pos")) {
+                emit positionChanged(value);
+            } else if (name == QByteArrayLiteral("duration")) {
+                emit durationChanged(value);
+            } else if (name == QByteArrayLiteral("speed")) {
+                emit speedChanged(value);
+            } else if (name == QByteArrayLiteral("video-params/aspect")) {
+                m_aspect = value;
+            }
+        } else if (pc->format == MPV_FORMAT_NODE
+                   && name == QByteArrayLiteral("osd-dimensions")) {
+            // Map of x0/y0/x1/y1 in render-target pixels: the picture area,
+            // i.e. what is left after letterbox/pillarbox bars.
+            const mpv_node *node = static_cast<const mpv_node *>(pc->data);
+            if (!node || node->format != MPV_FORMAT_NODE_MAP) {
+                break;
+            }
+            double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+            bool hasX1 = false, hasY1 = false;
+            for (int i = 0; i < node->u.list->num; ++i) {
+                const char *key = node->u.list->keys[i];
+                const mpv_node &val = node->u.list->values[i];
+                if (!key || val.format != MPV_FORMAT_INT64) {
+                    continue;
+                }
+                const QByteArray k(key);
+                const double v = double(val.u.int64);
+                if (k == QByteArrayLiteral("x0")) { x0 = v; }
+                else if (k == QByteArrayLiteral("y0")) { y0 = v; }
+                else if (k == QByteArrayLiteral("x1")) { x1 = v; hasX1 = true; }
+                else if (k == QByteArrayLiteral("y1")) { y1 = v; hasY1 = true; }
+            }
+            if (hasX1 && hasY1 && x1 > x0 && y1 > y0) {
+                m_videoRectPx = QRectF(x0, y0, x1 - x0, y1 - y0);
+            }
         }
         break;
     }

@@ -3,6 +3,7 @@ SOURCES += \
     app/PlayerWindow.cpp \
     app/SessionManager.cpp \
     analysis/analysis_service.cpp \
+    analysis/byte_tracker.cpp \
     analysis/yolo_detector.cpp \
     analysis/evidence.cpp \
     platform/platform_http_client.cpp \
@@ -28,6 +29,7 @@ HEADERS += \
     app/SessionManager.h \
     analysis/analyzer.h \
     analysis/analysis_service.h \
+    analysis/byte_tracker.h \
     analysis/yolo_detector.h \
     analysis/evidence.h \
     platform/platform_api.h \
