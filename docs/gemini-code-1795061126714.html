@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 智能视频分析播放器 - 底部交互原型</title>
+<style>
+  :root {
+    --primary: #1890ff;
+    --primary-hover: #40a9ff;
+    --bg-bar: rgba(20, 24, 31, 0.85);
+    --bg-panel: rgba(28, 33, 43, 0.95);
+    --border-color: rgba(255, 255, 255, 0.12);
+    --text-main: #f0f2f5;
+    --text-sub: #9aa5b1;
+    --color-person: #1890ff;
+    --color-car: #52c41a;
+    --color-dog: #fa8c16;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background-color: #0d1015;
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  /* 播放器主容器 */
+  .player-wrapper {
+    position: relative;
+    width: 1080px;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+    border: 1px solid #2a303c;
+  }
+
+  /* 模拟视频画布层（支持缩放和平移） */
+  .video-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-origin: center center;
+    transition: transform 0.2s ease-out, filter 0.3s ease;
+    background: radial-gradient(circle at 50% 45%, #2b4c3f 0%, #16241f 60%, #090d0b 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+  }
+  .video-stage.zoomed { cursor: grab; }
+  .video-stage.zoomed:active { cursor: grabbing; }
+  .video-stage.sharpened { filter: contrast(1.18) saturate(1.15) brightness(1.03); }
+
+  /* 模拟画面元素：树洞场景背景网格 */
+  .scene-placeholder {
+    color: rgba(255,255,255,0.2);
+    font-size: 18px;
+    letter-spacing: 2px;
+    pointer-events: none;
+  }
+
+  /* ROI 区域框 */
+  .roi-box {
+    position: absolute;
+    top: 22%; left: 28%; width: 44%; height: 50%;
+    border: 2px dashed rgba(24, 144, 255, 0.8);
+    background: rgba(24, 144, 255, 0.06);
+    pointer-events: none;
+    display: flex;
+    align-items: flex-start;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #69c0ff;
+  }
+  .roi-box.hidden { display: none; }
+
+  /* 模拟 AI 检测框 & OCR 结果 */
+  .ai-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .det-box {
+    position: absolute;
+    border: 2px solid var(--color-car);
+    background: rgba(82, 196, 26, 0.1);
+  }
+  .det-tag {
+    position: absolute;
+    top: -24px; left: -2px;
+    background: var(--color-car);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px 3px 3px 0;
+    white-space: nowrap;
+  }
+  /* OCR 失败/模糊状态样式 */
+  .det-box.ocr-fail {
+    border-color: #ff4d4f;
+    border-style: dashed;
+    background: rgba(255, 77, 79, 0.1);
+  }
+  .det-box.ocr-fail .det-tag {
+    background: #ff4d4f;
+  }
+
+  /* 顶部状态提示条 (Toast & 状态徽章) */
+  .top-hud {
+    position: absolute;
+    top: 16px; left: 16px; right: 16px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .status-pills { display: flex; gap: 8px; }
+  .pill {
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-color);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #52c41a; }
+  .dot.fast { background: #faad14; animation: pulse 0.8s infinite; }
+
+  /* 鹰眼缩放导航窗 */
+  .minimap {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 140px; height: 78px;
+    background: rgba(0,0,0,0.75);
+    border: 1px solid var(--primary);
+    border-radius: 4px;
+    display: none;
+    overflow: hidden;
+    z-index: 15;
+  }
+  .minimap.active { display: block; }
+  .minimap-viewport {
+    position: absolute;
+    border: 1.5px solid #ff4d4f;
+    background: rgba(255, 77, 79, 0.2);
+    width: 50%; height: 50%;
+    top: 25%; left: 25%;
+  }
+
+  /* 底部控制栏核心区域 */
+  .control-bar-container {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(to top, rgba(10,12,16,0.96) 0%, rgba(15,19,26,0.88) 75%, transparent 100%);
+    padding: 24px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 20;
+  }
+
+  /* 智能时间轴 */
+  .timeline-wrapper {
+    position: relative;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  .timeline-track {
+    position: relative;
+    width: 100%;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    transition: height 0.15s;
+  }
+  .timeline-wrapper:hover .timeline-track { height: 7px; }
+  .timeline-progress {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 35%;
+    background: var(--primary);
+    border-radius: 3px;
+    z-index: 2;
+  }
+  .timeline-thumb {
+    position: absolute;
+    right: -6px; top: 50%;
+    transform: translateY(-50%);
+    width: 13px; height: 13px;
+    background: #fff;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+  }
+  /* 时间轴 AI 扫描事件打点层 */
+  .timeline-markers {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .marker-seg {
+    position: absolute;
+    top: 0; bottom: 0;
+    opacity: 0.85;
+  }
+  /* 扫描光束动画 */
+  .scan-beam {
+    position: absolute;
+    top: -2px; bottom: -2px;
+    width: 40px;
+    background: linear-gradient(90deg, transparent, #00e5ff, transparent);
+    display: none;
+    z-index: 3;
+  }
+  .scan-beam.scanning {
+    display: block;
+    animation: scanMove 1.5s linear infinite;
+  }
+
+  /* 底部按钮主行 */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+  }
+  .controls-left, .controls-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border-color);
+    margin: 0 4px;
+  }
+
+  /* 通用工具按钮样式 */
+  .tool-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 32px;
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text-sub);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tool-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-main);
+  }
+  .tool-btn.active {
+    background: rgba(24, 144, 255, 0.18);
+    border-color: rgba(24, 144, 255, 0.5);
+    color: #69c0ff;
+    font-weight: 500;
+  }
+  .tool-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px; left: 50%;
+    transform: translateX(-50%);
+    width: 12px; height: 2px;
+    background: var(--primary);
+    border-radius: 2px;
+  }
+
+  /* 复合按钮（左侧开关 + 右侧下拉箭头） */
+  .split-btn-group {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .split-btn-group .tool-btn:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    padding-right: 8px;
+  }
+  .split-btn-arrow {
+    height: 32px;
+    padding: 0 5px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0 5px 5px 0;
+    color: var(--text-sub);
+    font-size: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+  .split-btn-arrow:hover { background: rgba(255,255,255,0.16); color: #fff; }
+  .split-btn-group.active .tool-btn,
+  .split-btn-group.active .split-btn-arrow {
+    background: rgba(24, 144, 255, 0.18);
+    border-color: rgba(24, 144, 255, 0.5);
+    color: #69c0ff;
+  }
+
+  /* 弹出设置气泡 (Popover) */
+  .popover {
+    position: absolute;
+    bottom: 42px;
+    right: 0;
+    width: 230px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 50;
+  }
+  .popover.show { display: flex; }
+  .popover-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-sub);
+    cursor: pointer;
+    padding: 3px 0;
+  }
+  .checkbox-row:hover { color: #fff; }
+  .tag-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+  /* 证据导出按钮及角标 */
+  .btn-evidence {
+    background: rgba(24, 144, 255, 0.85);
+    color: #fff;
+    font-weight: 500;
+  }
+  .btn-evidence:hover { background: var(--primary-hover); color: #fff; }
+  .badge {
+    background: #ff4d4f;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 10px;
+    font-weight: bold;
+  }
+
+  /* 证据导出模态框 */
+  .modal-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-mask.show { display: flex; }
+  .modal-box {
+    width: 520px;
+    background: #1c212b;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 15px; font-weight: 600; margin-bottom: 14px;
+  }
+  .evidence-list {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 240px; overflow-y: auto; margin-bottom: 16px;
+  }
+  .evidence-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,0.04);
+    padding: 8px 12px; border-radius: 6px; font-size: 12px;
+  }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Toast 提示 */
+  .toast {
+    position: absolute;
+    top: 56px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    border: 1px solid var(--primary);
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+    z-index: 60;
+  }
+  .toast.show { opacity: 1; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes scanMove { 0% { left: 0%; } 100% { left: 96%; } }
+</style>
+</head>
+<body>
+
+<div class="player-wrapper" id="playerWrapper">
+  <!-- 顶部状态浮层 -->
+  <div class="top-hud">
+    <div class="status-pills">
+      <div class="pill"><span class="dot" id="playDot"></span><span id="playStatusText">常规播放 1.0x</span></div>
+      <div class="pill" id="aiTargetPill" style="display:none;">AI过滤: <strong id="activeTargetsText" style="color:#69c0ff">人, 车</strong></div>
+    </div>
+  </div>
+
+  <!-- 鹰眼导航窗（放大时显示） -->
+  <div class="minimap" id="minimap">
+    <div style="font-size:10px; color:#aaa; padding:2px 4px;">画中画导航 (<span id="zoomLevelHud">2.0x</span>)</div>
+    <div class="minimap-viewport" id="minimapView"></div>
+  </div>
+
+  <!-- Toast 轻提示 -->
+  <div class="toast" id="toast">提示信息</div>
+
+  <!-- 视频画面舞台 -->
+  <div class="video-stage" id="videoStage">
+    <div class="scene-placeholder">[ 1080P H.265 实时/录像视频渲染画布 - 支持放大后鼠标拖拽平移 ]</div>
+
+    <!-- ROI 检测区 -->
+    <div class="roi-box" id="roiBox">ROI 重点分析区域</div>
+
+    <!-- 模拟 AI 框与 OCR 结果 -->
+    <div class="ai-overlay" id="aiOverlay">
+      <div class="det-box" style="top: 42%; left: 32%; width: 140px; height: 90px;">
+        <div class="det-tag">车辆 | 粤B·8899X (98%)</div>
+      </div>
+      <div class="det-box ocr-fail" style="top: 50%; left: 56%; width: 110px; height: 75px;">
+        <div class="det-tag">车辆 | OCR模糊/未识别</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部控制栏 -->
+  <div class="control-bar-container">
+    <!-- 智能时间轴 -->
+    <div class="timeline-wrapper" id="timeline" title="点击跳转进度，色块为AI检索命中片段">
+      <div class="timeline-track">
+        <div class="timeline-markers" id="timelineMarkers"></div>
+        <div class="scan-beam" id="scanBeam"></div>
+        <div class="timeline-progress" id="timelineProgress">
+          <div class="timeline-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部操作按钮行 -->
+    <div class="controls-row">
+      <!-- 左侧：基础播放控制 -->
+      <div class="controls-left">
+        <button class="tool-btn" id="btnPlay" onclick="togglePlay()">⏸ 暂停</button>
+        <span style="font-size: 12px; color: var(--text-sub); margin: 0 6px; font-variant-numeric: tabular-nums;">00:05 / 02:30</span>
+        <button class="tool-btn" id="btnSpeed" onclick="cycleSpeed()" title="切换常规播放倍速">1.0x</button>
+      </div>
+
+      <!-- 右侧：AI 与画质功能分组 -->
+      <div class="controls-right">
+
+        <!-- 1. AI 跳播（复合按钮：一键开关 + 目标过滤配置） -->
+        <div class="split-btn-group" id="aiSkipGroup">
+          <button class="tool-btn" id="btnAiSkip" onclick="toggleAiSkip()" title="开启后无目标自动16x快放，命中目标恢复常速或暂停">
+            ⚡ AI跳播
+          </button>
+          <button class="split-btn-arrow" onclick="togglePopover('aiPopover')" title="配置AI关注目标与命中动作">▼</button>
+
+          <!-- AI 过滤气泡面板 -->
+          <div class="popover" id="aiPopover">
+            <div class="popover-title">关注目标（命中时停止快放）</div>
+            <label class="checkbox-row">
+              <span><i class="tag-dot" style="background:var(--color-person)"></i>人员 (Person)</span>
+              <input type="checkbox" checked value="人" onchange="updateAiTargets()">
+            </label>
+            <label class="checkbox-row">
+              <span><i class="tag-dot" style="background:var(--color-car)"></i>车辆 (Vehicle)</span>
+              <input type="checkbox" checked value="车" onchange="updateAiTargets()">
+            </label>
+            <label class="checkbox-row">
+              <span><i class="tag-dot" style="background:var(--color-dog)"></i>动物/宠物 (Dog/Cat)</span>
+              <input type="checkbox" value="狗" onchange="updateAiTargets()">
+            </label>
+            <div class="popover-title" style="margin-top:4px;">命中目标时动作</div>
+            <select id="aiTriggerAction" style="background:#14181f; color:#fff; border:1px solid #333; padding:4px; border-radius:4px; font-size:12px;">
+              <option value="normal">恢复 1.0x 正常播放</option>
+              <option value="pause">自动暂停并弹窗提示</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 2. OCR 识别 -->
+        <button class="tool-btn active" id="btnOcr" onclick="toggleOcr()" title="开启/关闭车牌与画面文字OCR识别">
+          🔤 OCR识别
+        </button>
+
+        <!-- 3. ROI 区域 -->
+        <button class="tool-btn active" id="btnRoi" onclick="toggleRoi()" title="显示/隐藏重点检测区域(ROI)">
+          ⬚ ROI框
+        </button>
+
+        <div class="divider"></div>
+
+        <!-- 4. 多级电子放大（支持 1x -> 2x -> 4x 循环 + 滚轮缩放 + 拖拽） -->
+        <button class="tool-btn" id="btnZoom" onclick="cycleZoom()" title="点击切换多级放大(1x/2x/4x)，放大后可拖拽画面">
+          🔍 放大 1x
+        </button>
+
+        <!-- 5. 画质增强（GPU 锐化） -->
+        <button class="tool-btn" id="btnSharpen" onclick="toggleSharpen()" title="开启GPU实时图像锐化增强，提升模糊车牌辨识度">
+          ✨ 锐化
+        </button>
+
+        <div class="divider"></div>
+
+        <!-- 6. 智能检索（快速扫描生成时间轴打点） -->
+        <button class="tool-btn" id="btnScan" onclick="runSmartScan()" title="全片快速扫描，在进度条标出人/车/狗出现片段">
+          📡 智能检索
+        </button>
+
+        <!-- 7. 证据导出 -->
+        <button class="tool-btn btn-evidence" onclick="openEvidenceModal()" title="导出AI检测事件报表与抓拍截图">
+          📥 导出证据 <span class="badge" id="evidenceCount">3</span>
+        </button>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 证据导出确认弹窗 -->
+<div class="modal-mask" id="evidenceModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>📥 AI 检测事件与取证导出</span>
+      <span style="cursor:pointer; color:#999;" onclick="closeEvidenceModal()">✕</span>
+    </div>
+    <div class="evidence-list">
+      <div class="evidence-item">
+        <div>
+          <strong style="color:var(--color-car)">[00:05] 车辆识别 + OCR</strong>
+          <div style="color:var(--text-sub); margin-top:2px;">车牌号：粤B·8899X | 置信度：98.2%</div>
+        </div>
+        <span style="color:#52c41a;">✓ 已附原图+框选截图</span>
+      </div>
+      <div class="evidence-item">
+        <div>
+          <strong style="color:#ff4d4f">[00:14] 车辆识别 (OCR识别失败)</strong>
+          <div style="color:var(--text-sub); margin-top:2px;">车牌区域过暗/运动模糊，建议开启锐化复核</div>
+        </div>
+        <span style="color:#faad14;">⚠ 仅抓拍截图</span>
+      </div>
+      <div class="evidence-item">
+        <div>
+          <strong style="color:var(--color-person)">[01:12] 人员闯入 ROI 区域</strong>
+          <div style="color:var(--text-sub); margin-top:2px;">目标类型：行人 | 停留时长：4.5s</div>
+        </div>
+        <span style="color:#52c41a;">✓ 已附原图+框选截图</span>
+      </div>
+    </div>
+    <div style="font-size:12px; color:var(--text-sub); margin-bottom:16px; display:flex; gap:16px;">
+      <label><input type="checkbox" checked> 导出高清抓拍图 (.jpg)</label>
+      <label><input type="checkbox" checked> 导出结构化事件台账 (.csv)</label>
+      <label><input type="checkbox"> 附带事件前后5秒录像切片</label>
+    </div>
+    <div class="modal-footer">
+      <button class="tool-btn" onclick="closeEvidenceModal()">取消</button>
+      <button class="tool-btn btn-evidence" onclick="confirmExport()">确认打包下载 (.zip)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let isPlaying = true;
+  let speedList = [1.0, 2.0, 4.0, 8.0];
+  let speedIdx = 0;
+  let aiSkipActive = false;
+  let zoomLevels = [1, 2, 4];
+  let zoomIdx = 0;
+  let panX = 0, panY = 0, isDragging = false, startX = 0, startY = 0;
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function togglePlay() {
+    isPlaying = !isPlaying;
+    document.getElementById('btnPlay').innerHTML = isPlaying ? '⏸ 暂停' : '▶ 播放';
+    document.getElementById('playDot').style.background = isPlaying ? '#52c41a' : '#ff4d4f';
+    updateTopHud();
+  }
+
+  function cycleSpeed() {
+    if (aiSkipActive) {
+      showToast('当前处于 AI跳播 模式，请先关闭后再手动调速');
+      return;
+    }
+    speedIdx = (speedIdx + 1) % speedList.length;
+    document.getElementById('btnSpeed').textContent = speedList[speedIdx].toFixed(1) + 'x';
+    updateTopHud();
+  }
+
+  function toggleAiSkip() {
+    aiSkipActive = !aiSkipActive;
+    const group = document.getElementById('aiSkipGroup');
+    const pill = document.getElementById('aiTargetPill');
+    if (aiSkipActive) {
+      group.classList.add('active');
+      pill.style.display = 'flex';
+      document.getElementById('playDot').classList.add('fast');
+      showToast('已开启 AI跳播：无目标时自动 16x 快进');
+    } else {
+      group.classList.remove('active');
+      pill.style.display = 'none';
+      document.getElementById('playDot').classList.remove('fast');
+      showToast('已关闭 AI跳播，恢复常规播放');
+    }
+    updateTopHud();
+  }
+
+  function togglePopover(id) {
+    document.getElementById(id).classList.toggle('show');
+  }
+
+  function updateAiTargets() {
+    const checks = document.querySelectorAll('#aiPopover input[type="checkbox"]:checked');
+    const vals = Array.from(checks).map(c => c.value);
+    document.getElementById('activeTargetsText').textContent = vals.length ? vals.join(', ') : '未选择(全快放)';
+  }
+
+  function updateTopHud() {
+    const txt = document.getElementById('playStatusText');
+    if (!isPlaying) { txt.textContent = '已暂停'; return; }
+    if (aiSkipActive) {
+      txt.textContent = 'AI智能巡航中 (无目标 16x 快进)';
+    } else {
+      txt.textContent = `常规播放 ${speedList[speedIdx].toFixed(1)}x`;
+    }
+  }
+
+  function toggleOcr() {
+    const btn = document.getElementById('btnOcr');
+    const overlay = document.getElementById('aiOverlay');
+    btn.classList.toggle('active');
+    const active = btn.classList.contains('active');
+    overlay.style.display = active ? 'block' : 'none';
+    showToast(active ? '已开启实时车牌/文字 OCR 识别' : '已隐藏 OCR 识别层');
+  }
+
+  function toggleRoi() {
+    const btn = document.getElementById('btnRoi');
+    btn.classList.toggle('active');
+    document.getElementById('roiBox').classList.toggle('hidden');
+  }
+
+  // 多级电子放大与拖拽平移逻辑
+  function cycleZoom() {
+    zoomIdx = (zoomIdx + 1) % zoomLevels.length;
+    const z = zoomLevels[zoomIdx];
+    const stage = document.getElementById('videoStage');
+    const btn = document.getElementById('btnZoom');
+    const minimap = document.getElementById('minimap');
+
+    panX = 0; panY = 0;
+    btn.textContent = `🔍 放大 ${z}x`;
+    if (z > 1) {
+      btn.classList.add('active');
+      stage.classList.add('zoomed');
+      minimap.classList.add('active');
+      document.getElementById('zoomLevelHud').textContent = z + '.0x';
+      showToast(`电子放大 ${z}.0x：按住鼠标左键可拖拽查看细节`);
+    } else {
+      btn.classList.remove('active');
+      stage.classList.remove('zoomed');
+      minimap.classList.remove('active');
+    }
+    applyTransform();
+  }
+
+  function applyTransform() {
+    const z = zoomLevels[zoomIdx];
+    const stage = document.getElementById('videoStage');
+    stage.style.transform = `translate(${panX}px, ${panY}px) scale(${z})`;
+  }
+
+  const stageEl = document.getElementById('videoStage');
+  stageEl.addEventListener('mousedown', e => {
+    if (zoomLevels[zoomIdx] <= 1) return;
+    isDragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    panX = e.clientX - startX;
+    panY = e.clientY - startY;
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => isDragging = false);
+
+  function toggleSharpen() {
+    const btn = document.getElementById('btnSharpen');
+    btn.classList.toggle('active');
+    const active = btn.classList.contains('active');
+    document.getElementById('videoStage').classList.toggle('sharpened', active);
+    showToast(active ? 'GPU 画质锐化已开启' : 'GPU 画质锐化已关闭');
+  }
+
+  // 模拟智能检索与时间轴打点
+  function runSmartScan() {
+    const beam = document.getElementById('scanBeam');
+    const markers = document.getElementById('timelineMarkers');
+    beam.classList.add('scanning');
+    showToast('正在进行全片 AI 快速检索...');
+
+    setTimeout(() => {
+      beam.classList.remove('scanning');
+      markers.innerHTML = `
+        <div class="marker-seg" style="left: 12%; width: 6%; background: var(--color-person);" title="00:18 检测到人员"></div>
+        <div class="marker-seg" style="left: 34%; width: 9%; background: var(--color-car);" title="00:51 检测到车辆 (粤B·8899X)"></div>
+        <div class="marker-seg" style="left: 62%; width: 5%; background: var(--color-dog);" title="01:33 检测到动物(狗)"></div>
+        <div class="marker-seg" style="left: 78%; width: 11%; background: var(--color-person);" title="01:57 检测到人员"></div>
+      `;
+      showToast('检索完成：已标出 2处人员、1处车辆、1处动物片段');
+    }, 1500);
+  }
+
+  // 时间轴点击跳转
+  document.getElementById('timeline').addEventListener('click', e => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    document.getElementById('timelineProgress').style.width = pct + '%';
+  });
+
+  function openEvidenceModal() { document.getElementById('evidenceModal').classList.add('show'); }
+  function closeEvidenceModal() { document.getElementById('evidenceModal').classList.remove('show'); }
+  function confirmExport() {
+    closeEvidenceModal();
+    showToast('正在打包导出 3 条事件记录与高清截图...');
+  }
+</script>
+</body>
+</html>
