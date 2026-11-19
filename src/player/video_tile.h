@@ -180,6 +180,7 @@ private:
     double m_duration = -1.0;
     bool m_scrubbing = false;
     bool m_hasPlayed = false;   // a stream has been shown (keep last frame)
+    bool m_hovered = false;     // pointer over the video (small-tile bar)
 
     // ROI selection (normalized to the video widget).
     bool m_roiMode = false;       // waiting for / receiving a drag

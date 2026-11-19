@@ -107,7 +107,11 @@ void AnalysisOverlay::paintEvent(QPaintEvent *)
         if (r.width() < 2 || r.height() < 2) {
             continue;
         }
-        const QColor c = colorFor(box.classId);
+        // OCR lines that fell below the confidence bar are shown amber so the
+        // operator sees "text here, unreadable" rather than nothing.
+        const bool unreadable =
+            box.label == QString::fromUtf8("识别模糊");
+        const QColor c = unreadable ? QColor(245, 166, 35) : colorFor(box.classId);
         p.setPen(QPen(c, 2.0));
         p.setBrush(Qt::NoBrush);
         p.drawRect(r);

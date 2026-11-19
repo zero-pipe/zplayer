@@ -551,15 +551,15 @@ AnalysisResult OcrDetector::analyze(const AnalysisFrame &frame)
             continue;
         }
         const float score = float(confSum / confCount);
-        if (score < m->minTextScore) {
-            continue;
-        }
 
         AnalysisBox box;
         box.rect = QRectF(tl.rect.x() / srcW, tl.rect.y() / srcH,
                           tl.rect.width() / srcW, tl.rect.height() / srcH);
         box.classId = kTextClassId;
-        box.label = text;
+        // Below the confidence bar the line is still reported — the overlay
+        // shows it as "unreadable" instead of silently dropping it, which is
+        // what an operator needs to know ("there IS text, I can't read it").
+        box.label = score >= m->minTextScore ? text : QStringLiteral("识别模糊");
         box.score = score;
         result.boxes.push_back(box);
     }

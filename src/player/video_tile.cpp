@@ -319,6 +319,7 @@ void VideoTile::buildControlBar()
     m_footer = new QWidget(m_video);
     m_footer->setObjectName(QStringLiteral("TileBar"));
     m_footer->setAttribute(Qt::WA_StyledBackground, true);
+    m_footer->installEventFilter(this);
     auto *row = new QHBoxLayout(m_footer);
     row->setContentsMargins(10, 5, 10, 5);
     row->setSpacing(4);
@@ -621,9 +622,10 @@ void VideoTile::positionControlBar()
         return;
     }
     const QRect r = m_video->rect();
-    // Very small tiles (4x4 layouts) cannot host the grouped bar comfortably;
-    // hide it there instead of letting it cover the whole picture.
-    if (r.width() < 380 || r.height() < 150) {
+    // Small tiles (4x4 layouts) keep the bar hidden until the pointer is over
+    // the tile, so a 16-way grid stays clean but every tile remains reachable.
+    const bool small = r.width() < 380 || r.height() < 150;
+    if (small && !m_hovered) {
         m_footer->hide();
         return;
     }
@@ -1080,6 +1082,23 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
         m_aiOverlay->setGeometry(m_video->rect());
         m_aiOverlay->raise();
         positionControlBar();
+    }
+
+    // ---- hover reveal for small tiles ----
+    if (watched == m_video && m_video && event->type() == QEvent::Enter) {
+        m_hovered = true;
+        positionControlBar();
+    } else if (watched == m_video && m_video && event->type() == QEvent::Leave) {
+        // Moving onto the bar itself (a child) must not hide it mid-click.
+        if (!m_footer || !m_footer->underMouse()) {
+            m_hovered = false;
+            positionControlBar();
+        }
+    } else if (watched == m_footer && m_footer && event->type() == QEvent::Leave) {
+        if (!m_video || !m_video->underMouse()) {
+            m_hovered = false;
+            positionControlBar();
+        }
     }
 
     // ---- ROI rubber band ----
