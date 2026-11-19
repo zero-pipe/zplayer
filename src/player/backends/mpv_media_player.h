@@ -21,6 +21,7 @@ public:
     void pause() override;
     void stop() override;
     void setMuted(bool muted) override;
+    bool muted() const override;
     void setVolume(int volume) override;
     bool grabSnapshot(const QString &filePath) override;
     MediaState state() const override { return m_state; }

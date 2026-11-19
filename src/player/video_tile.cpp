@@ -3,6 +3,7 @@
 #include "player/shaders.h"
 #include "ui/analysis_overlay.h"
 #include "ui/icons.h"
+#include "ui/timeline_slider.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
@@ -18,6 +19,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QDebug>
 #include <QEvent>
 #include <QRegExp>
 
@@ -262,6 +264,8 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
         if (m_aiOverlay) {
             m_aiOverlay->clear();
         }
+        // Reaching the end of the file during a scan is the normal finish.
+        finishScan();
     });
     connect(m_player, &IMediaPlayer::failed, this, [this](const QString &msg) {
         setState(Failed, tr("播放失败"));
@@ -431,11 +435,17 @@ void VideoTile::buildTransport(QHBoxLayout *row)
     m_timeLabel = new QLabel(QStringLiteral("--:-- / --:--"), m_footer);
     m_timeLabel->setObjectName(QStringLiteral("TileTime"));
 
-    m_posSlider = new QSlider(Qt::Horizontal, m_footer);
+    m_posSlider = new TimelineSlider(Qt::Horizontal, m_footer);
     m_posSlider->setObjectName(QStringLiteral("TileSeek"));
     m_posSlider->setRange(0, 0);
     m_posSlider->setMinimumWidth(40);
     m_posSlider->setCursor(Qt::PointingHandCursor);
+    // Clicking a person segment jumps there (see TimelineSlider).
+    connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
+        if (m_player) {
+            m_player->seek(t);
+        }
+    });
     connect(m_posSlider, &QSlider::sliderPressed, this, [this]() { m_scrubbing = true; });
     connect(m_posSlider, &QSlider::sliderReleased, this, [this]() {
         m_scrubbing = false;
@@ -474,14 +484,39 @@ void VideoTile::buildTransport(QHBoxLayout *row)
         emit evidenceExportRequested(m_channel);
     });
 
+    m_scanBtn = new QToolButton(m_footer);
+    m_scanBtn->setObjectName(QStringLiteral("TileBtn"));
+    m_scanBtn->setText(tr("扫描"));
+    m_scanBtn->setCheckable(true);
+    m_scanBtn->setToolTip(tr("快速扫描全片，标出有人物的时间段（可点击跳转）"));
+    m_scanBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_scanBtn, &QToolButton::clicked, this, [this](bool checked) {
+        if (checked) {
+            startScan();
+        } else {
+            cancelScan();
+        }
+    });
+
     row->addWidget(m_playBtn);
     row->addWidget(m_timeLabel);
     row->addWidget(m_posSlider, 1);
     row->addWidget(m_speedBtn);
     row->addWidget(m_aiBtn);
     row->addWidget(m_evidenceBtn);
+    row->addWidget(m_scanBtn);
 
     connect(m_player, &IMediaPlayer::positionChanged, this, [this](double pos) {
+        if (m_scanning && m_duration > 0) {
+            const int pct = int(qBound(0.0, pos / m_duration, 1.0) * 100.0);
+            if (m_timeLabel) {
+                m_timeLabel->setText(tr("扫描中 %1%").arg(pct));
+            }
+            if (pos >= m_duration - 0.4) {
+                finishScan();
+            }
+            return;
+        }
         if (!m_scrubbing && m_duration > 0) {
             if (m_posSlider) {
                 m_posSlider->setValue(int(pos * 1000.0));
@@ -496,6 +531,7 @@ void VideoTile::buildTransport(QHBoxLayout *row)
         m_duration = d;
         if (m_posSlider) {
             m_posSlider->setRange(0, d > 0 ? int(d * 1000.0) : 0);
+            m_posSlider->setMediaDuration(d);
         }
         if (m_timeLabel) {
             m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0)
@@ -518,6 +554,99 @@ void VideoTile::cycleSpeed()
     }
 }
 
+// ---------------------------------------------------------------------------
+// Smart timeline: fast scan
+// ---------------------------------------------------------------------------
+void VideoTile::startScan()
+{
+    if (!m_player || !m_player->supportsPlaybackControl() || m_duration <= 0.0) {
+        if (m_scanBtn) {
+            m_scanBtn->setChecked(false);
+        }
+        return;
+    }
+    if (m_scanning) {
+        return;
+    }
+    m_scanning = true;
+    m_scanSamples.clear();
+    if (m_posSlider) {
+        m_posSlider->clearSegments();
+    }
+    m_scanPrevSpeed = m_player->speed();
+    m_scanPrevMuted = m_player->muted();
+    m_scanPrevPos = m_player->position();
+    if (m_scanBtn) {
+        m_scanBtn->setText(tr("停止"));
+    }
+    // Scan fast but not so fast that consecutive analysis frames are far apart
+    // in media time: at 8x a 4 fps analysis cadence still samples every ~2 s.
+    m_player->setMuted(true);
+    m_player->setSpeed(8.0);
+    m_player->seek(0.0);
+    m_player->play();
+}
+
+void VideoTile::finishScan()
+{
+    if (!m_scanning) {
+        return;
+    }
+    m_scanning = false;
+    if (m_player) {
+        m_player->pause();
+        m_player->setSpeed(m_scanPrevSpeed > 0.0 ? m_scanPrevSpeed : 1.0);
+        m_player->setMuted(m_scanPrevMuted);
+        // Leave the user where they were before the scan, not at the end.
+        m_player->seek(m_scanPrevPos > 0.0 ? m_scanPrevPos : 0.0);
+    }
+    if (m_scanBtn) {
+        m_scanBtn->setText(tr("扫描"));
+        m_scanBtn->setChecked(false);
+    }
+    const QVector<TimelineSegment> segs = buildPersonTimeline(m_scanSamples, 3.0);
+    if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
+        QStringList parts;
+        for (const TimelineSegment &s : segs) {
+            parts << QStringLiteral("%1-%2 x%3").arg(s.start, 0, 'f', 1)
+                         .arg(s.end, 0, 'f', 1).arg(s.peak);
+        }
+        qInfo().noquote() << "[scan] samples=" << m_scanSamples.size()
+                          << "segments=" << segs.size() << parts.join(QLatin1Char(' '));
+    }
+    if (m_posSlider) {
+        m_posSlider->setSegments(segs);
+    }
+    if (m_timeLabel) {
+        m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0.0)
+                             + QStringLiteral(" / ") + formatTime(m_duration));
+    }
+    emit scanFinished(m_channel, segs.size());
+}
+
+void VideoTile::cancelScan()
+{
+    if (!m_scanning) {
+        return;
+    }
+    m_scanning = false;
+    if (m_player) {
+        m_player->pause();
+        m_player->setSpeed(m_scanPrevSpeed > 0.0 ? m_scanPrevSpeed : 1.0);
+        m_player->setMuted(m_scanPrevMuted);
+        if (m_scanPrevPos > 0.0) {
+            m_player->seek(m_scanPrevPos);
+        }
+    }
+    if (m_scanBtn) {
+        m_scanBtn->setText(tr("扫描"));
+    }
+    if (m_timeLabel) {
+        m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0.0)
+                             + QStringLiteral(" / ") + formatTime(m_duration));
+    }
+}
+
 void VideoTile::updateTransportUi()
 {
     if (m_playBtn) {
@@ -533,6 +662,18 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
 {
     if (m_aiOverlay) {
         m_aiOverlay->setBoxes(result.boxes, result.videoRect);
+    }
+    if (m_scanning && result.pts >= 0.0) {
+        int persons = 0;
+        for (const AnalysisBox &b : result.boxes) {
+            if (b.classId == 0 /* person */ && b.score >= 0.25f) {
+                ++persons;
+            }
+        }
+        PresenceSample s;
+        s.t = result.pts;
+        s.persons = persons;
+        m_scanSamples.append(s);
     }
     updateAiSkip(result.pts, result.boxes);
     updateEvidence(result.pts, result.boxes);

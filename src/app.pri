@@ -5,6 +5,7 @@ SOURCES += \
     analysis/analysis_service.cpp \
     analysis/byte_tracker.cpp \
     analysis/ocr_detector.cpp \
+    analysis/timeline.cpp \
     analysis/yolo_detector.cpp \
     analysis/evidence.cpp \
     platform/platform_http_client.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
     ui/theme.cpp \
     ui/icons.cpp \
     ui/analysis_overlay.cpp \
+    ui/timeline_slider.cpp \
     ui/toast.cpp \
     ui/icon_field.cpp \
     ui/login_dialog.cpp \
@@ -33,6 +35,7 @@ HEADERS += \
     analysis/analysis_service.h \
     analysis/byte_tracker.h \
     analysis/ocr_detector.h \
+    analysis/timeline.h \
     analysis/yolo_detector.h \
     analysis/evidence.h \
     platform/platform_api.h \
@@ -48,6 +51,7 @@ HEADERS += \
     ui/theme.h \
     ui/icons.h \
     ui/analysis_overlay.h \
+    ui/timeline_slider.h \
     ui/toast.h \
     ui/icon_field.h \
     ui/login_dialog.h \

@@ -361,6 +361,18 @@ void MpvMediaPlayer::setMuted(bool muted)
     }
 }
 
+bool MpvMediaPlayer::muted() const
+{
+    if (!m_holder || !m_holder->h) {
+        return false;
+    }
+    int flag = 0;
+    if (mpv_get_property(m_holder->h, "mute", MPV_FORMAT_FLAG, &flag) < 0) {
+        return false;
+    }
+    return flag != 0;
+}
+
 void MpvMediaPlayer::setVolume(int volume)
 {
     if (m_holder && m_holder->h) {

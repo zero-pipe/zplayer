@@ -171,6 +171,18 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
                 }
             });
 
+    // Smart timeline scan finished: summary toast; the segments themselves are
+    // painted on the tile's transport slider (click one to jump there).
+    connect(m_grid, &VideoGrid::streamScanFinished, this,
+            [this](const zp::ChannelRef &, int segments) {
+                if (segments > 0) {
+                    toastSuccess(tr("扫描完成：发现 %1 个有人物的时间段，点击进度条色块跳转")
+                                     .arg(segments));
+                } else {
+                    toastInfo(tr("扫描完成：未发现人物片段"));
+                }
+            });
+
     // Dev: ZP_SETTINGS=1 opens the settings dialog shortly after start, so UI
     // can be captured headlessly (see ZP_SHOT in main.cpp).
     if (!qEnvironmentVariableIsEmpty("ZP_SETTINGS")) {
@@ -809,6 +821,13 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
             if (t) {
                 t->setSharpenEnabled(true);
             }
+        }
+    }
+    // ZP_SCAN=1: kick off the smart-timeline scan on the first tile once the
+    // media length is known (dev/headless testing).
+    if (qEnvironmentVariableIsSet("ZP_SCAN")) {
+        if (VideoTile *t = m_grid->tiles().value(0)) {
+            QTimer::singleShot(2500, t, [t]() { t->startScan(); });
         }
     }
 

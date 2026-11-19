@@ -154,6 +154,7 @@ public:
     virtual void stop() = 0;
 
     virtual void setMuted(bool muted) = 0;
+    virtual bool muted() const { return false; }
     virtual void setVolume(int volume /*0..100*/) = 0;
 
     // Apply engine-neutral video settings. Safe to call before or during

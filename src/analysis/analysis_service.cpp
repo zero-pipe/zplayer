@@ -267,10 +267,18 @@ void AnalysisService::processLoop()
         // Dev aid (ZP_AI_TRACE=1): one line per analyzed frame, so per-source
         // cadence and detection counts are visible in the ZP_LOG file.
         if (m_trace) {
+            QStringList labels;
+            for (const AnalysisBox &b : result.boxes) {
+                labels << QStringLiteral("%1(%2)").arg(b.label).arg(b.classId);
+                if (labels.size() >= 4) {
+                    break;
+                }
+            }
             qDebug().noquote() << "[ai] result player=" << frame.playerId
                                << "pts=" << QString::number(frame.pts, 'f', 2)
                                << "boxes=" << result.boxes.size()
-                               << "analyzer=" << analyzer->name();
+                               << "analyzer=" << analyzer->name()
+                               << labels.join(QLatin1Char(','));
         }
 
         // Auto-connection: receivers living in the GUI thread get this queued.

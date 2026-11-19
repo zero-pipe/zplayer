@@ -9,6 +9,7 @@
 #include "player/media_player.h"
 #include "analysis/analyzer.h"
 #include "analysis/evidence.h"
+#include "analysis/timeline.h"
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -16,12 +17,14 @@ class QToolButton;
 class QStackedLayout;
 class QPushButton;
 class QSlider;
+class TimelineSlider;
 class QHBoxLayout;
 QT_END_NAMESPACE
 
 namespace zp {
 
 class AnalysisOverlay;
+class TimelineSlider;
 
 // One stream cell: a media engine renderer behind a status overlay, with a
 // floating header (title, state, close/maximize). Depends only on IMediaPlayer,
@@ -81,6 +84,13 @@ public:
     void setZoomEnabled(bool on);           // same as clicking 放大
     void setSharpenEnabled(bool on);        // same as clicking 超分
 
+    // ---- Smart timeline ----
+    // Fast offline pass over the file at high playback speed, recording when
+    // people are on screen; the result is painted on the transport slider.
+    // Public so the demo hooks can drive it headlessly.
+    void startScan();
+    bool isScanning() const { return m_scanning; }
+
 signals:
     void clickedTile(const zp::ChannelRef &ch);
     void closeRequested(const zp::ChannelRef &ch);
@@ -95,6 +105,8 @@ signals:
     void roiChanged(const zp::ChannelRef &ch, const QRectF &roi);
     // Per-tile OCR analysis toggled.
     void ocrToggled(const zp::ChannelRef &ch, bool on);
+    // Offline scan finished; `segments` = number of person intervals found.
+    void scanFinished(const zp::ChannelRef &ch, int segments);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
@@ -118,6 +130,10 @@ private:
     void closeOpenEvidence(double atPts, bool all);
     QString captureEvidenceThumbnail();
 
+    // Smart timeline: scan driving.
+    void finishScan();
+    void cancelScan();
+
     ChannelRef m_channel;
     QString m_name;
     bool m_ptzCapable = false;
@@ -139,7 +155,7 @@ private:
     // Transport.
     bool m_hasTransport = false;
     QToolButton *m_playBtn = nullptr;
-    QSlider *m_posSlider = nullptr;
+    TimelineSlider *m_posSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QToolButton *m_speedBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
@@ -157,6 +173,14 @@ private:
     bool m_draggingRoi = false;
     QPointF m_roiStart;
     QRectF m_roi;
+
+    // Smart timeline scan state.
+    QToolButton *m_scanBtn = nullptr;
+    bool m_scanning = false;
+    bool m_scanPrevMuted = false;
+    double m_scanPrevSpeed = 1.0;
+    double m_scanPrevPos = 0.0;
+    QVector<PresenceSample> m_scanSamples;
 
     // AI fast-forward state.
     bool m_aiSkip = false;

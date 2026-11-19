@@ -78,6 +78,8 @@ signals:
     void layoutChanged(int index);
     void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
     void evidenceExportRequested(const zp::ChannelRef &ch);
+    // Offline smart-timeline scan finished for a tile.
+    void streamScanFinished(const zp::ChannelRef &ch, int segments);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };
