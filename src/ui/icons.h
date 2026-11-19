@@ -14,6 +14,9 @@ QIcon camera(bool online = true);
 QPixmap folderPixmap(const QColor &color, int size);
 QPixmap cameraPixmap(const QColor &color, int size);
 
+// Filled play triangle / pause bars for the transport control.
+QPixmap playPause(bool playing, const QColor &color, int size = 16);
+
 // Product logo mark: hexagon "smart IoT engine" in a rounded gradient tile.
 QPixmap appLogo(int size);
 

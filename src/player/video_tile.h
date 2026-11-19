@@ -17,6 +17,7 @@ class QToolButton;
 class QStackedLayout;
 class QPushButton;
 class QSlider;
+class QMenu;
 class TimelineSlider;
 class QHBoxLayout;
 QT_END_NAMESPACE
@@ -107,6 +108,8 @@ signals:
     void ocrToggled(const zp::ChannelRef &ch, bool on);
     // Offline scan finished; `segments` = number of person intervals found.
     void scanFinished(const zp::ChannelRef &ch, int segments);
+    // Transient status text for the window-level toast.
+    void statusMessage(const zp::ChannelRef &ch, const QString &text);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
@@ -119,10 +122,14 @@ private:
     void takeSnapshot();
 
     // Transport bar (only built when the engine supports playback control).
-    void buildTransport(QHBoxLayout *row);
     void updateTransportUi();
-    void cycleSpeed();
+    void setSpeed(double speed);
     static QString formatTime(double seconds);
+
+    // Floating glass control bar over the video (built on the video widget).
+    void buildControlBar();
+    void positionControlBar();
+    void updateEvidenceBadge();
 
     // AI helpers.
     void updateAiSkip(double pts, const QVector<AnalysisBox> &boxes);
@@ -158,6 +165,8 @@ private:
     TimelineSlider *m_posSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QToolButton *m_speedBtn = nullptr;
+    QMenu *m_speedMenu = nullptr;
+    QToolButton *m_snapBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
     QToolButton *m_roiBtn = nullptr;
@@ -165,7 +174,6 @@ private:
     QToolButton *m_zoomBtn = nullptr;
     QToolButton *m_sharpenBtn = nullptr;
     double m_duration = -1.0;
-    int m_speedIndex = 0;
     bool m_scrubbing = false;
 
     // ROI selection (normalized to the video widget).

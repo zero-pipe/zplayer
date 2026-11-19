@@ -7,6 +7,9 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QFrame>
+#include <QMenu>
+#include <QAction>
 #include <QPushButton>
 #include <QSlider>
 #include <QStackedLayout>
@@ -127,131 +130,14 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
         m_video->installEventFilter(this);
     }
 
-    // --- Footer: bottom action bar (snapshot now, AI actions later) ---
-    m_footer = new QWidget(this);
-    m_footer->setObjectName(QStringLiteral("TileFooter"));
-    auto *fl = new QHBoxLayout(m_footer);
-    fl->setContentsMargins(8, 3, 8, 3);
-    fl->setSpacing(6);
-    auto *snapBtn = new QToolButton(m_footer);
-    snapBtn->setObjectName(QStringLiteral("TileBtn"));
-    snapBtn->setIcon(QIcon(icons::camera(true)));
-    snapBtn->setIconSize(QSize(15, 15));
-    snapBtn->setToolTip(tr("抓图"));
-    snapBtn->setCursor(Qt::PointingHandCursor);
-    connect(snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
-
-    // Local / recorded playback gets a transport bar; live streams keep only
-    // the action buttons (they have no meaningful timeline).
-    if (m_player && m_player->supportsPlaybackControl()) {
-        buildTransport(fl);
-    } else {
-        // Right-align the actions (matches common OS/desktop placement).
-        fl->addStretch(1);
-    }
-
-    // ROI: restrict AI analysis to the framed region (click, then drag on the
-    // picture; click again to clear).
-    m_roiBtn = new QToolButton(m_footer);
-    m_roiBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_roiBtn->setText(QStringLiteral("ROI"));
-    m_roiBtn->setCheckable(true);
-    m_roiBtn->setToolTip(tr("圈选分析区域：点击后拖动框选，再点一次清除"));
-    m_roiBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_roiBtn, &QToolButton::clicked, this, [this](bool checked) {
-        if (!checked) {
-            m_roiMode = false;
-            m_roi = QRectF();
-            if (m_zoomBtn && m_zoomBtn->isChecked()) {
-                m_zoomBtn->setChecked(false);   // restores the full picture
-            }
-            if (m_zoomBtn) {
-                m_zoomBtn->setEnabled(false);
-            }
-            if (m_aiOverlay) {
-                m_aiOverlay->setRoi(QRectF());
-                m_aiOverlay->setRoiDraft(QRectF());
-            }
-            if (m_video) {
-                m_video->unsetCursor();
-            }
-            emit roiChanged(m_channel, QRectF());
-            return;
-        }
-        m_roiMode = true;
-        if (m_video) {
-            m_video->setCursor(Qt::CrossCursor);
-        }
-    });
-
-    // OCR: recognize scene text on this tile (inside the ROI when one is set).
-    m_ocrBtn = new QToolButton(m_footer);
-    m_ocrBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_ocrBtn->setText(tr("文字"));
-    m_ocrBtn->setCheckable(true);
-    m_ocrBtn->setToolTip(tr("文字识别（需 OCR 模型；配合 ROI 可只识别局部）"));
-    m_ocrBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_ocrBtn, &QToolButton::toggled, this, [this](bool on) {
-        emit ocrToggled(m_channel, on);
-    });
-
-    fl->addWidget(snapBtn);
-    fl->addWidget(m_roiBtn);
-    fl->addWidget(m_ocrBtn);
-
-    // Zoom to ROI: fills the tile with the framed region (local magnification,
-    // the practical form of "local upscaling" for a video renderer).
-    m_zoomBtn = new QToolButton(m_footer);
-    m_zoomBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_zoomBtn->setText(tr("放大"));
-    m_zoomBtn->setCheckable(true);
-    m_zoomBtn->setEnabled(false);   // needs an ROI first
-    m_zoomBtn->setToolTip(tr("放大到 ROI 区域（需先圈选）"));
-    m_zoomBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_zoomBtn, &QToolButton::toggled, this, [this](bool on) {
-        if (!m_player) {
-            return;
-        }
-        m_player->setVideoCrop(on ? m_roi : QRectF());
-        // While zoomed the visible picture IS the ROI: analysis no longer needs
-        // (and must not re-apply) the ROI crop, so hand it the whole frame.
-        // The dashed ROI frame would also be misleading over the zoomed view.
-        if (on) {
-            if (m_aiOverlay) {
-                m_aiOverlay->setRoi(QRectF());
-            }
-            emit roiChanged(m_channel, QRectF());
-        } else {
-            if (m_aiOverlay) {
-                m_aiOverlay->setRoi(m_roi);
-            }
-            emit roiChanged(m_channel, m_roi);
-        }
-    });
-
-    // GPU sharpening (applies to whatever is on screen, ROI zoom included).
-    m_sharpenBtn = new QToolButton(m_footer);
-    m_sharpenBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_sharpenBtn->setText(tr("超分"));
-    m_sharpenBtn->setCheckable(true);
-    m_sharpenBtn->setToolTip(tr("GPU 锐化（配合 ROI 放大观看细节）"));
-    m_sharpenBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_sharpenBtn, &QToolButton::toggled, this, [this](bool on) {
-        if (!m_player) {
-            return;
-        }
-        m_player->setShader(on ? ensureSharpenShaderFile() : QString());
-    });
-
-    fl->addWidget(m_zoomBtn);
-    fl->addWidget(m_sharpenBtn);
+    // --- Floating glass control bar over the video ---
+    buildControlBar();
 
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(1, 1, 1, 1);
     vl->setSpacing(0);
     vl->addWidget(header);
     vl->addWidget(stageWidget, 1);
-    vl->addWidget(m_footer);
 
     connect(m_player, &IMediaPlayer::started, this, [this]() {
         setState(Playing, tr("播放中"));
@@ -412,84 +298,197 @@ QString VideoTile::formatTime(double seconds)
     return QStringLiteral("%1:%2").arg(m).arg(s, 2, 10, QLatin1Char('0'));
 }
 
-void VideoTile::buildTransport(QHBoxLayout *row)
+// ---------------------------------------------------------------------------
+// Floating glass control bar
+//
+// The bar floats over the bottom of the video (like modern VMS clients /
+// streaming players) instead of occupying a strip under the picture, and is
+// grouped left→right: transport · timeline · AI strategy · picture · evidence.
+// ---------------------------------------------------------------------------
+void VideoTile::buildControlBar()
 {
-    m_hasTransport = true;
+    if (!m_video) {
+        return;
+    }
+    m_footer = new QWidget(m_video);
+    m_footer->setObjectName(QStringLiteral("TileBar"));
+    m_footer->setAttribute(Qt::WA_StyledBackground, true);
+    auto *row = new QHBoxLayout(m_footer);
+    row->setContentsMargins(10, 5, 10, 5);
+    row->setSpacing(4);
 
-    m_playBtn = new QToolButton(m_footer);
-    m_playBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_playBtn->setText(QString::fromUtf8("▶"));
-    m_playBtn->setToolTip(tr("播放 / 暂停"));
-    m_playBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_playBtn, &QToolButton::clicked, this, [this]() {
+    auto makeBtn = [this](const QString &text) {
+        auto *b = new QToolButton(m_footer);
+        b->setObjectName(QStringLiteral("BarBtn"));
+        b->setText(text);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setFocusPolicy(Qt::NoFocus);
+        return b;
+    };
+    auto addSep = [this, row]() {
+        auto *line = new QFrame(m_footer);
+        line->setObjectName(QStringLiteral("BarSep"));
+        line->setFrameShape(QFrame::VLine);
+        line->setFixedHeight(18);
+        row->addWidget(line);
+    };
+
+    m_hasTransport = m_player && m_player->supportsPlaybackControl();
+
+    // ---- left: transport ----
+    if (m_hasTransport) {
+        m_playBtn = makeBtn(QString());
+        m_playBtn->setObjectName(QStringLiteral("BarPlay"));
+        m_playBtn->setIcon(QIcon(icons::playPause(false, QColor(0xD5DEEA), 15)));
+        m_playBtn->setIconSize(QSize(15, 15));
+        m_playBtn->setToolTip(tr("播放 / 暂停"));
+        connect(m_playBtn, &QToolButton::clicked, this, [this]() {
+            if (!m_player) {
+                return;
+            }
+            if (m_player->state() == MediaState::Playing) {
+                m_player->pause();
+            } else {
+                m_player->play();
+            }
+        });
+
+        m_timeLabel = new QLabel(QStringLiteral("--:-- / --:--"), m_footer);
+        m_timeLabel->setObjectName(QStringLiteral("BarTime"));
+
+        // Speed: dropdown with the standard ladder.
+        m_speedBtn = makeBtn(QStringLiteral("1.0x"));
+        m_speedBtn->setToolTip(tr("播放速度"));
+        m_speedMenu = new QMenu(m_speedBtn);
+        for (double s : {1.0, 2.0, 4.0, 8.0, 16.0}) {
+            QAction *a = m_speedMenu->addAction(QStringLiteral("%1x").arg(s, 0, 'g', 2));
+            a->setCheckable(true);
+            a->setChecked(qFuzzyCompare(s, 1.0));
+            connect(a, &QAction::triggered, this, [this, s]() { setSpeed(s); });
+        }
+        m_speedBtn->setMenu(m_speedMenu);
+        m_speedBtn->setPopupMode(QToolButton::InstantPopup);
+    }
+
+    // ---- middle: smart timeline ----
+    if (m_hasTransport) {
+        m_posSlider = new TimelineSlider(Qt::Horizontal, m_footer);
+        m_posSlider->setObjectName(QStringLiteral("BarSeek"));
+        m_posSlider->setRange(0, 0);
+        m_posSlider->setMinimumWidth(90);
+        m_posSlider->setCursor(Qt::PointingHandCursor);
+        m_posSlider->setToolTip(tr("进度：点击人物/车辆色块可跳转"));
+        connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
+            if (m_player) {
+                m_player->seek(t);
+            }
+        });
+        connect(m_posSlider, &QSlider::sliderPressed, this, [this]() { m_scrubbing = true; });
+        connect(m_posSlider, &QSlider::sliderReleased, this, [this]() {
+            m_scrubbing = false;
+            if (m_player && m_duration > 0) {
+                m_player->seek(m_posSlider->value() / 1000.0);
+            }
+        });
+        connect(m_posSlider, &QSlider::valueChanged, this, [this](int v) {
+            if (m_scrubbing && m_timeLabel) {
+                m_timeLabel->setText(formatTime(v / 1000.0)
+                                     + QStringLiteral(" / ") + formatTime(m_duration));
+            }
+        });
+    }
+
+    // ---- right group 1: AI strategy ----
+    m_aiBtn = makeBtn(tr("AI 跳播"));
+    m_aiBtn->setCheckable(true);
+    m_aiBtn->setToolTip(tr("无人时自动跳过（本地/回放）"));
+    connect(m_aiBtn, &QToolButton::toggled, this, [this](bool on) {
+        setAiSkipEnabled(on);
+        emit statusMessage(m_channel, on ? tr("AI 跳播：开") : tr("AI 跳播：关"));
+    });
+
+    m_ocrBtn = makeBtn(tr("OCR识别"));
+    m_ocrBtn->setCheckable(true);
+    m_ocrBtn->setToolTip(tr("识别画面中的文字/车牌；配合 ROI 可只识别局部"));
+    connect(m_ocrBtn, &QToolButton::toggled, this, [this](bool on) {
+        emit ocrToggled(m_channel, on);
+        emit statusMessage(m_channel, on ? tr("OCR 识别：开") : tr("OCR 识别：关"));
+    });
+
+    m_roiBtn = makeBtn(tr("ROI框"));
+    m_roiBtn->setCheckable(true);
+    m_roiBtn->setToolTip(tr("圈选重点分析区域：点击后拖动框选，再点一次清除"));
+    connect(m_roiBtn, &QToolButton::clicked, this, [this](bool checked) {
+        if (!checked) {
+            m_roiMode = false;
+            m_roi = QRectF();
+            if (m_zoomBtn && m_zoomBtn->isChecked()) {
+                m_zoomBtn->setChecked(false);   // restores the full picture
+            }
+            if (m_zoomBtn) {
+                m_zoomBtn->setEnabled(false);
+            }
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(QRectF());
+                m_aiOverlay->setRoiDraft(QRectF());
+            }
+            if (m_video) {
+                m_video->unsetCursor();
+            }
+            emit roiChanged(m_channel, QRectF());
+            emit statusMessage(m_channel, tr("ROI 已清除"));
+            return;
+        }
+        m_roiMode = true;
+        if (m_video) {
+            m_video->setCursor(Qt::CrossCursor);
+        }
+        emit statusMessage(m_channel, tr("在画面上拖动框选分析区域"));
+    });
+
+    // ---- right group 2: picture ----
+    m_zoomBtn = makeBtn(tr("电子放大"));
+    m_zoomBtn->setCheckable(true);
+    m_zoomBtn->setEnabled(false);   // needs an ROI first
+    m_zoomBtn->setToolTip(tr("放大到 ROI 区域（需先圈选）"));
+    connect(m_zoomBtn, &QToolButton::toggled, this, [this](bool on) {
         if (!m_player) {
             return;
         }
-        if (m_player->state() == MediaState::Playing) {
-            m_player->pause();
+        m_player->setVideoCrop(on ? m_roi : QRectF());
+        // While zoomed the visible picture IS the ROI: analysis no longer needs
+        // (and must not re-apply) the ROI crop, so hand it the whole frame.
+        // The dashed ROI frame would also be misleading over the zoomed view.
+        if (on) {
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(QRectF());
+            }
+            emit roiChanged(m_channel, QRectF());
         } else {
-            m_player->play();
+            if (m_aiOverlay) {
+                m_aiOverlay->setRoi(m_roi);
+            }
+            emit roiChanged(m_channel, m_roi);
         }
+        emit statusMessage(m_channel, on ? tr("电子放大：开（显示 ROI 区域）")
+                                         : tr("电子放大：关"));
     });
 
-    m_timeLabel = new QLabel(QStringLiteral("--:-- / --:--"), m_footer);
-    m_timeLabel->setObjectName(QStringLiteral("TileTime"));
-
-    m_posSlider = new TimelineSlider(Qt::Horizontal, m_footer);
-    m_posSlider->setObjectName(QStringLiteral("TileSeek"));
-    m_posSlider->setRange(0, 0);
-    m_posSlider->setMinimumWidth(40);
-    m_posSlider->setCursor(Qt::PointingHandCursor);
-    // Clicking a person segment jumps there (see TimelineSlider).
-    connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
-        if (m_player) {
-            m_player->seek(t);
+    m_sharpenBtn = makeBtn(tr("画质锐化"));
+    m_sharpenBtn->setCheckable(true);
+    m_sharpenBtn->setToolTip(tr("GPU 锐化增强（配合电子放大观看细节）"));
+    connect(m_sharpenBtn, &QToolButton::toggled, this, [this](bool on) {
+        if (!m_player) {
+            return;
         }
-    });
-    connect(m_posSlider, &QSlider::sliderPressed, this, [this]() { m_scrubbing = true; });
-    connect(m_posSlider, &QSlider::sliderReleased, this, [this]() {
-        m_scrubbing = false;
-        if (m_player && m_duration > 0) {
-            m_player->seek(m_posSlider->value() / 1000.0);
-        }
-    });
-    connect(m_posSlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_scrubbing && m_timeLabel) {
-            m_timeLabel->setText(formatTime(v / 1000.0) + QStringLiteral(" / ")
-                                 + formatTime(m_duration));
-        }
+        m_player->setShader(on ? ensureSharpenShaderFile() : QString());
+        emit statusMessage(m_channel, on ? tr("画质锐化：开") : tr("画质锐化：关"));
     });
 
-    m_speedBtn = new QToolButton(m_footer);
-    m_speedBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_speedBtn->setText(QStringLiteral("1x"));
-    m_speedBtn->setToolTip(tr("播放速度"));
-    m_speedBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_speedBtn, &QToolButton::clicked, this, &VideoTile::cycleSpeed);
-
-    m_aiBtn = new QToolButton(m_footer);
-    m_aiBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_aiBtn->setText(QStringLiteral("AI"));
-    m_aiBtn->setCheckable(true);
-    m_aiBtn->setToolTip(tr("AI 跳过无人片段（快放）"));
-    m_aiBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_aiBtn, &QToolButton::toggled, this, &VideoTile::setAiSkipEnabled);
-
-    m_evidenceBtn = new QToolButton(m_footer);
-    m_evidenceBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_evidenceBtn->setText(tr("证据"));
-    m_evidenceBtn->setToolTip(tr("导出检测事件证据（报告 + 截图）"));
-    m_evidenceBtn->setCursor(Qt::PointingHandCursor);
-    connect(m_evidenceBtn, &QToolButton::clicked, this, [this]() {
-        emit evidenceExportRequested(m_channel);
-    });
-
-    m_scanBtn = new QToolButton(m_footer);
-    m_scanBtn->setObjectName(QStringLiteral("TileBtn"));
-    m_scanBtn->setText(tr("扫描"));
+    // ---- right group 3: search & evidence ----
+    m_scanBtn = makeBtn(tr("智能检索"));
     m_scanBtn->setCheckable(true);
-    m_scanBtn->setToolTip(tr("快速扫描全片，标出有人物的时间段（可点击跳转）"));
-    m_scanBtn->setCursor(Qt::PointingHandCursor);
+    m_scanBtn->setToolTip(tr("快速扫描全片，在时间轴标出有人物的片段"));
     connect(m_scanBtn, &QToolButton::clicked, this, [this](bool checked) {
         if (checked) {
             startScan();
@@ -498,60 +497,125 @@ void VideoTile::buildTransport(QHBoxLayout *row)
         }
     });
 
-    row->addWidget(m_playBtn);
-    row->addWidget(m_timeLabel);
-    row->addWidget(m_posSlider, 1);
-    row->addWidget(m_speedBtn);
-    row->addWidget(m_aiBtn);
-    row->addWidget(m_evidenceBtn);
-    row->addWidget(m_scanBtn);
+    m_snapBtn = makeBtn(QString());
+    m_snapBtn->setObjectName(QStringLiteral("BarPlay"));
+    m_snapBtn->setIcon(QIcon(icons::camera(true)));
+    m_snapBtn->setIconSize(QSize(15, 15));
+    m_snapBtn->setToolTip(tr("抓图"));
+    connect(m_snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
 
-    connect(m_player, &IMediaPlayer::positionChanged, this, [this](double pos) {
-        if (m_scanning && m_duration > 0) {
-            const int pct = int(qBound(0.0, pos / m_duration, 1.0) * 100.0);
-            if (m_timeLabel) {
-                m_timeLabel->setText(tr("扫描中 %1%").arg(pct));
+    m_evidenceBtn = makeBtn(tr("导出证据"));
+    m_evidenceBtn->setToolTip(tr("导出事件列表与截图（HTML + JSON）"));
+    connect(m_evidenceBtn, &QToolButton::clicked, this, [this]() {
+        emit evidenceExportRequested(m_channel);
+    });
+
+    // ---- assemble: left · timeline · AI · picture · evidence ----
+    if (m_hasTransport) {
+        row->addWidget(m_playBtn);
+        row->addWidget(m_timeLabel);
+        row->addSpacing(2);
+        row->addWidget(m_posSlider, 1);
+        row->addWidget(m_speedBtn);
+        addSep();
+    } else {
+        row->addStretch(1);
+    }
+    row->addWidget(m_aiBtn);
+    row->addWidget(m_ocrBtn);
+    row->addWidget(m_roiBtn);
+    addSep();
+    row->addWidget(m_zoomBtn);
+    row->addWidget(m_sharpenBtn);
+    addSep();
+    row->addWidget(m_scanBtn);
+    row->addWidget(m_snapBtn);
+    row->addWidget(m_evidenceBtn);
+
+    if (m_hasTransport) {
+        connect(m_player, &IMediaPlayer::positionChanged, this, [this](double pos) {
+            if (m_scanning && m_duration > 0) {
+                const int pct = int(qBound(0.0, pos / m_duration, 1.0) * 100.0);
+                if (m_timeLabel) {
+                    m_timeLabel->setText(tr("扫描中 %1%").arg(pct));
+                }
+                if (pos >= m_duration - 0.4) {
+                    finishScan();
+                }
+                return;
             }
-            if (pos >= m_duration - 0.4) {
-                finishScan();
+            if (!m_scrubbing && m_duration > 0) {
+                if (m_posSlider) {
+                    m_posSlider->setValue(int(pos * 1000.0));
+                }
+                if (m_timeLabel) {
+                    m_timeLabel->setText(formatTime(pos) + QStringLiteral(" / ")
+                                         + formatTime(m_duration));
+                }
             }
-            return;
-        }
-        if (!m_scrubbing && m_duration > 0) {
+        });
+        connect(m_player, &IMediaPlayer::durationChanged, this, [this](double d) {
+            m_duration = d;
             if (m_posSlider) {
-                m_posSlider->setValue(int(pos * 1000.0));
+                m_posSlider->setRange(0, d > 0 ? int(d * 1000.0) : 0);
+                m_posSlider->setMediaDuration(d);
             }
             if (m_timeLabel) {
-                m_timeLabel->setText(formatTime(pos) + QStringLiteral(" / ")
-                                     + formatTime(m_duration));
+                m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0)
+                                     + QStringLiteral(" / ") + formatTime(m_duration));
             }
-        }
-    });
-    connect(m_player, &IMediaPlayer::durationChanged, this, [this](double d) {
-        m_duration = d;
-        if (m_posSlider) {
-            m_posSlider->setRange(0, d > 0 ? int(d * 1000.0) : 0);
-            m_posSlider->setMediaDuration(d);
-        }
-        if (m_timeLabel) {
-            m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0)
-                                 + QStringLiteral(" / ") + formatTime(m_duration));
-        }
-    });
-    connect(m_player, &IMediaPlayer::speedChanged, this, [this](double s) {
-        if (m_speedBtn) {
-            m_speedBtn->setText(QStringLiteral("%1x").arg(s, 0, 'g', 2));
-        }
-    });
+        });
+        connect(m_player, &IMediaPlayer::speedChanged, this, [this](double s) {
+            if (m_speedBtn) {
+                m_speedBtn->setText(QStringLiteral("%1x").arg(s, 0, 'g', 2));
+            }
+            if (m_speedMenu) {
+                for (QAction *a : m_speedMenu->actions()) {
+                    a->setChecked(false);
+                }
+            }
+        });
+    }
+
+    positionControlBar();
+    updateEvidenceBadge();
 }
 
-void VideoTile::cycleSpeed()
+void VideoTile::positionControlBar()
 {
-    static const double speeds[] = {1.0, 2.0, 4.0, 8.0, 16.0};
-    m_speedIndex = (m_speedIndex + 1) % int(sizeof(speeds) / sizeof(speeds[0]));
-    if (m_player) {
-        m_player->setSpeed(speeds[m_speedIndex]);
+    if (!m_video || !m_footer) {
+        return;
     }
+    const QRect r = m_video->rect();
+    // Very small tiles (4x4 layouts) cannot host the grouped bar comfortably;
+    // hide it there instead of letting it cover the whole picture.
+    if (r.width() < 380 || r.height() < 150) {
+        m_footer->hide();
+        return;
+    }
+    const int h = qMax(30, m_footer->sizeHint().height());
+    const int margin = 8;
+    m_footer->setGeometry(margin, r.height() - h - margin,
+                          qMax(120, r.width() - 2 * margin), h);
+    m_footer->show();
+    m_footer->raise();
+}
+
+void VideoTile::updateEvidenceBadge()
+{
+    if (!m_evidenceBtn) {
+        return;
+    }
+    const int n = m_evidence.size();
+    m_evidenceBtn->setText(n > 0 ? tr("导出证据 ·%1").arg(n) : tr("导出证据"));
+}
+
+void VideoTile::setSpeed(double speed)
+{
+    if (!m_player) {
+        return;
+    }
+    m_player->setSpeed(speed);
 }
 
 // ---------------------------------------------------------------------------
@@ -650,8 +714,10 @@ void VideoTile::cancelScan()
 void VideoTile::updateTransportUi()
 {
     if (m_playBtn) {
-        m_playBtn->setText(m_state == Playing ? QString::fromUtf8("❚❚")
-                                              : QString::fromUtf8("▶"));
+        const bool playing = m_state == Playing;
+        m_playBtn->setIcon(QIcon(icons::playPause(
+            playing, playing ? QColor(0x2F, 0x81, 0xF7) : QColor(0xD5, 0xDE, 0xEA), 15)));
+        m_playBtn->setToolTip(playing ? tr("暂停") : tr("播放"));
     }
 }
 
@@ -825,6 +891,7 @@ void VideoTile::updateEvidence(double pts, const QVector<AnalysisBox> &boxes)
         still.insert(it.key(), idx);
     }
     m_openEvents = still;
+    updateEvidenceBadge();
 }
 
 void VideoTile::closeOpenEvidence(double atPts, bool all)
@@ -895,6 +962,7 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_video && event->type() == QEvent::Resize && m_aiOverlay && m_video) {
         m_aiOverlay->setGeometry(m_video->rect());
         m_aiOverlay->raise();
+        positionControlBar();
     }
 
     // ---- ROI rubber band ----

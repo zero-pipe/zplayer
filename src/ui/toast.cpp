@@ -64,9 +64,11 @@ void Toast::reposition()
     if (!parentWidget()) {
         return;
     }
+    // Top-centre, like modern players' status pills: visible without covering
+    // the picture's lower area where the control bar floats.
     const QRect pr = parentWidget()->rect();
-    const int margin = 20;
-    move(pr.right() - width() - margin, pr.bottom() - height() - margin);
+    const int margin = 14;
+    move(pr.center().x() - width() / 2, pr.top() + margin);
 }
 
 } // namespace zp

@@ -40,8 +40,7 @@ QPixmap folderPixmap(const QColor &color, int size)
 QPixmap cameraPixmap(const QColor &color, int size)
 {
     QPixmap pm(size, size);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
+    pm.fill(Qt::transparent);    QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing, true);
 
     const qreal s = size;
@@ -68,6 +67,29 @@ QPixmap cameraPixmap(const QColor &color, int size)
     p.setBrush(body);
     p.drawPath(tri);
 
+    return pm;
+}
+
+QPixmap playPause(bool playing, const QColor &color, int size)
+{
+    QPixmap pm(size, size);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    const qreal s = size;
+    if (playing) {
+        p.drawRoundedRect(QRectF(s * 0.30, s * 0.22, s * 0.14, s * 0.56), 1.5, 1.5);
+        p.drawRoundedRect(QRectF(s * 0.56, s * 0.22, s * 0.14, s * 0.56), 1.5, 1.5);
+    } else {
+        QPainterPath tri;
+        tri.moveTo(s * 0.32, s * 0.20);
+        tri.lineTo(s * 0.82, s * 0.50);
+        tri.lineTo(s * 0.32, s * 0.80);
+        tri.closeSubpath();
+        p.drawPath(tri);
+    }
     return pm;
 }
 

@@ -229,6 +229,7 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
     connect(tile, &VideoTile::evidenceExportRequested, this,
             &VideoGrid::evidenceExportRequested);
     connect(tile, &VideoTile::scanFinished, this, &VideoGrid::streamScanFinished);
+    connect(tile, &VideoTile::statusMessage, this, &VideoGrid::tileStatus);
 
     // ROI / OCR are per-tile analysis controls; forward them to the service
     // with the tile's player id.

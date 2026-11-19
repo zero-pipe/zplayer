@@ -80,6 +80,8 @@ signals:
     void evidenceExportRequested(const zp::ChannelRef &ch);
     // Offline smart-timeline scan finished for a tile.
     void streamScanFinished(const zp::ChannelRef &ch, int segments);
+    // Transient tile status text (control-bar toggles), shown as a toast.
+    void tileStatus(const zp::ChannelRef &ch, const QString &text);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };

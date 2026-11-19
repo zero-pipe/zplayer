@@ -289,6 +289,58 @@ QWidget#TileFooter {
     border-bottom-right-radius: 6px;
 }
 
+/* Floating glass control bar over the video (replaces the footer strip). */
+QWidget#TileBar {
+    background: rgba(10, 14, 20, 172);
+    border: 1px solid rgba(255, 255, 255, 32);
+    border-radius: 12px;
+}
+QToolButton#BarBtn, QToolButton#BarPlay {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #C6D0DB;
+    font-size: 12px;
+    padding: 3px 8px;
+}
+QToolButton#BarBtn:hover, QToolButton#BarPlay:hover {
+    background: rgba(255, 255, 255, 26);
+    color: #FFFFFF;
+}
+QToolButton#BarBtn:pressed, QToolButton#BarPlay:pressed {
+    background: rgba(255, 255, 255, 40);
+}
+QToolButton#BarBtn:checked {
+    color: #6CB6FF;
+    background: rgba(47, 129, 247, 46);
+}
+QToolButton#BarBtn:disabled { color: rgba(198, 208, 219, 90); }
+QToolButton#BarPlay { padding: 3px 5px; }
+QLabel#BarTime {
+    color: #AEB9C6;
+    font-size: 12px;
+    padding: 0 2px;
+}
+QFrame#BarSep { color: rgba(255, 255, 255, 36); }
+
+QSlider#BarSeek { background: transparent; }
+QSlider#BarSeek::groove:horizontal {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 34);
+}
+QSlider#BarSeek::sub-page:horizontal {
+    background: %accent%;
+    border-radius: 2px;
+}
+QSlider#BarSeek::handle:horizontal {
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+    background: #FFFFFF;
+}
+
 QToolButton#TileBtn {
     background: %bgPanel%;
     border: 1px solid %border%;

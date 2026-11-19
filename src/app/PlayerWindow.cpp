@@ -183,6 +183,10 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
                 }
             });
 
+    // Control-bar toggles report their new state through the window toast.
+    connect(m_grid, &VideoGrid::tileStatus, this,
+            [this](const zp::ChannelRef &, const QString &text) { toastInfo(text); });
+
     // Dev: ZP_SETTINGS=1 opens the settings dialog shortly after start, so UI
     // can be captured headlessly (see ZP_SHOT in main.cpp).
     if (!qEnvironmentVariableIsEmpty("ZP_SETTINGS")) {
