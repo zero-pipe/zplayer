@@ -95,3 +95,31 @@ mpv 原生支持加载自定义 GLSL 着色器（`glsl-shaders`），几乎不�
 ### 阶段三：显存零拷贝与全链路硬件加速
 1. **CUDA-OpenGL 互操作**：在 NVIDIA 平台上，将 `libmpv` 解码出的 OpenGL 纹理直接注册为 CUDA 资源，实现 **显存 -> TensorRT 推理 -> 渲染输出** 全程零内存拷贝，支持 4K 60fps 下的实时多路 AI 分析。
 2. **智能事件时间轴（Smart Timeline）**：在后台快速扫描本地视频文件，将检测到特定目标（如“出现行人”、“画面剧烈变化”、“特定关键词语音”）的时间点自动标记在播放器的进度条上，实现**基于内容的智能跳转**。
+---
+
+## 四、 实现现状（2026-11-19）
+
+路线图与代码的对应关系（均已合入 master）：
+
+| 能力 | 实现位置 | 说明 |
+| --- | --- | --- |
+| 自建 FBO + 帧旁路 | `player/backends/mpv_media_player.cpp`、`player/media_player.h` | `mpv_render_context` 渲染到自有纹理，每帧经 `IVideoFrameSink` 回调；`VideoFrame` 携带 `videoRect`（画面在黑边内的位置） |
+| 分析调度 | `analysis/analysis_service.cpp` | 全窗口共享一个推理线程；每路限帧（默认 4fps）、每路最多 1 帧待处理（公平调度）；GPU 侧先裁剪画面区/ROI 再降采样读回 |
+| 目标检测 | `analysis/yolo_detector.cpp` | YOLOv8n / YOLO11n（ONNX Runtime，DirectML 优先、CPU 兜底），COCO 80 类，中文标签 |
+| 多目标追踪 | `analysis/byte_tracker.cpp` | ByteTrack 风格两阶段 IoU 关联 + 匀速模型，输出稳定 trackId |
+| 叠加绘制 | `ui/analysis_overlay.cpp` | 透明层画框/标签/ROI 虚线，按 `videoRect` 映射坐标 |
+| 文字识别 | `analysis/ocr_detector.cpp` | PP-OCRv4 mobile det+rec（ORT，CPU），DB 后处理 + CTC 解码；模型默认放在 `3rdpart/models/ocr/` |
+| ROI / 局部放大 / 锐化 | `player/video_tile.cpp`、`player/shaders.cpp` | ROI 拖拽圈选限制分析区域；`video-crop` 放大到 ROI；内置 GLSL 锐化挂 `glsl-shaders` |
+| 证据导出 | `analysis/evidence.cpp` | 检测事件汇总为 report.html / report.json + 截图 |
+| 智能时间轴 | `analysis/timeline.*`、`ui/timeline_slider.*` | 8x 快扫全片，人物片段画在进度条上，点击色块跳转 |
+| AI 快放 | `player/video_tile.cpp` | 无人物时按 8x 跳过，检测到人恢复 1x（本地/回放场景） |
+
+**运行依赖**：`out/` 下需带 `models/yolo11n.onnx`、`models/coco.names`、`models/ocr/*` 与 `onnxruntime.dll`、`DirectML.dll`（`build.bat` 自动拷贝）。
+
+**调试开关**（仅开发）：`ZP_LOG=<file>` 文件日志；`ZP_AI_TRACE=1` 每帧结果与 OCR/crop/scan 诊断；`ZP_ANALYZE=<file>` 无模型冒烟；`ZP_OCR=1`/`ZP_ROI=x,y,w,h`/`ZP_ZOOM=1`/`ZP_SHARPEN=1`/`ZP_SCAN=1` 演示钩子。
+
+**未完成**：
+- 阶段三的 CUDA-OpenGL 零拷贝（需 NVIDIA 卡 + CUDA 版 ORT/TensorRT，当前构建机为 Intel 核显，无法实现与验证）；
+- OCR 模型在 DirectML EP 上会卡死，暂走 CPU（`ZP_OCR_DML=1` 可复现）；
+- 智能时间轴的离线解码目前复用播放链路驱动，独立 `IOfflineDecoder` 的无播放扫描待后续；
+- 语音降噪（rnnoise / DeepFilterNet）未接入。
