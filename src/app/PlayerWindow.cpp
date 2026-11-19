@@ -6,6 +6,7 @@
 #include "ui/icons.h"
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
+#include "ui/evidence_dialog.h"
 #include "player/video_grid.h"
 #include "player/video_tile.h"
 #include "analysis/analysis_service.h"
@@ -154,20 +155,8 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
 
     connect(m_grid, &VideoGrid::evidenceExportRequested, this,
             [this](const zp::ChannelRef &ch) {
-                VideoTile *tile = m_grid->tileFor(ch);
-                if (!tile) {
-                    return;
-                }
-                const QString dir = QFileDialog::getExistingDirectory(
-                    this, tr("选择证据导出目录"));
-                if (dir.isEmpty()) {
-                    return;
-                }
-                QString err;
-                if (tile->exportEvidence(dir, &err)) {
-                    toastSuccess(tr("证据已导出：%1").arg(dir));
-                } else {
-                    toastError(tr("导出失败：%1").arg(err));
+                if (VideoTile *tile = m_grid->tileFor(ch)) {
+                    openEvidenceDialog(tile);
                 }
             });
 
@@ -780,6 +769,38 @@ void PlayerWindow::dropEvent(QDropEvent *event)
     }
 }
 
+void PlayerWindow::openEvidenceDialog(VideoTile *tile)
+{
+    if (!tile) {
+        return;
+    }
+    if (tile->evidenceEvents().isEmpty()) {
+        toastInfo(tr("暂无可导出的证据（先播放或扫描一段时间）"));
+        return;
+    }
+    // Review first: the user picks which events go into the folder.
+    const QString media = tile->mediaName();
+    auto *dlg = new zp::EvidenceDialog(media, tile->evidenceEvents(), this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &zp::EvidenceDialog::exportRequested, this,
+            [this, media](const QVector<zp::EvidenceEvent> &events) {
+                const QString dir = QFileDialog::getExistingDirectory(
+                    this, tr("选择证据导出目录"));
+                if (dir.isEmpty()) {
+                    return;
+                }
+                QString err;
+                if (zp::EvidenceExporter::writeReport(media, events, dir, &err)) {
+                    toastSuccess(tr("证据已导出：%1（%2 个事件）")
+                                     .arg(dir)
+                                     .arg(events.size()));
+                } else {
+                    toastError(tr("导出失败：%1").arg(err));
+                }
+            });
+    dlg->open();
+}
+
 void PlayerWindow::fillDemo(const QUrl &url, int count)
 {
     for (int i = 0; i < count; ++i) {
@@ -832,6 +853,13 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
     if (qEnvironmentVariableIsSet("ZP_SCAN")) {
         if (VideoTile *t = m_grid->tiles().value(0)) {
             QTimer::singleShot(2500, t, [t]() { t->startScan(); });
+        }
+    }
+
+    // ZP_EVIDENCE=1: open the evidence review dialog a few seconds in (dev).
+    if (qEnvironmentVariableIsSet("ZP_EVIDENCE")) {
+        if (VideoTile *t = m_grid->tiles().value(0)) {
+            QTimer::singleShot(6000, this, [this, t]() { openEvidenceDialog(t); });
         }
     }
 

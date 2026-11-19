@@ -241,7 +241,7 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
     if (m_holder->h) {
         mpv_set_option_string(m_holder->h, "vo", "libmpv");
         mpv_set_option_string(m_holder->h, "terminal", "no");
-        mpv_set_option_string(m_holder->h, "keep-open", "no");
+        mpv_set_option_string(m_holder->h, "keep-open", "yes");
         mpv_set_option_string(m_holder->h, "hwdec", "auto-safe");
         mpv_initialize(m_holder->h);
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);

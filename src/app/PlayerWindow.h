@@ -17,6 +17,7 @@ namespace zp {
 
 class DeviceTreeView;
 class VideoGrid;
+class VideoTile;
 class PtzPanel;
 class Toast;
 class AnalysisService;
@@ -37,6 +38,8 @@ public:
 
     // Dev helper: fill the grid with N demo tiles (for layout verification).
     void fillDemo(const QUrl &url, int count);
+    // Evidence review dialog for a tile (shared by the button and dev hooks).
+    void openEvidenceDialog(VideoTile *tile);
     void setDemoLayout(int index);
 
 signals:

@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QUrl>
+#include <QSet>
 #include <QVector>
 #include <QHash>
 #include "platform/platform_api.h"
@@ -77,6 +78,8 @@ public:
     // Write the events collected for this tile into outDir (report + thumbs).
     bool exportEvidence(const QString &outDir, QString *error = nullptr);
     int evidenceEventCount() const { return m_evidence.size(); }
+    const QVector<EvidenceEvent> &evidenceEvents() const { return m_evidence; }
+    QString mediaName() const { return m_name.isEmpty() ? m_channel.channelId : m_name; }
 
     // ---- Dev/test hooks (see ZP_OCR / ZP_ROI in PlayerWindow::fillDemo) ----
     void setOcrEnabled(bool on);            // same as clicking 文字
@@ -168,6 +171,7 @@ private:
     QMenu *m_speedMenu = nullptr;
     QToolButton *m_snapBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
+    QToolButton *m_aiMenuBtn = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
     QToolButton *m_roiBtn = nullptr;
     QToolButton *m_ocrBtn = nullptr;
@@ -175,12 +179,23 @@ private:
     QToolButton *m_sharpenBtn = nullptr;
     double m_duration = -1.0;
     bool m_scrubbing = false;
+    bool m_hasPlayed = false;   // a stream has been shown (keep last frame)
 
     // ROI selection (normalized to the video widget).
     bool m_roiMode = false;       // waiting for / receiving a drag
     bool m_draggingRoi = false;
     QPointF m_roiStart;
     QRectF m_roi;
+
+    // Electronic zoom: 0 = off (1x), 1 = 2x, 2 = 4x. The view crops a
+    // centered window inside the ROI (or the whole video) and can be panned.
+    int m_zoomLevel = 0;
+    QPointF m_zoomCenter = QPointF(0.5, 0.5);   // tile-normalized
+    bool m_panning = false;
+    QPointF m_panLast;
+    void applyZoom();
+    QRectF zoomCropRect() const;
+    void setZoomLevel(int level);
 
     // Smart timeline scan state.
     QToolButton *m_scanBtn = nullptr;
@@ -192,6 +207,9 @@ private:
 
     // AI fast-forward state.
     bool m_aiSkip = false;
+    bool m_aiPauseOnHit = false;      // pause instead of resuming 1x on a hit
+    bool m_aiSkipping = false;        // a skip just happened, awaiting a hit
+    QSet<int> m_aiClasses;            // class ids that count as "present"
     qint64 m_lastPresenceMs = 0;
     qint64 m_lastSeekMs = 0;
 

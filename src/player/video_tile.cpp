@@ -10,12 +10,14 @@
 #include <QFrame>
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 #include <QPushButton>
 #include <QSlider>
 #include <QStackedLayout>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QStyle>
 #include <QFontMetrics>
 #include <QStandardPaths>
@@ -140,6 +142,7 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     vl->addWidget(stageWidget, 1);
 
     connect(m_player, &IMediaPlayer::started, this, [this]() {
+        m_hasPlayed = true;
         setState(Playing, tr("播放中"));
         m_stage->setCurrentWidget(m_video ? m_video : m_overlay);
     });
@@ -241,8 +244,11 @@ void VideoTile::setState(State state, const QString &text)
     m_retryBtn->setVisible(state == Failed);
     // Keep the video widget visible while connecting/playing so the engine's
     // OpenGL context is created early (libmpv needs its render context ready
-    // before the first frame can be decoded).
-    if (state == Playing || state == Connecting) {
+    // before the first frame can be decoded). Once a stream has played, Idle
+    // keeps the last frame on screen (mpv keep-open) so the control bar stays
+    // usable instead of being replaced by the status panel.
+    const bool hasPicture = m_hasPlayed && m_video;
+    if (state == Playing || state == Connecting || (state == Idle && hasPicture)) {
         m_stage->setCurrentWidget(m_video ? m_video : m_overlay);
     } else {
         m_stage->setCurrentWidget(m_overlay);
@@ -401,11 +407,61 @@ void VideoTile::buildControlBar()
     // ---- right group 1: AI strategy ----
     m_aiBtn = makeBtn(tr("AI 跳播"));
     m_aiBtn->setCheckable(true);
-    m_aiBtn->setToolTip(tr("无人时自动跳过（本地/回放）"));
+    m_aiBtn->setToolTip(tr("无人时自动跳过（本地/回放）；目标与行为在右侧 ▾ 设置"));
     connect(m_aiBtn, &QToolButton::toggled, this, [this](bool on) {
         setAiSkipEnabled(on);
         emit statusMessage(m_channel, on ? tr("AI 跳播：开") : tr("AI 跳播：关"));
     });
+
+    // Settings bubble for AI skip: which targets count, and what happens on a
+    // hit (resume 1x or pause for a closer look).
+    m_aiClasses.insert(0);   // people by default
+    m_aiMenuBtn = makeBtn(QString::fromUtf8("▾"));
+    m_aiMenuBtn->setToolTip(tr("AI 跳播设置：目标与命中行为"));
+    {
+        auto *aiMenu = new QMenu(m_aiMenuBtn);
+        auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
+                                        bool on) {
+            QAction *a = aiMenu->addAction(label);
+            a->setCheckable(true);
+            a->setChecked(on);
+            connect(a, &QAction::toggled, this, [this, ids](bool on2) {
+                for (int id : ids) {
+                    if (on2) {
+                        m_aiClasses.insert(id);
+                    } else {
+                        m_aiClasses.remove(id);
+                    }
+                }
+                emit statusMessage(m_channel, tr("AI 跳播目标已更新"));
+            });
+        };
+        addTarget(tr("人"), {0}, true);
+        addTarget(tr("车"), {2, 3, 5, 7}, false);
+        addTarget(tr("狗"), {16}, false);
+        aiMenu->addSeparator();
+        QAction *resumeAct = aiMenu->addAction(tr("命中后：恢复正常播放"));
+        QAction *pauseAct = aiMenu->addAction(tr("命中后：自动暂停"));
+        resumeAct->setCheckable(true);
+        pauseAct->setCheckable(true);
+        resumeAct->setChecked(true);
+        auto *group = new QActionGroup(aiMenu);
+        group->addAction(resumeAct);
+        group->addAction(pauseAct);
+        group->setExclusive(true);
+        connect(resumeAct, &QAction::toggled, this, [this](bool on) {
+            if (on) {
+                m_aiPauseOnHit = false;
+            }
+        });
+        connect(pauseAct, &QAction::toggled, this, [this](bool on) {
+            if (on) {
+                m_aiPauseOnHit = true;
+            }
+        });
+        m_aiMenuBtn->setMenu(aiMenu);
+        m_aiMenuBtn->setPopupMode(QToolButton::InstantPopup);
+    }
 
     m_ocrBtn = makeBtn(tr("OCR识别"));
     m_ocrBtn->setCheckable(true);
@@ -422,11 +478,8 @@ void VideoTile::buildControlBar()
         if (!checked) {
             m_roiMode = false;
             m_roi = QRectF();
-            if (m_zoomBtn && m_zoomBtn->isChecked()) {
-                m_zoomBtn->setChecked(false);   // restores the full picture
-            }
-            if (m_zoomBtn) {
-                m_zoomBtn->setEnabled(false);
+            if (m_zoomLevel > 0) {
+                setZoomLevel(0);   // zoom base was the ROI; restore the picture
             }
             if (m_aiOverlay) {
                 m_aiOverlay->setRoi(QRectF());
@@ -448,30 +501,10 @@ void VideoTile::buildControlBar()
 
     // ---- right group 2: picture ----
     m_zoomBtn = makeBtn(tr("电子放大"));
-    m_zoomBtn->setCheckable(true);
-    m_zoomBtn->setEnabled(false);   // needs an ROI first
-    m_zoomBtn->setToolTip(tr("放大到 ROI 区域（需先圈选）"));
-    connect(m_zoomBtn, &QToolButton::toggled, this, [this](bool on) {
-        if (!m_player) {
-            return;
-        }
-        m_player->setVideoCrop(on ? m_roi : QRectF());
-        // While zoomed the visible picture IS the ROI: analysis no longer needs
-        // (and must not re-apply) the ROI crop, so hand it the whole frame.
-        // The dashed ROI frame would also be misleading over the zoomed view.
-        if (on) {
-            if (m_aiOverlay) {
-                m_aiOverlay->setRoi(QRectF());
-            }
-            emit roiChanged(m_channel, QRectF());
-        } else {
-            if (m_aiOverlay) {
-                m_aiOverlay->setRoi(m_roi);
-            }
-            emit roiChanged(m_channel, m_roi);
-        }
-        emit statusMessage(m_channel, on ? tr("电子放大：开（显示 ROI 区域）")
-                                         : tr("电子放大：关"));
+    m_zoomBtn->setToolTip(tr("点击循环 1x/2x/4x；放大后可滚轮切换倍数、拖动平移画面"));
+    m_zoomBtn->setEnabled(m_player && m_player->supportsVideoCrop());
+    connect(m_zoomBtn, &QToolButton::clicked, this, [this]() {
+        setZoomLevel((m_zoomLevel + 1) % 3);
     });
 
     m_sharpenBtn = makeBtn(tr("画质锐化"));
@@ -522,6 +555,7 @@ void VideoTile::buildControlBar()
         row->addStretch(1);
     }
     row->addWidget(m_aiBtn);
+    row->addWidget(m_aiMenuBtn);
     row->addWidget(m_ocrBtn);
     row->addWidget(m_roiBtn);
     addSep();
@@ -619,6 +653,73 @@ void VideoTile::setSpeed(double speed)
 }
 
 // ---------------------------------------------------------------------------
+// Electronic zoom (1x / 2x / 4x, wheel to change, drag to pan)
+// ---------------------------------------------------------------------------
+QRectF VideoTile::zoomCropRect() const
+{
+    const QRectF base = m_roi.isEmpty() ? QRectF(0.0, 0.0, 1.0, 1.0) : m_roi;
+    const double scale = 1.0 / double(1 << m_zoomLevel);   // level 1 -> 1/2, 2 -> 1/4
+    const double w = base.width() * scale;
+    const double h = base.height() * scale;
+    QPointF c(m_zoomCenter);
+    if (w < base.width()) {
+        c.setX(qBound(base.left() + w / 2.0, c.x(), base.right() - w / 2.0));
+    }
+    if (h < base.height()) {
+        c.setY(qBound(base.top() + h / 2.0, c.y(), base.bottom() - h / 2.0));
+    }
+    return QRectF(c.x() - w / 2.0, c.y() - h / 2.0, w, h);
+}
+
+void VideoTile::applyZoom()
+{
+    if (!m_player) {
+        return;
+    }
+    if (m_zoomLevel <= 0) {
+        m_player->setVideoCrop(QRectF());
+        if (m_aiOverlay) {
+            m_aiOverlay->setRoi(m_roi);
+        }
+        // Analysis ROI applies again once the full picture is visible.
+        emit roiChanged(m_channel, m_roi);
+        if (m_video) {
+            m_video->unsetCursor();
+        }
+        return;
+    }
+    m_player->setVideoCrop(zoomCropRect());
+    // The visible picture IS the crop, so the service must not re-apply the
+    // ROI, and the dashed frame would be meaningless over the zoomed view.
+    if (m_aiOverlay) {
+        m_aiOverlay->setRoi(QRectF());
+    }
+    emit roiChanged(m_channel, QRectF());
+    if (m_video && !m_roiMode) {
+        m_video->setCursor(Qt::OpenHandCursor);
+    }
+}
+
+void VideoTile::setZoomLevel(int level)
+{
+    m_zoomLevel = qBound(0, level, 2);
+    if (m_zoomLevel > 0) {
+        const QRectF base = m_roi.isEmpty() ? QRectF(0.0, 0.0, 1.0, 1.0) : m_roi;
+        m_zoomCenter = base.center();
+    }
+    if (m_zoomBtn) {
+        m_zoomBtn->setText(m_zoomLevel > 0
+                               ? tr("电子放大 %1x").arg(1 << m_zoomLevel)
+                               : tr("电子放大"));
+    }
+    applyZoom();
+    emit statusMessage(m_channel,
+                       m_zoomLevel > 0
+                           ? tr("电子放大：%1x（滚轮调整，拖动平移）").arg(1 << m_zoomLevel)
+                           : tr("电子放大：关"));
+}
+
+// ---------------------------------------------------------------------------
 // Smart timeline: fast scan
 // ---------------------------------------------------------------------------
 void VideoTile::startScan()
@@ -665,10 +766,10 @@ void VideoTile::finishScan()
         m_player->seek(m_scanPrevPos > 0.0 ? m_scanPrevPos : 0.0);
     }
     if (m_scanBtn) {
-        m_scanBtn->setText(tr("扫描"));
+        m_scanBtn->setText(tr("智能检索"));
         m_scanBtn->setChecked(false);
     }
-    const QVector<TimelineSegment> segs = buildPersonTimeline(m_scanSamples, 3.0);
+    const QVector<TimelineSegment> segs = buildTimeline(m_scanSamples, 3.0);
     if (qEnvironmentVariableIsSet("ZP_AI_TRACE")) {
         QStringList parts;
         for (const TimelineSegment &s : segs) {
@@ -703,7 +804,7 @@ void VideoTile::cancelScan()
         }
     }
     if (m_scanBtn) {
-        m_scanBtn->setText(tr("扫描"));
+        m_scanBtn->setText(tr("智能检索"));
     }
     if (m_timeLabel) {
         m_timeLabel->setText(formatTime(m_player ? m_player->position() : 0.0)
@@ -730,15 +831,20 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
         m_aiOverlay->setBoxes(result.boxes, result.videoRect);
     }
     if (m_scanning && result.pts >= 0.0) {
-        int persons = 0;
-        for (const AnalysisBox &b : result.boxes) {
-            if (b.classId == 0 /* person */ && b.score >= 0.25f) {
-                ++persons;
-            }
-        }
         PresenceSample s;
         s.t = result.pts;
-        s.persons = persons;
+        for (const AnalysisBox &b : result.boxes) {
+            if (b.score < 0.25f) {
+                continue;
+            }
+            switch (b.classId) {
+            case 0: s.persons++; break;
+            case 2: case 3: case 5: case 7: s.vehicles++; break;
+            case 15: case 16: case 17: case 18: case 19:
+            case 20: case 21: case 22: case 23: s.animals++; break;
+            default: break;
+            }
+        }
         m_scanSamples.append(s);
     }
     updateAiSkip(result.pts, result.boxes);
@@ -765,15 +871,27 @@ void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)
     }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
 
-    bool personPresent = false;
+    bool present = false;
     for (const AnalysisBox &b : boxes) {
-        if (b.classId == 0 /* person */ && b.score >= 0.25f) {
-            personPresent = true;
+        if (b.score >= 0.25f && m_aiClasses.contains(b.classId)) {
+            present = true;
             break;
         }
     }
-    if (personPresent) {
+    if (present) {
         m_lastPresenceMs = now;
+        if (m_aiSkipping) {
+            // A configured target appeared after a skip: honour the chosen
+            // behaviour — either settle back to normal speed, or stop so the
+            // operator can look at the event.
+            m_aiSkipping = false;
+            if (m_aiPauseOnHit) {
+                m_player->pause();
+                emit statusMessage(m_channel, tr("AI 跳播：命中目标，已暂停"));
+            } else if (m_player->speed() > 1.001) {
+                m_player->setSpeed(1.0);
+            }
+        }
         return;
     }
     if (m_lastPresenceMs == 0) {
@@ -802,6 +920,7 @@ void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)
     }
     m_lastSeekMs = now;
     m_lastPresenceMs = now;
+    m_aiSkipping = true;
     closeOpenEvidence(pos, true);
     m_player->seek(target);
 }
@@ -934,20 +1053,18 @@ void VideoTile::setRoiRect(const QRectF &roi)
     if (m_roiBtn) {
         m_roiBtn->setChecked(!m_roi.isEmpty());
     }
-    if (m_zoomBtn) {
-        m_zoomBtn->setEnabled(!m_roi.isEmpty());
-    }
-    if (m_roi.isEmpty() && m_zoomBtn && m_zoomBtn->isChecked()) {
-        m_zoomBtn->setChecked(false);
+    if (m_roi.isEmpty() && m_zoomLevel > 0) {
+        setZoomLevel(0);
+    } else if (m_zoomLevel > 0) {
+        m_zoomCenter = m_roi.center();
+        applyZoom();
     }
     emit roiChanged(m_channel, m_roi);
 }
 
 void VideoTile::setZoomEnabled(bool on)
 {
-    if (m_zoomBtn) {
-        m_zoomBtn->setChecked(on);   // emits toggled -> setVideoCrop
-    }
+    setZoomLevel(on ? 1 : 0);
 }
 
 void VideoTile::setSharpenEnabled(bool on)
@@ -966,6 +1083,47 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
     }
 
     // ---- ROI rubber band ----
+    // ---- wheel zoom + drag pan while the electronic zoom is active ----
+    if (watched == m_video && m_video && !m_roiMode && m_zoomLevel > 0) {
+        if (event->type() == QEvent::Wheel) {
+            auto *we = static_cast<QWheelEvent *>(event);
+            const int dy = we->angleDelta().y();
+            if (dy != 0) {
+                setZoomLevel(dy > 0 ? qMin(2, m_zoomLevel + 1)
+                                    : qMax(0, m_zoomLevel - 1));
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_panning = true;
+                m_panLast = me->pos();
+                m_video->setCursor(Qt::ClosedHandCursor);
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove && m_panning) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            const QSizeF size = m_video->size();
+            if (size.width() > 0 && size.height() > 0) {
+                // Move the crop opposite to the drag so the picture follows the
+                // cursor, scaled by how much of the frame the crop covers.
+                const QRectF crop = zoomCropRect();
+                const double dx = -(me->pos().x() - m_panLast.x()) / size.width()
+                                  * crop.width();
+                const double dy = -(me->pos().y() - m_panLast.y()) / size.height()
+                                  * crop.height();
+                m_zoomCenter += QPointF(dx, dy);
+                m_panLast = me->pos();
+                applyZoom();
+            }
+            return true;
+        } else if (event->type() == QEvent::MouseButtonRelease && m_panning) {
+            m_panning = false;
+            m_video->setCursor(Qt::OpenHandCursor);
+            return true;
+        }
+    }
+
     if (watched == m_video && m_roiMode && m_video) {
         const QSizeF size = m_video->size();
         auto normalized = [&](const QPointF &p) {
@@ -1008,19 +1166,13 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
                     if (m_aiOverlay) {
                         m_aiOverlay->setRoi(m_roi);
                     }
-                    if (m_zoomBtn) {
-                        m_zoomBtn->setEnabled(true);
-                        if (m_zoomBtn->isChecked()) {
-                            // Re-apply the zoom to the freshly framed region.
-                            if (m_player) {
-                                m_player->setVideoCrop(m_roi);
-                            }
-                        }
+                    if (m_zoomLevel > 0) {
+                        // Re-apply the zoom with the freshly framed ROI as base.
+                        m_zoomCenter = m_roi.center();
+                        applyZoom();
+                    } else {
+                        emit roiChanged(m_channel, m_roi);
                     }
-                    // While zoomed, analysis sees the whole (already cropped)
-                    // picture — see the zoom toggle above.
-                    emit roiChanged(m_channel, (m_zoomBtn && m_zoomBtn->isChecked())
-                                                   ? QRectF() : m_roi);
                 } else if (m_roiBtn) {
                     // Nothing framed: leave selection mode so the tile is
                     // normally clickable again. With an existing ROI the button

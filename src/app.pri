@@ -20,6 +20,7 @@ SOURCES += \
     ui/icons.cpp \
     ui/analysis_overlay.cpp \
     ui/timeline_slider.cpp \
+    ui/evidence_dialog.cpp \
     ui/toast.cpp \
     ui/icon_field.cpp \
     ui/login_dialog.cpp \
@@ -52,6 +53,7 @@ HEADERS += \
     ui/icons.h \
     ui/analysis_overlay.h \
     ui/timeline_slider.h \
+    ui/evidence_dialog.h \
     ui/toast.h \
     ui/icon_field.h \
     ui/login_dialog.h \

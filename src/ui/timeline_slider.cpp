@@ -45,16 +45,22 @@ void TimelineSlider::paintEvent(QPaintEvent *event)
 
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
-    const QColor personColor(46, 204, 113, 200);   // online green
     for (const TimelineSegment &seg : m_segments) {
         const double a = qBound(0.0, seg.start / m_duration, 1.0);
         const double b = qBound(0.0, seg.end / m_duration, 1.0);
         const int x1 = groove.left() + int(a * groove.width());
         const int x2 = groove.left() + int(b * groove.width());
         QRect r(x1, groove.top(), qMax(2, x2 - x1), groove.height());
-        // Higher peak count = more opaque, so crowds stand out.
-        QColor c = personColor;
-        c.setAlpha(qBound(90, 90 + seg.peak * 40, 220));
+        // Category colours follow the control legend: person blue, vehicle
+        // green, animal orange. More targets = more opaque.
+        QColor c;
+        switch (seg.category) {
+        case TimelineCategory::Vehicle: c = QColor(46, 204, 113); break;
+        case TimelineCategory::Animal: c = QColor(245, 166, 35); break;
+        case TimelineCategory::Person:
+        default: c = QColor(47, 129, 247); break;
+        }
+        c.setAlpha(qBound(110, 110 + seg.peak * 35, 220));
         p.fillRect(r, c);
     }
 }
