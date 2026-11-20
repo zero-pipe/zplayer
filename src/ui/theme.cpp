@@ -18,34 +18,35 @@ ThemeTokens ThemeTokens::light()
     ThemeTokens t;
     t.name = QStringLiteral("light");
 
-    // Zeroo identity palette: calm Google-grade neutrals with a single blue
-    // accent, red/green/yellow reserved for status.
-    t.bgRoot     = c("#F8F9FA");
+    // Zeroo AI product palette (slate + blue): calm neutrals with a single
+    // primary blue and semantic status colours (green=ok, amber=warning,
+    // rose=bad) used for confidence / state chips.
+    t.bgRoot     = c("#F8FAFC");
     t.bgPanel    = c("#FFFFFF");
     t.bgElevated = c("#FFFFFF");
-    t.bgInput    = c("#F1F3F4");
-    t.bgHover    = c("#E8EAED");
-    t.border       = c("#E8EAED");
-    t.borderStrong = c("#DADCE0");
-    t.divider      = c("#F1F3F4");
+    t.bgInput    = c("#F1F5F9");
+    t.bgHover    = c("#EEF2F7");
+    t.border       = c("#E2E8F0");
+    t.borderStrong = c("#CBD5E1");
+    t.divider      = c("#EEF2F6");
 
-    t.text  = c("#202124");
-    t.text2 = c("#5F6368");
-    t.muted = c("#80868B");
+    t.text  = c("#1E293B");
+    t.text2 = c("#475569");
+    t.muted = c("#94A3B8");
 
-    t.accent      = c("#1A73E8");
-    t.accent2     = c("#1967D2");
-    t.accentSoft  = QColor(26, 115, 232, 20);
-    t.accentSoft2 = QColor(26, 115, 232, 46);
+    t.accent      = c("#2563EB");
+    t.accent2     = c("#1D4ED8");
+    t.accentSoft  = QColor(37, 99, 235, 20);
+    t.accentSoft2 = QColor(37, 99, 235, 40);
 
-    t.success     = c("#34A853");
-    t.successSoft = QColor(52, 168, 83, 26);
-    t.warning     = c("#FBBC05");
-    t.warningSoft = QColor(251, 188, 5, 32);
-    t.danger      = c("#EA4335");
-    t.dangerSoft  = QColor(234, 67, 53, 26);
+    t.success     = c("#16A34A");
+    t.successSoft = QColor(22, 163, 74, 26);
+    t.warning     = c("#F59E0B");
+    t.warningSoft = QColor(245, 158, 11, 32);
+    t.danger      = c("#E11D48");
+    t.dangerSoft  = QColor(225, 29, 72, 26);
 
-    t.videoBg = c("#F1F3F4");
+    t.videoBg = c("#F1F5F9");
     return t;
 }
 
@@ -67,17 +68,17 @@ ThemeTokens ThemeTokens::dark()
     t.text2 = c("#9AA7B6");
     t.muted = c("#5F6B7A");
 
-    t.accent      = c("#8AB4F8");
-    t.accent2     = c("#AECBFA");
-    t.accentSoft  = QColor(138, 180, 248, 36);
-    t.accentSoft2 = QColor(138, 180, 248, 66);
+    t.accent      = c("#3B82F6");
+    t.accent2     = c("#60A5FA");
+    t.accentSoft  = QColor(59, 130, 246, 34);
+    t.accentSoft2 = QColor(59, 130, 246, 62);
 
-    t.success     = c("#81C995");
-    t.successSoft = QColor(129, 201, 149, 31);
-    t.warning     = c("#FDD663");
-    t.warningSoft = QColor(253, 214, 99, 31);
-    t.danger      = c("#F28B82");
-    t.dangerSoft  = QColor(242, 139, 130, 31);
+    t.success     = c("#22C55E");
+    t.successSoft = QColor(34, 197, 94, 30);
+    t.warning     = c("#F59E0B");
+    t.warningSoft = QColor(245, 158, 11, 30);
+    t.danger      = c("#F43F5E");
+    t.dangerSoft  = QColor(244, 63, 94, 30);
 
     t.videoBg = c("#121A24");
     return t;

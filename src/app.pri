@@ -18,6 +18,7 @@ SOURCES += \
     player/video_grid.cpp \
     ui/theme.cpp \
     ui/icons.cpp \
+    ui/ui_kit.cpp \
     ui/analysis_overlay.cpp \
     ui/timeline_slider.cpp \
     ui/evidence_dialog.cpp \
@@ -27,7 +28,11 @@ SOURCES += \
     ui/device_tree_view.cpp \
     ui/ptz_panel.cpp \
     ui/video_settings_page.cpp \
-    ui/settings_dialog.cpp
+    ui/settings_dialog.cpp \
+    train/dataset_store.cpp \
+    train/annotation_canvas.cpp \
+    train/training_tool_window.cpp \
+    train/model_registry.cpp
 
 HEADERS += \
     app/PlayerWindow.h \
@@ -51,6 +56,7 @@ HEADERS += \
     player/video_grid.h \
     ui/theme.h \
     ui/icons.h \
+    ui/ui_kit.h \
     ui/analysis_overlay.h \
     ui/timeline_slider.h \
     ui/evidence_dialog.h \
@@ -60,7 +66,11 @@ HEADERS += \
     ui/device_tree_view.h \
     ui/ptz_panel.h \
     ui/video_settings_page.h \
-    ui/settings_dialog.h
+    ui/settings_dialog.h \
+    train/dataset_store.h \
+    train/annotation_canvas.h \
+    train/training_tool_window.h \
+    train/model_registry.h
 
 # ---- Media engine implementations (guarded by app.pro CONFIG) ----
 contains(DEFINES, ZP_WITH_MPV) {

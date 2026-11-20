@@ -122,6 +122,11 @@ private:
     QWidget *shotTarget() const
     {
         if (QWidget *modal = QApplication::activeModalWidget()) return modal;
+        // The training tool is a non-modal window; give it priority so it can
+        // be captured headlessly (ZP_TRAINTOOL + ZP_SHOT).
+        for (QWidget *w : QApplication::topLevelWidgets()) {
+            if (w->isVisible() && w->objectName() == QLatin1String("TrainingTool")) return w;
+        }
         if (m_player) return m_player;
         if (m_login) return m_login;
         return nullptr;
@@ -256,7 +261,10 @@ int main(int argc, char *argv[])
     qRegisterMetaType<zp::AnalysisResult>("zp::AnalysisResult");
 
     zp::ThemeManager::instance().apply(app);
-    zp::ThemeManager::instance().setPreset(zp::SessionManager::instance().theme());
+    // Dev: ZP_THEME=light|dark pins the theme for headless screenshots.
+    const QString themeOverride = qEnvironmentVariable("ZP_THEME");
+    zp::ThemeManager::instance().setPreset(
+        themeOverride.isEmpty() ? zp::SessionManager::instance().theme() : themeOverride);
 
     AppController controller(app);
     controller.start();

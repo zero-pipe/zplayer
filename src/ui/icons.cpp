@@ -385,6 +385,66 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(9, 15);  path.lineTo(9, 21);    // bottom row column split
         path.moveTo(15, 9);  path.lineTo(21, 9);    // right column split
         break;
+    case Queue:
+        // Repository/rows: stacked horizontal rows with end caps.
+        path.addRoundedRect(QRectF(3, 4, 18, 16), 2, 2);
+        path.moveTo(3, 9.3);  path.lineTo(21, 9.3);
+        path.moveTo(3, 14.6); path.lineTo(21, 14.6);
+        break;
+    case Annotate:
+        // Pen.
+        path.moveTo(15.2, 5.2);
+        path.lineTo(18.8, 8.8);
+        path.moveTo(4.5, 19.5);
+        path.lineTo(5.2, 15.4);
+        path.lineTo(15.2, 5.4);
+        path.lineTo(18.6, 8.8);
+        path.lineTo(8.6, 18.8);
+        path.closeSubpath();
+        break;
+    case CheckBadge:
+        path.addEllipse(QPointF(12, 12), 8.5, 8.5);
+        path.moveTo(8, 12);  path.lineTo(11, 15); path.lineTo(16.5, 9);
+        break;
+    case Bolt:
+        path.moveTo(13, 3);
+        path.lineTo(6, 13.5);
+        path.lineTo(11, 13.5);
+        path.lineTo(10.5, 21);
+        path.lineTo(18, 10.5);
+        path.lineTo(13, 10.5);
+        path.closeSubpath();
+        break;
+    case Chart:
+        path.moveTo(4, 20);  path.lineTo(20, 20);
+        path.moveTo(6.5, 20);  path.lineTo(6.5, 12);
+        path.moveTo(12, 20);   path.lineTo(12, 7);
+        path.moveTo(17.5, 20); path.lineTo(17.5, 10);
+        break;
+    case Upload:
+        path.moveTo(12, 20);   path.lineTo(12, 9);
+        path.moveTo(8, 13);    path.lineTo(12, 9); path.lineTo(16, 13);
+        path.moveTo(4.5, 8);   path.lineTo(4.5, 4.5);
+        path.lineTo(19.5, 4.5); path.lineTo(19.5, 8);
+        break;
+    case ArrowLeft:
+        path.moveTo(19, 12);   path.lineTo(5, 12);
+        path.moveTo(11, 6);    path.lineTo(5, 12); path.lineTo(11, 18);
+        break;
+    case Copy:
+        path.addRoundedRect(QRectF(8, 8, 12, 12), 2, 2);
+        path.moveTo(16, 8);    path.lineTo(16, 5.5);
+        path.cubicTo(16, 4.7, 15.3, 4, 14.5, 4);
+        path.lineTo(5.5, 4);   path.cubicTo(4.7, 4, 4, 4.7, 4, 5.5);
+        path.lineTo(4, 14.5);  path.cubicTo(4, 15.3, 4.7, 16, 5.5, 16);
+        path.lineTo(8, 16);
+        break;
+    case Layers:
+        path.moveTo(12, 3);    path.lineTo(21, 8);  path.lineTo(12, 13);
+        path.lineTo(3, 8);     path.closeSubpath();
+        path.moveTo(3, 12);    path.lineTo(12, 17); path.lineTo(21, 12);
+        path.moveTo(3, 16);    path.lineTo(12, 21); path.lineTo(21, 16);
+        break;
     }
     strokePath(p, path, color, w);
     return pm;

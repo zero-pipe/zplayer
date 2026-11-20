@@ -1,4 +1,5 @@
 #include "player/video_tile.h"
+#include "train/dataset_store.h"
 #include "player/media_factory.h"
 #include "player/shaders.h"
 #include "ui/analysis_overlay.h"
@@ -232,6 +233,22 @@ void VideoTile::takeSnapshot()
         QStringLiteral("%1_%2.png").arg(safe, stamp));
     const bool ok = m_player->grabSnapshot(path);
     emit snapshotTaken(m_channel, path, ok);
+}
+
+void VideoTile::captureSample(const QString &reason)
+{
+    if (!m_player || m_lastBoxes.isEmpty()) {
+        emit sampleCaptured(m_channel, false);
+        return;
+    }
+    DatasetStore &ds = DatasetStore::instance();
+    const QString name = m_name.isEmpty() ? m_channel.channelId : m_name;
+    const QString path = ds.newFramePath(name);
+    const bool ok = m_player->grabSnapshot(path);
+    if (ok) {
+        ds.add(path, name, m_capturePts, reason, m_lastBoxes);
+    }
+    emit sampleCaptured(m_channel, ok);
 }
 
 void VideoTile::showConnecting(const QString &text)
@@ -988,6 +1005,10 @@ void VideoTile::updateTransportUi()
 // ---------------------------------------------------------------------------
 void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
 {
+    // Remember the latest result so a failure sample can be captured on demand.
+    m_lastBoxes = result.boxes;
+    m_capturePts = result.pts;
+
     // Detection boxes are only drawn while AI check is enabled; switching it
     // off clears the overlay. The analysis pipeline keeps running so the
     // on-demand 智能检索 (scan) and evidence export still work.
@@ -1024,6 +1045,25 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
     }
     updateAiSkip(result.pts, result.boxes);
     updateEvidence(result.pts, result.boxes);
+
+    // Auto-collect "hard" samples: a plausible but low-confidence box (below
+    // the display threshold) is exactly what retraining benefits from most.
+    // Throttled per tile so a busy scene cannot flood the dataset.
+    if (!m_scanning && m_state == Playing && m_player
+        && m_player->supportsFrameTap()) {
+        bool suspicious = false;
+        for (const AnalysisBox &b : result.boxes) {
+            if (b.score >= 0.15f && b.score < m_aiMinScore) {
+                suspicious = true;
+                break;
+            }
+        }
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (suspicious && now - m_lastCaptureMs > 6000) {
+            m_lastCaptureMs = now;
+            captureSample(QStringLiteral("low_conf"));
+        }
+    }
 }
 
 void VideoTile::setAiSkipEnabled(bool on)

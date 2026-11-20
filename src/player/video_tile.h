@@ -88,6 +88,9 @@ public:
     void setZoomEnabled(bool on);           // same as clicking 放大
     void setSharpenEnabled(bool on);        // same as clicking 超分
     void setDenoiseEnabled(bool on);        // same as clicking 语音降噪
+    // Save the current frame + last detection boxes into the local dataset
+    // (failed-sample collection). reason = "manual" | "low_conf".
+    void captureSample(const QString &reason = QStringLiteral("manual"));
 
     // Live preview (platform stream) vs on-demand file. The PTZ panel only
     // makes sense for live streams; transport controls only for files.
@@ -108,6 +111,8 @@ signals:
     void maximizeRequested(const zp::ChannelRef &ch);
     // Emitted after the footer's snapshot action. path is where it was saved.
     void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
+    // Emitted after a failed-sample capture into the local dataset.
+    void sampleCaptured(const zp::ChannelRef &ch, bool ok);
     // User pressed the evidence button; the window picks a folder, then calls
     // exportEvidence() and reports the result.
     void evidenceExportRequested(const zp::ChannelRef &ch);
@@ -227,6 +232,9 @@ private:
     bool m_aiSkipping = false;        // a skip just happened, awaiting a hit
     QSet<int> m_aiClasses;            // class ids that count as "present"
     float m_aiMinScore = 0.80f;       // 相似度阈值: boxes below this are ignored
+    QVector<AnalysisBox> m_lastBoxes; // last detection result (for capture)
+    double m_capturePts = -1.0;       // media time of the captured frame
+    qint64 m_lastCaptureMs = 0;        // throttle for auto failed-sample capture
     qint64 m_lastPresenceMs = 0;
     qint64 m_lastSeekMs = 0;
 

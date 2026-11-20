@@ -1,6 +1,7 @@
 # build outputs
 /build/
 /out/
+/zplayer/
 
 # vendored 3rd-party runtimes (large; only headers/.pri/.lib are tracked).
 # qtav-sdk is x86-only and unused in the x64 mainline -> ignored wholesale.
@@ -30,6 +31,8 @@ Makefile*
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
+# ...except the hand-written widget kit (not a Qt Designer form)
+!src/ui/ui_kit.h
 
 # binaries
 *.exe

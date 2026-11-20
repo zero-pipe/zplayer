@@ -11,6 +11,9 @@ class QLineEdit;
 class QToolButton;
 class QButtonGroup;
 class QSizeGrip;
+class QTabWidget;
+class QScrollArea;
+class QVBoxLayout;
 QT_END_NAMESPACE
 
 namespace zp {
@@ -22,6 +25,7 @@ class PtzPanel;
 class Toast;
 class AnalysisService;
 class IFrameAnalyzer;
+class TrainingToolWindow;
 
 class PlayerWindow : public QMainWindow {
     Q_OBJECT
@@ -72,6 +76,11 @@ private:
     void toastInfo(const QString &text);
     void toastSuccess(const QString &text);
     void toastError(const QString &text);
+    void openTrainingTool();
+    void updateSampleBadge();
+    void refreshSampleList();
+    void selectSampleTab();
+    void reloadDetector();
 
     // Frameless custom title bar helpers.
     void toggleMaximize();
@@ -84,6 +93,12 @@ private:
     VideoGrid *m_grid = nullptr;
     PtzPanel *m_ptz = nullptr;
     Toast *m_toast = nullptr;
+    QTabWidget *m_toolDock = nullptr;
+    QScrollArea *m_sampleScroll = nullptr;
+    QVBoxLayout *m_sampleLay = nullptr;   // holds the sample cards + trailing stretch
+    int m_sampleShown = -1;          // last rendered sample count
+    QToolButton *m_sampleBtn = nullptr;
+    TrainingToolWindow *m_trainTool = nullptr;
     AnalysisService *m_analysis = nullptr;   // per-window AI scheduler
     IFrameAnalyzer *m_detector = nullptr;    // owned; YOLO analyzer (may be null)
     IFrameAnalyzer *m_ocr = nullptr;         // owned; scene-text OCR (may be null)

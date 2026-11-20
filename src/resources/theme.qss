@@ -248,6 +248,161 @@ QTreeView#DeviceTree::item:pressed {
 }
 QTreeView#DeviceTree::branch { background: transparent; }
 
+/* Right tool dock: PTZ + local failed samples share one tabbed panel. */
+QTabWidget#ToolDock::pane {
+    border: none;
+    border-left: 1px solid %borderStrong%;
+    background: %bgPanel%;
+    top: -1px;
+}
+QTabWidget#ToolDock QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: %text2%;
+    padding: 9px 16px;
+    font-size: 12.5px;
+}
+QTabWidget#ToolDock QTabBar::tab:hover { color: %accent%; }
+QTabWidget#ToolDock QTabBar::tab:selected {
+    color: %accent%;
+    border-bottom: 2px solid %accent%;
+    font-weight: 600;
+}
+QTabWidget#ToolDock QTabBar::tab:disabled { color: %muted%; }
+
+/* ---- Product UI cards (redisign) ---- */
+QListWidget#SampleCards {
+    background: transparent;
+    border: none;
+    outline: none;
+}
+QListWidget#SampleCards::item {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 3px 2px;
+    color: %text%;
+    font-size: 12px;
+}
+QListWidget#SampleCards::item:hover { border-color: %accent%; }
+QListWidget#SampleCards::item:selected {
+    background: %accentSoft%;
+    border-color: %accent%;
+    color: %accent%;
+}
+
+/* Queue as a clean table */
+QTableWidget#QueueTable {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 10px;
+    gridline-color: %divider%;
+    selection-background-color: %accentSoft%;
+    selection-color: %text%;
+    outline: none;
+}
+QTableWidget#QueueTable::item {
+    padding: 7px 8px;
+    border-bottom: 1px solid %divider%;
+}
+QTableWidget#QueueTable QHeaderView::section {
+    background: %bgInput%;
+    color: %text2%;
+    border: none;
+    border-bottom: 1px solid %border%;
+    padding: 7px 8px;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+/* Training progress + dark console */
+QProgressBar#TrainProgress {
+    border: 1px solid %border%;
+    border-radius: 6px;
+    background: %bgInput%;
+    height: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: %text2%;
+}
+QProgressBar#TrainProgress::chunk {
+    background: %accent%;
+    border-radius: 6px;
+}
+QPlainTextEdit#TrainLog {
+    background: transparent;
+    color: #CBD5E1;
+    border: none;
+    font-family: %monoFamily%;
+    font-size: 11.5px;
+    padding: 0;
+    selection-background-color: #1E40AF;
+}
+QFrame#KpiCard {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 10px;
+}
+QLabel#KpiTitle { color: %text2%; font-size: 11px; font-weight: 600; }
+QLabel#KpiValue { color: %text%; font-size: 20px; font-weight: 700; }
+
+/* Publish export-format cards */
+QFrame#FmtCard, QFrame#FmtCardOn {
+    border-radius: 10px;
+}
+QFrame#FmtCard {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+}
+QFrame#FmtCardOn {
+    background: %accentSoft%;
+    border: 2px solid %accent%;
+}
+QLabel#FmtTitle { color: %text%; font-size: 12.5px; font-weight: 700; }
+QLabel#FmtSub { color: %text2%; font-size: 11px; }
+
+/* Training command box + console header */
+QLineEdit#CmdBox {
+    background: #0B1220;
+    color: #CBD5E1;
+    border: 1px solid #1E293B;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-family: %monoFamily%;
+    font-size: 12px;
+}
+QLabel#ConsoleHeader {
+    color: %text2%;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 2px 0 2px;
+}
+
+/* Version list as cards */
+QListWidget#VersionList {
+    background: transparent;
+    border: none;
+    outline: none;
+}
+QListWidget#VersionList::item {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+    padding: 9px 11px;
+    margin: 3px 2px;
+    color: %text%;
+    font-size: 12px;
+}
+QListWidget#VersionList::item:hover { border-color: %accent%; }
+QListWidget#VersionList::item:selected {
+    background: %accentSoft%;
+    border-color: %accent%;
+    color: %accent%;
+}
+
 QSplitter#BodySplitter::handle { background: %borderStrong%; }
 
 /* PTZ collapse handle tab on the panel's left edge */
@@ -610,3 +765,234 @@ QLabel#VideoHint {
     padding: 6px 14px;
     font-size: 12px;
 }
+
+/* =====================================================================
+   AI 样本采集 / 标注 / 训练闭环  (docs/zeroo_ai_prototype)
+   ===================================================================== */
+
+/* ---- soft status chips ---- */
+QLabel#Chip {
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+}
+QLabel#Chip[kind="ok"]    { background: %successSoft%; color: %success%; }
+QLabel#Chip[kind="warn"]  { background: %warningSoft%; color: %warning%; }
+QLabel#Chip[kind="bad"]   { background: %dangerSoft%;  color: %danger%; }
+QLabel#Chip[kind="info"]  { background: %accentSoft%;  color: %accent%; }
+QLabel#Chip[kind="muted"] { background: %bgInput%; color: %muted%; border-color: %border%; }
+QLabel#Chip[mono="true"]  { font-family: %monoFamily%; }
+
+/* ---- player right dock: sample cards ---- */
+QScrollArea#SampleScroll { background: transparent; border: none; }
+QScrollArea#SampleScroll > QWidget > QWidget { background: transparent; }
+QWidget#SampleListHost { background: transparent; }
+QLabel#SampleEmpty { color: %muted%; font-size: 12px; }
+
+QFrame#SampleCard {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+}
+QFrame#SampleCard:hover { border-color: %accent%; }
+QFrame#SampleCard[done="true"] { background: %bgRoot%; }
+QLabel#SampleName {
+    color: %text%;
+    font-family: %monoFamily%;
+    font-size: 12px;
+    font-weight: 700;
+}
+QLabel#SampleName[done="true"] { color: %muted%; font-weight: 600; }
+
+/* ---- training workbench ---- */
+QDialog#TrainingTool { background: %bgRoot%; }
+
+QWidget#TrainNav {
+    background: %bgPanel%;
+    border-right: 1px solid %border%;
+}
+QPushButton#NavItem {
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: %text2%;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 12.5px;
+}
+QPushButton#NavItem:hover { background: %bgHover%; color: %text%; }
+QPushButton#NavItem:checked { background: %accentSoft%; color: %accent%; font-weight: 600; }
+QLabel#NavBadge {
+    background: %accentSoft2%;
+    color: %accent%;
+    border-radius: 8px;
+    padding: 1px 6px;
+    font-family: %monoFamily%;
+    font-size: 10px;
+    font-weight: 700;
+}
+QLabel#NavDot {
+    background: %success%;
+    border-radius: 3px;
+    min-width: 6px; max-width: 6px;
+    min-height: 6px; max-height: 6px;
+}
+QFrame#NavFooter {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+}
+QLabel#NavFootKey { color: %muted%; font-size: 10px; }
+QLabel#NavFootVal {
+    color: %text2%;
+    font-family: %monoFamily%;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QFrame#PanelCard {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 10px;
+}
+QLabel#PageTitle { color: %text%; font-size: 14px; font-weight: 700; }
+QLabel#PageSub   { color: %muted%; font-size: 11px; font-family: %monoFamily%; }
+QLabel#CardTitle { color: %text%; font-size: 12px; font-weight: 700; }
+QLabel#FieldLabel { color: %text2%; font-size: 11px; font-weight: 600; }
+QLabel#MonoValue { color: %text%; font-family: %monoFamily%; font-size: 12px; font-weight: 600; }
+
+/* inputs */
+QLineEdit#SearchInput {
+    background: %bgPanel%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: %text%;
+    font-size: 12px;
+}
+QLineEdit#SearchInput:focus { border-color: %accent%; }
+QSpinBox#ParamBox, QLineEdit#ParamBox, QComboBox#ParamCombo {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: %text%;
+    font-family: %monoFamily%;
+    font-size: 12px;
+    font-weight: 600;
+}
+QSpinBox#ParamBox:focus, QLineEdit#ParamBox:focus, QComboBox#ParamCombo:focus {
+    border-color: %accent%;
+}
+QComboBox#ParamCombo::drop-down { border: none; width: 20px; }
+QComboBox#ParamCombo QAbstractItemView {
+    background: %bgElevated%;
+    border: 1px solid %border%;
+    border-radius: 6px;
+    color: %text%;
+    selection-background-color: %accentSoft%;
+    selection-color: %accent%;
+    outline: none;
+}
+QLineEdit#CmdBox {
+    background: #0B1220;
+    border: 1px solid #1E293B;
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: #CBD5E1;
+    font-family: %monoFamily%;
+    font-size: 11px;
+    selection-background-color: #1E40AF;
+}
+
+/* dark training console */
+QFrame#ConsoleCard {
+    background: #0B1220;
+    border: 1px solid #1E293B;
+    border-radius: 10px;
+}
+QLabel#ConsoleHead {
+    color: #64748B;
+    font-family: %monoFamily%;
+    font-size: 10px;
+}
+QLabel#ConsoleBadge[idle="true"]  { color: #64748B; font-family: %monoFamily%; font-size: 10px; }
+QLabel#ConsoleBadge[idle="false"] { color: #34D399; font-family: %monoFamily%; font-size: 10px; font-weight: 700; }
+
+/* annotation page */
+QWidget#AnnoBar {
+    background: %bgPanel%;
+    border-bottom: 1px solid %border%;
+}
+QLabel#AnnoName {
+    color: %text%;
+    font-family: %monoFamily%;
+    font-size: 12px;
+    font-weight: 700;
+}
+QLabel#AnnoIndex { color: %text2%; font-family: %monoFamily%; font-size: 11px; }
+QWidget#AnnoInspector {
+    background: %bgPanel%;
+    border-left: 1px solid %border%;
+}
+QListWidget#BoxList {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+    outline: none;
+    padding: 3px;
+}
+QListWidget#BoxList::item {
+    color: %text2%;
+    padding: 5px 7px;
+    border-radius: 6px;
+    font-size: 11.5px;
+}
+QListWidget#BoxList::item:hover { background: %bgHover%; color: %text%; }
+QListWidget#BoxList::item:selected { background: %accentSoft%; color: %accent%; }
+QToolButton#ClassBtn {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 6px;
+    color: %text2%;
+    padding: 5px 8px;
+    font-size: 11px;
+    text-align: left;
+}
+QToolButton#ClassBtn:hover { border-color: %accent%; color: %accent%; }
+QToolButton#ClassBtn:checked {
+    background: %accent%;
+    border-color: %accent%;
+    color: #FFFFFF;
+    font-weight: 700;
+}
+QPushButton#LinkBtn {
+    background: transparent;
+    border: none;
+    color: %accent%;
+    font-size: 11px;
+    padding: 0;
+}
+QPushButton#LinkBtn:hover { color: %accent2%; }
+
+/* thin distribution / comparison bars (chunk colour set inline) */
+QProgressBar#DistBar {
+    background: %bgInput%;
+    border: none;
+    border-radius: 4px;
+    min-height: 8px;
+    max-height: 8px;
+}
+QProgressBar#DistBar::chunk { border-radius: 4px; }
+QWidget#AnnoFoot {
+    background: %bgPanel%;
+    border-top: 1px solid %border%;
+}
+QComboBox#ParamCombo::down-arrow {
+    image: url(:/resources/chevron-down.svg);
+    width: 10px;
+    height: 10px;
+}
+QComboBox#ParamCombo::down-arrow:on { image: url(:/resources/chevron-down.svg); }

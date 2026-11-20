@@ -7,11 +7,14 @@
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
 #include "ui/evidence_dialog.h"
+#include "ui/ui_kit.h"
 #include "player/video_grid.h"
 #include "player/video_tile.h"
 #include "analysis/analysis_service.h"
 #include "analysis/ocr_detector.h"
 #include "analysis/yolo_detector.h"
+#include "train/dataset_store.h"
+#include "train/training_tool_window.h"
 
 #include <QAction>
 #include <QApplication>
@@ -20,10 +23,16 @@
 #include <QDropEvent>
 #include <QDebug>
 #include <QEvent>
+#include <QColor>
+#include <QFrame>
+#include <QIcon>
+#include <QPainter>
+#include <QPixmap>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMimeData>
@@ -33,6 +42,8 @@
 #include <QSizeGrip>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QTabWidget>
+#include <QScrollArea>
 #include <QTimer>
 #include <QToolButton>
 #include <QToolTip>
@@ -99,6 +110,28 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     addAction(aiAct);
 
     buildUi();
+
+    updateSampleBadge();
+    // Dev: ZP_SAMPLETAB=1 opens on the sample tab (headless screenshots).
+    if (qEnvironmentVariableIsSet("ZP_SAMPLETAB")) {
+        selectSampleTab();
+    }
+    auto *sampleTimer = new QTimer(this);
+    sampleTimer->setInterval(4000);
+    connect(sampleTimer, &QTimer::timeout, this, &PlayerWindow::updateSampleBadge);
+    sampleTimer->start();
+
+    // Dev: ZP_TRAINTOOL=1 opens the training tool shortly after start so it
+    // can be exercised headlessly. ZP_TRAINPAGE=<0..5> selects a stage.
+    if (qEnvironmentVariableIsSet("ZP_TRAINTOOL")) {
+        QTimer::singleShot(1500, this, [this]() {
+            openTrainingTool();
+            const QString page = qEnvironmentVariable("ZP_TRAINPAGE");
+            if (m_trainTool && !page.isEmpty()) {
+                m_trainTool->goToStage(page.toInt());
+            }
+        });
+    }
 
     // Frameless windows lose the native resize border; a floating grip in the
     // bottom-right corner keeps manual resizing available.
@@ -248,6 +281,33 @@ void PlayerWindow::buildUi()
     tb->addWidget(appName);
 
     tb->addStretch(1);
+
+    // Failed-sample entry: opens the independent local training/labelling tool.
+    m_sampleBtn = new QToolButton(topBar);
+    m_sampleBtn->setObjectName(QStringLiteral("ToolChip"));
+    m_sampleBtn->setCursor(Qt::PointingHandCursor);
+    m_sampleBtn->setToolTip(tr("失败样本 · 标注 / 训练"));
+    m_sampleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    connect(m_sampleBtn, &QToolButton::clicked, this, &PlayerWindow::selectSampleTab);
+    tb->addWidget(m_sampleBtn);
+
+    auto *captureBtn = new QToolButton(topBar);
+    captureBtn->setObjectName(QStringLiteral("ToolChip"));
+    captureBtn->setText(tr("＋样本"));
+    captureBtn->setToolTip(tr("把当前画面加入待标注"));
+    captureBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    captureBtn->setCursor(Qt::PointingHandCursor);
+    connect(captureBtn, &QToolButton::clicked, this, [this]() {
+        VideoTile *t = m_grid ? m_grid->activeTile() : nullptr;
+        if (!t) {
+            toastInfo(tr("请先选择一路画面"));
+            return;
+        }
+        t->captureSample(QStringLiteral("manual"));
+        updateSampleBadge();
+    });
+    tb->addWidget(captureBtn);
+    tb->addSpacing(4);
 
     // Theme quick-toggle (sun/moon) — icon button, toggles directly.
     auto *themeBtn = new QToolButton(topBar);
@@ -409,23 +469,55 @@ void PlayerWindow::buildUi()
     centerLay->addWidget(m_grid, 1);
 
     m_ptz = new PtzPanel(body);
-    m_ptz->setMinimumWidth(260);
+    m_ptz->setMinimumWidth(250);
     m_ptz->setMaximumWidth(360);
-    // Hidden until a PTZ-capable live channel is actually playing (see
-    // updatePtzPanel). An empty or irrelevant panel just wastes space and
-    // invites mis-clicks.
-    m_ptz->hide();
+
+    // Right tool dock: the PTZ controls and the local failed-sample list share
+    // one panel (tabs), instead of opening extra windows.
+    m_toolDock = new QTabWidget(body);
+    m_toolDock->setObjectName(QStringLiteral("ToolDock"));
+    m_toolDock->setDocumentMode(true);
+    m_toolDock->setMinimumWidth(270);
+    m_toolDock->setMaximumWidth(380);
+    m_toolDock->addTab(m_ptz, tr("云台"));
+
+    auto *samplePage = new QWidget(m_toolDock);
+    auto *sampleLay = new QVBoxLayout(samplePage);
+    sampleLay->setContentsMargins(10, 10, 10, 10);
+    sampleLay->setSpacing(8);
+
+    // Card list: one compact card per captured sample (see refreshSampleList).
+    m_sampleScroll = new QScrollArea(samplePage);
+    m_sampleScroll->setObjectName(QStringLiteral("SampleScroll"));
+    m_sampleScroll->setWidgetResizable(true);
+    m_sampleScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_sampleScroll->setFrameShape(QFrame::NoFrame);
+    auto *sampleHost = new QWidget(m_sampleScroll);
+    sampleHost->setObjectName(QStringLiteral("SampleListHost"));
+    m_sampleLay = new QVBoxLayout(sampleHost);
+    m_sampleLay->setContentsMargins(0, 0, 4, 0);
+    m_sampleLay->setSpacing(8);
+    m_sampleLay->addStretch(1);
+    m_sampleScroll->setWidget(sampleHost);
+    sampleLay->addWidget(m_sampleScroll, 1);
+
+    auto *openBtn = new QPushButton(tr("打开标注 / 训练工具 →"), samplePage);
+    openBtn->setObjectName(QStringLiteral("PrimaryButton"));
+    openBtn->setCursor(Qt::PointingHandCursor);
+    connect(openBtn, &QPushButton::clicked, this, &PlayerWindow::openTrainingTool);
+    sampleLay->addWidget(openBtn);
+    m_toolDock->addTab(samplePage, tr("样本"));
 
     auto *splitter = new QSplitter(Qt::Horizontal, body);
     splitter->setObjectName(QStringLiteral("BodySplitter"));
     splitter->setHandleWidth(1);
     splitter->addWidget(m_tree);
     splitter->addWidget(centerCol);
-    splitter->addWidget(m_ptz);
+    splitter->addWidget(m_toolDock);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setSizes({280, 864, 300});
+    splitter->setSizes({280, 840, 320});
 
     bodyLay->addWidget(splitter);
     rootLay->addWidget(body, 1);
@@ -505,6 +597,169 @@ void PlayerWindow::openSettings()
     dlg.exec();
 }
 
+void PlayerWindow::openTrainingTool()
+{
+    if (!m_trainTool) {
+        m_trainTool = new TrainingToolWindow(this);
+        m_trainTool->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_trainTool, &TrainingToolWindow::sampleCountChanged, this,
+                [this](int) {
+                    m_sampleShown = -1;
+                    updateSampleBadge();
+                });
+        connect(m_trainTool, &TrainingToolWindow::modelVersionChanged, this,
+                [this](const QString &) { reloadDetector(); });
+        connect(m_trainTool, &QObject::destroyed, this, [this]() {
+            m_trainTool = nullptr;
+            m_sampleShown = -1;   // labels may have changed while it was open
+            updateSampleBadge();
+        });
+    }
+    m_trainTool->show();
+    m_trainTool->raise();
+    m_trainTool->activateWindow();
+}
+
+void PlayerWindow::updateSampleBadge()
+{
+    const int n = DatasetStore::instance().count();
+    if (m_sampleBtn) {
+        m_sampleBtn->setText(n > 0 ? tr("样本 %1").arg(n) : tr("样本"));
+    }
+    if (m_toolDock) {
+        m_toolDock->setTabText(1, n > 0 ? tr("样本 %1").arg(n) : tr("样本"));
+    }
+    if (n != m_sampleShown) {
+        m_sampleShown = n;
+        refreshSampleList();
+    }
+}
+
+void PlayerWindow::refreshSampleList()
+{
+    if (!m_sampleLay) {
+        return;
+    }
+    // Drop every card, keep the trailing stretch.
+    while (m_sampleLay->count() > 1) {
+        QLayoutItem *item = m_sampleLay->takeAt(0);
+        if (QWidget *w = item->widget()) {
+            w->deleteLater();
+        }
+        delete item;
+    }
+
+    const QVector<SampleRecord> recs = DatasetStore::instance().load();
+    const int insertAt = m_sampleLay->count() - 1;   // before the stretch
+    if (recs.isEmpty()) {
+        auto *empty = new QLabel(
+            tr("暂无失败样本。\nAI 低置信帧或点顶栏「＋样本」后会出现在这里。"),
+            m_sampleLay->parentWidget());
+        empty->setObjectName(QStringLiteral("SampleEmpty"));
+        empty->setWordWrap(true);
+        empty->setAlignment(Qt::AlignCenter);
+        empty->setContentsMargins(8, 28, 8, 28);
+        m_sampleLay->insertWidget(insertAt, empty);
+        return;
+    }
+
+    int idx = 0;
+    for (const SampleRecord &r : recs) {
+        int score = 0;
+        for (const AnalysisBox &b : r.boxes) {
+            score = qMax(score, int(b.score * 100));
+        }
+
+        auto *card = new QFrame(m_sampleLay->parentWidget());
+        card->setObjectName(QStringLiteral("SampleCard"));
+        card->setProperty("done", r.done);
+        card->setProperty("sampleId", r.id);
+        card->setCursor(Qt::PointingHandCursor);
+        card->setToolTip(tr("点击进入标注"));
+        card->installEventFilter(this);
+
+        auto *cv = new QVBoxLayout(card);
+        cv->setContentsMargins(10, 8, 10, 8);
+        cv->setSpacing(6);
+
+        auto *row1 = new QHBoxLayout();
+        row1->setSpacing(6);
+        auto *name = new uikit::ElidedLabel(card);
+        name->setObjectName(QStringLiteral("SampleName"));
+        name->setProperty("done", r.done);
+        name->setFullText(r.channel);
+        name->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        row1->addWidget(name, 1);
+        if (score > 0) {
+            const uikit::ChipKind kind = score >= 70 ? uikit::ChipOk
+                                        : score < 40 ? uikit::ChipBad
+                                                     : uikit::ChipWarn;
+            auto *conf = uikit::makeChip(QStringLiteral("%1%").arg(score), kind, card);
+            conf->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            row1->addWidget(conf);
+        }
+        cv->addLayout(row1);
+
+        auto *row2 = new QHBoxLayout();
+        row2->setSpacing(6);
+        auto *reason = uikit::makeChip(r.reason.isEmpty() ? tr("manual") : r.reason,
+                                       r.done ? uikit::ChipMuted : uikit::ChipWarn, card);
+        reason->setProperty("mono", true);
+        reason->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        auto *status = uikit::makeChip(r.done ? tr("已标注") : tr("待标注"),
+                                       r.done ? uikit::ChipInfo : uikit::ChipWarn, card);
+        status->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        row2->addWidget(reason);
+        row2->addStretch(1);
+        row2->addWidget(status);
+        cv->addLayout(row2);
+
+        m_sampleLay->insertWidget(insertAt + idx, card);
+        ++idx;
+    }
+}
+
+void PlayerWindow::selectSampleTab()
+{
+    if (m_toolDock) {
+        m_toolDock->setCurrentIndex(1);
+        m_toolDock->show();
+    }
+}
+
+void PlayerWindow::reloadDetector()
+{
+    if (!m_analysis) {
+        return;
+    }
+    if (createDebugStatsAnalyzer()) {
+        return;   // dev stats analyzer is in use; keep it
+    }
+    QString modelPath, classesPath, findErr;
+    if (!findDefaultYoloModel(&modelPath, &classesPath, &findErr)) {
+        toastError(tr("模型切换失败：%1").arg(findErr));
+        return;
+    }
+    auto *det = new YoloDetector();
+    QString loadErr;
+    if (!det->load(modelPath, classesPath, &loadErr)) {
+        delete det;
+        toastError(tr("模型加载失败：%1").arg(loadErr));
+        return;
+    }
+    IFrameAnalyzer *old = m_detector;
+    m_detector = det;
+    m_analysis->setAnalyzer(det);
+    qInfo().noquote() << "[ai] detector reloaded:" << modelPath
+                      << "backend=" << det->backendName();
+    const QString ver = QFileInfo(modelPath).dir().dirName();
+    toastSuccess(tr("模型已切换：%1").arg(ver));
+    if (old) {
+        // Give any in-flight analyze() on the worker time to finish.
+        QTimer::singleShot(3000, this, [old]() { delete old; });
+    }
+}
+
 void PlayerWindow::setActiveLayoutButton(int index)
 {
     if (QAbstractButton *b = m_layoutGroup->button(index)) {
@@ -547,6 +802,23 @@ void PlayerWindow::resizeEvent(QResizeEvent *event)
 
 bool PlayerWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // Sample card in the right dock: a click opens the training tool straight
+    // on that record (mirrors the prototype's card -> workbench jump).
+    if (auto *w = qobject_cast<QWidget *>(watched)) {
+        if (w->objectName() == QLatin1String("SampleCard")
+            && event->type() == QEvent::MouseButtonRelease) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                const QString id = w->property("sampleId").toString();
+                openTrainingTool();
+                if (m_trainTool) {
+                    m_trainTool->openRecordById(id);
+                }
+                return true;
+            }
+        }
+    }
+
     // Layout buttons: show the split count on hover for a moment, then let it
     // auto-hide after ~1.6 s even while the pointer stays on the button.
     if (auto *btn = qobject_cast<QToolButton *>(watched)) {
@@ -692,8 +964,13 @@ void PlayerWindow::updatePtzPanel()
             show = t->isPlaying() && !t->isVod();
         }
     }
-    if (m_ptz) {
-        m_ptz->setVisible(show);
+    if (m_toolDock) {
+        // The dock is always present; just enable/disable the PTZ page and
+        // fall back to the samples page when the channel has no PTZ.
+        m_toolDock->setTabEnabled(0, show);
+        if (!show && m_toolDock->currentIndex() == 0) {
+            m_toolDock->setCurrentIndex(1);
+        }
     }
 }
 
@@ -704,7 +981,7 @@ void PlayerWindow::onActiveChannelChanged(const ChannelRef &ch, const QString &n
     m_ptz->setTarget(ch, name, ptzCapable);
     updatePtzPanel();
     if (ch.isValid()) {
-        setWindowTitle(QStringLiteral("Zeroo Player — %1").arg(name));
+        setWindowTitle(QString::fromUtf8("Zeroo Player — %1").arg(name));
         statusBar()->showMessage(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));
     } else {
         setWindowTitle(QStringLiteral("Zeroo Player"));

@@ -41,7 +41,17 @@ enum Glyph {
     Layout2x2,   // 2x2 grid
     Layout3x3,   // 3x3 grid
     Layout4x4,   // 4x4 grid
-    Layout1p5    // one big pane + five small panes
+    Layout1p5,   // one big pane + five small panes
+    // Product UI glyphs (nav / actions).
+    Queue,       // stacked rows: 待标注
+    Annotate,    // pen: 标注
+    CheckBadge,  // circled check: 质检
+    Bolt,        // lightning: 训练
+    Chart,       // bars: 评估
+    Upload,      // arrow up into tray: 发布
+    ArrowLeft,   // back
+    Copy,        // overlapping sheets: 复制
+    Layers       // stacked layers: 样本
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 

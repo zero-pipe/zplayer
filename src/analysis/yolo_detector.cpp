@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextStream>
 
 #include <algorithm>
@@ -534,6 +536,31 @@ bool findDefaultYoloModel(QString *modelPath, QString *classesPath, QString *err
         if (modelPath) *modelPath = envModel;
         if (classesPath) *classesPath = qEnvironmentVariable("ZP_CLASSES");
         return true;
+    }
+
+    // A published model version (models/current.json -> models/versions/<v>)
+    // takes precedence over the bundled defaults, so publish/rollback works.
+    const QString appModels = QCoreApplication::applicationDirPath() + QStringLiteral("/models");
+    {
+        QFile cf(appModels + QStringLiteral("/current.json"));
+        if (cf.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QJsonObject o = QJsonDocument::fromJson(cf.readAll()).object();
+            const QString ver = o.value(QStringLiteral("version")).toString();
+            if (!ver.isEmpty()) {
+                const QDir vd(appModels + QStringLiteral("/versions/") + ver);
+                const QString mp = vd.filePath(QStringLiteral("model.onnx"));
+                if (QFileInfo::exists(mp)) {
+                    if (modelPath) *modelPath = mp;
+                    if (classesPath) {
+                        const QString vc = vd.filePath(QStringLiteral("classes.txt"));
+                        const QString cc = appModels + QStringLiteral("/coco.names");
+                        *classesPath = QFileInfo::exists(vc) ? vc
+                                        : (QFileInfo::exists(cc) ? cc : QString());
+                    }
+                    return true;
+                }
+            }
+        }
     }
 
     QStringList dirs;

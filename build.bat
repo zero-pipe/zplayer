@@ -46,7 +46,7 @@ if not defined QT_BIN (
 
 set "MPV_SDK=%ROOT%3rdpart\mpv-sdk"
 set "BUILDDIR=%ROOT%build"
-set "OUTBIN=%ROOT%out"
+set "OUTBIN=%ROOT%zplayer"
 
 call "%VCVARS%" || goto :err
 set "PATH=%QT_BIN%;%PATH%"
@@ -78,11 +78,16 @@ echo Deploying Qt runtime + libmpv + dependencies...
 if exist "%QT_BIN%\Qt5OpenGL.dll" copy /y "%QT_BIN%\Qt5OpenGL.dll" "%OUTBIN%" >nul
 REM libmpv + its runtime dependency DLLs (ffmpeg, libass, ...).
 if exist "%MPV_SDK%\bin\x64" copy /y "%MPV_SDK%\bin\x64\*.dll" "%OUTBIN%" >nul
-REM ONNX Runtime (DirectML) + the bundled YOLO model, so AI works from out/.
+REM ONNX Runtime (DirectML) + the bundled YOLO model, so AI works from zplayer/.
 if exist "%ROOT%3rdpart\onnxruntime\bin\*.dll" copy /y "%ROOT%3rdpart\onnxruntime\bin\*.dll" "%OUTBIN%" >nul
 if exist "%ROOT%3rdpart\models" (
     if not exist "%OUTBIN%\models" mkdir "%OUTBIN%\models"
     xcopy /y /q /e "%ROOT%3rdpart\models\*" "%OUTBIN%\models\" >nul
+)
+REM Local training scripts (ultralytics wrapper) so the "训练" page works from zplayer/.
+if exist "%ROOT%tools\train" (
+    if not exist "%OUTBIN%\tools\train" mkdir "%OUTBIN%\tools\train"
+    xcopy /y /q "%ROOT%tools\train\*" "%OUTBIN%\tools\train\" >nul
 )
 
 popd >nul
