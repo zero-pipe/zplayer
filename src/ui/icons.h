@@ -34,7 +34,8 @@ enum Glyph {
     Sparkle,     // four-point star: 画质锐化
     Wave,        // waveform with slash: 语音降噪
     SearchClock, // magnifier with clock: 智能检索
-    Export       // arrow into tray: 导出证据
+    Export,      // arrow into tray: 导出证据
+    Snapshot     // line camera: 抓图
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 

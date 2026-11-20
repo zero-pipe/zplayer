@@ -350,14 +350,17 @@ void VideoTile::buildControlBar()
         b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
-    // Consistent 16 px line icons for the action groups. Checked buttons get
-    // the accent colour through the icon's On state, without any extra code.
+    // The floating bar is always a dark glass strip (independent of the light/
+    // dark theme), so its glyphs use a fixed light palette: muted grey at rest,
+    // a soft brand blue when active. This keeps the bar readable and calm in
+    // both themes instead of dark theme-tokens sinking into the glass.
     auto barIcon = [](icons::Glyph g) {
-        const auto tk = ThemeManager::instance().tokens();
+        const QColor rest(0xC7, 0xCD, 0xD4);
+        const QColor active(0x8A, 0xB4, 0xF8);
         QIcon ic;
-        ic.addPixmap(icons::glyph(g, tk.text2, 16), QIcon::Normal, QIcon::Off);
-        ic.addPixmap(icons::glyph(g, tk.accent, 16), QIcon::Normal, QIcon::On);
-        ic.addPixmap(icons::glyph(g, tk.accent, 16), QIcon::Active, QIcon::Off);
+        ic.addPixmap(icons::glyph(g, rest, 16), QIcon::Normal, QIcon::Off);
+        ic.addPixmap(icons::glyph(g, active, 16), QIcon::Normal, QIcon::On);
+        ic.addPixmap(icons::glyph(g, active, 16), QIcon::Active, QIcon::Off);
         return ic;
     };
     auto dressBtn = [barIcon](QToolButton *b, icons::Glyph g) {
@@ -466,6 +469,10 @@ void VideoTile::buildControlBar()
         emit statusMessage(m_channel, on ? tr("AI 检查：开") : tr("AI 检查：关"));
     });
     {
+        // Persisted similarity threshold (percent). Default 80% — low-confidence
+        // boxes around 30% were too noisy to read.
+        m_aiMinScore = qBound(0.30f, QSettings().value(QStringLiteral("ai/minScorePct"), 80).toInt() / 100.0f, 0.95f);
+
         auto *aiMenu = new QMenu(m_aiBtn);
         aiMenu->addAction(tr("检查目标"))->setEnabled(false);
         auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
@@ -487,6 +494,23 @@ void VideoTile::buildControlBar()
         addTarget(tr("人"), {0}, true);
         addTarget(tr("车"), {2, 3, 5, 7}, true);
         addTarget(tr("狗"), {16}, true);
+
+        QMenu *scoreMenu = aiMenu->addMenu(tr("相似度阈值"));
+        auto *scoreGroup = new QActionGroup(scoreMenu);
+        scoreGroup->setExclusive(true);
+        const int curPct = qRound(m_aiMinScore * 100.0f);
+        for (int pct : {30, 40, 50, 60, 70, 80}) {
+            QAction *a = scoreMenu->addAction(QStringLiteral("%1%").arg(pct));
+            a->setCheckable(true);
+            a->setActionGroup(scoreGroup);
+            a->setChecked(pct == curPct);
+            connect(a, &QAction::triggered, this, [this, pct]() {
+                m_aiMinScore = pct / 100.0f;
+                QSettings().setValue(QStringLiteral("ai/minScorePct"), pct);
+                emit statusMessage(m_channel, tr("相似度阈值：%1%").arg(pct));
+            });
+        }
+
         aiMenu->addSeparator();
         QAction *skipAct = aiMenu->addAction(tr("无人时快进跳过"));
         skipAct->setCheckable(true);
@@ -605,10 +629,8 @@ void VideoTile::buildControlBar()
         }
     });
 
-    m_snapBtn = makeBtn(QString());
-    m_snapBtn->setObjectName(QStringLiteral("BarPlay"));
-    m_snapBtn->setIcon(QIcon(icons::camera(true)));
-    m_snapBtn->setIconSize(QSize(15, 15));
+    m_snapBtn = makeBtn(tr("抓图"));
+    dressBtn(m_snapBtn, icons::Snapshot);
     m_snapBtn->setToolTip(tr("抓图"));
     connect(m_snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
 
@@ -950,14 +972,28 @@ void VideoTile::updateTransportUi()
 // ---------------------------------------------------------------------------
 void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
 {
+    // Detection boxes are only drawn while AI check is enabled; switching it
+    // off clears the overlay. The analysis pipeline keeps running so the
+    // on-demand 智能检索 (scan) and evidence export still work.
     if (m_aiOverlay) {
-        m_aiOverlay->setBoxes(result.boxes, result.videoRect);
+        if (m_aiSkip) {
+            QVector<AnalysisBox> shown;
+            shown.reserve(result.boxes.size());
+            for (const AnalysisBox &b : result.boxes) {
+                if (b.score >= m_aiMinScore) {
+                    shown.append(b);
+                }
+            }
+            m_aiOverlay->setBoxes(shown, result.videoRect);
+        } else {
+            m_aiOverlay->clear();
+        }
     }
     if (m_scanning && result.pts >= 0.0) {
         PresenceSample s;
         s.t = result.pts;
         for (const AnalysisBox &b : result.boxes) {
-            if (b.score < 0.25f) {
+            if (b.score < m_aiMinScore) {
                 continue;
             }
             switch (b.classId) {
@@ -979,6 +1015,9 @@ void VideoTile::setAiSkipEnabled(bool on)
     m_aiSkip = on;
     m_lastPresenceMs = 0;
     m_lastSeekMs = 0;
+    if (!on && m_aiOverlay) {
+        m_aiOverlay->clear();   // hide boxes immediately when AI check is off
+    }
     if (m_aiBtn && m_aiBtn->isChecked() != on) {
         m_aiBtn->setChecked(on);
     }
@@ -996,7 +1035,7 @@ void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)
 
     bool present = false;
     for (const AnalysisBox &b : boxes) {
-        if (b.score >= 0.25f && m_aiClasses.contains(b.classId)) {
+        if (b.score >= m_aiMinScore && m_aiClasses.contains(b.classId)) {
             present = true;
             break;
         }
@@ -1099,7 +1138,7 @@ void VideoTile::updateEvidence(double pts, const QVector<AnalysisBox> &boxes)
     QHash<int, int> counts;
     QHash<int, QString> labels;
     for (const AnalysisBox &b : boxes) {
-        if (!isSalientClass(b.classId)) {
+        if (b.score < m_aiMinScore || !isSalientClass(b.classId)) {
             continue;
         }
         counts[b.classId] += 1;

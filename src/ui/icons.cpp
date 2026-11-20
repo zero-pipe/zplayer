@@ -345,6 +345,14 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(4.5, 16);  path.lineTo(4.5, 19.5);
         path.lineTo(19.5, 19.5); path.lineTo(19.5, 16);
         break;
+    case Snapshot:
+        // Line camera body + lens + top viewfinder bump, matched to the rest
+        // of the 16 px bar icon set.
+        path.addRoundedRect(QRectF(3, 7, 18, 12.5), 2, 2);
+        path.moveTo(8.5, 7);  path.lineTo(9.5, 4.5);
+        path.lineTo(14.5, 4.5); path.lineTo(15.5, 7);
+        path.addEllipse(QPointF(12, 13), 3.2, 3.2);
+        break;
     }
     strokePath(p, path, color, w);
     return pm;

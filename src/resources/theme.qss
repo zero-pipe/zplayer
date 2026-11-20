@@ -295,39 +295,57 @@ QWidget#TileFooter {
     border-bottom-right-radius: 6px;
 }
 
-/* Floating glass control bar over the video (replaces the footer strip). */
+/* Floating glass control bar over the video. A softer, neutral charcoal kept
+   low-key so it frames the controls without drawing attention itself. */
 QWidget#TileBar {
-    background: rgba(10, 14, 20, 172);
-    border: 1px solid rgba(255, 255, 255, 32);
+    background: rgba(24, 27, 33, 150);
+    border: 1px solid rgba(255, 255, 255, 18);
     border-radius: 12px;
 }
 QToolButton#BarBtn, QToolButton#BarPlay {
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: #C6D0DB;
+    color: #C7CDD4;
     font-size: 12px;
     padding: 3px 8px;
 }
 QToolButton#BarBtn:hover, QToolButton#BarPlay:hover {
-    background: rgba(255, 255, 255, 26);
+    background: rgba(255, 255, 255, 18);
     color: #FFFFFF;
 }
 QToolButton#BarBtn:pressed, QToolButton#BarPlay:pressed {
-    background: rgba(255, 255, 255, 40);
+    background: rgba(255, 255, 255, 30);
 }
 QToolButton#BarBtn:checked {
-    color: #6CB6FF;
-    background: rgba(47, 129, 247, 46);
+    color: #8AB4F8;
+    background: rgba(138, 180, 248, 30);
 }
-QToolButton#BarBtn:disabled { color: rgba(198, 208, 219, 90); }
+QToolButton#BarBtn:disabled { color: rgba(199, 205, 212, 80); }
 QToolButton#BarPlay { padding: 3px 5px; }
+/* Visible caret for buttons that open a menu (AI 检查 / 播放速度). */
+QToolButton#BarBtn::menu-button {
+    border: none;
+    width: 13px;
+}
+QToolButton#BarBtn::menu-arrow {
+    image: url(:/resources/chevron-down.svg);
+    width: 9px;
+    height: 9px;
+}
+QToolButton#BarBtn::menu-indicator {
+    image: url(:/resources/chevron-down.svg);
+    width: 9px;
+    height: 9px;
+    subcontrol-position: right center;
+    right: 3px;
+}
 QLabel#BarTime {
-    color: #AEB9C6;
+    color: #9AA3AD;
     font-size: 12px;
     padding: 0 2px;
 }
-QFrame#BarSep { color: rgba(255, 255, 255, 36); }
+QFrame#BarSep { color: rgba(255, 255, 255, 26); }
 
 QSlider#BarSeek { background: transparent; }
 QSlider#BarSeek::groove:horizontal {
