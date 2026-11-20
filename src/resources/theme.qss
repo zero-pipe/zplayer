@@ -239,9 +239,12 @@ QTreeView#DeviceTree::item {
     margin: 1px 2px;
 }
 QTreeView#DeviceTree::item:hover { background: %bgHover%; }
-QTreeView#DeviceTree::item:selected {
-    background: %accentSoft%;
-    color: %text%;
+/* Selection is shown with accent text only — no filled block behind the row. */
+QTreeView#DeviceTree::item:selected,
+QTreeView#DeviceTree::item:selected:hover,
+QTreeView#DeviceTree::item:pressed {
+    background: transparent;
+    color: %accent%;
 }
 QTreeView#DeviceTree::branch { background: transparent; }
 

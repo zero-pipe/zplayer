@@ -57,7 +57,11 @@ DeviceTreeView::DeviceTreeView(QWidget *parent)
     // the whole cell with the highlight colour — the solid blue block seen when
     // a directory row is clicked. Every state is listed so the fallback never
     // happens, and the arrows are our own chevrons so they match the theme.
+    // show-decoration-selected:0 is the key switch: it disables the
+    // PE_PanelItemViewRow fill that paints palette.highlight() behind the
+    // branch cell on selection (see qstylesheetstyle.cpp drawControl).
     m_view->setStyleSheet(QStringLiteral(
+        "QTreeView#DeviceTree { show-decoration-selected: 0; }"
         "QTreeView#DeviceTree::branch {"
         "  background: transparent; border: none;"
         "}"
