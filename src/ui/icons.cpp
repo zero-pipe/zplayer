@@ -279,6 +279,72 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.addRoundedRect(QRectF(7, 9, 8, 8), 1.5, 1.5);
         break;
     }
+    case AiScan: {
+        // Scan corners around a sensor dot: "AI is watching this frame".
+        path.moveTo(4, 9);  path.lineTo(4, 4);  path.lineTo(9, 4);
+        path.moveTo(15, 4); path.lineTo(20, 4); path.lineTo(20, 9);
+        path.moveTo(20, 15); path.lineTo(20, 20); path.lineTo(15, 20);
+        path.moveTo(9, 20); path.lineTo(4, 20); path.lineTo(4, 15);
+        path.addEllipse(QPointF(12, 12), 2.2, 2.2);
+        break;
+    }
+    case FastSkip:
+        path.moveTo(5, 7);  path.lineTo(11, 12); path.lineTo(5, 17);
+        path.moveTo(12, 7); path.lineTo(18, 12); path.lineTo(12, 17);
+        break;
+    case Ocr:
+        // "T" over a baseline with scan brackets.
+        path.moveTo(8, 8);  path.lineTo(16, 8);
+        path.moveTo(12, 8); path.lineTo(12, 15);
+        path.moveTo(8, 18); path.lineTo(16, 18);
+        path.moveTo(4, 5);  path.lineTo(4, 3);  path.lineTo(6, 3);
+        path.moveTo(18, 3); path.lineTo(20, 3); path.lineTo(20, 5);
+        break;
+    case Roi:
+        // Frame with corner handles and an inner selection box.
+        path.moveTo(3, 7);  path.lineTo(3, 3);  path.lineTo(7, 3);
+        path.moveTo(17, 3); path.lineTo(21, 3); path.lineTo(21, 7);
+        path.moveTo(21, 17); path.lineTo(21, 21); path.lineTo(17, 21);
+        path.moveTo(7, 21); path.lineTo(3, 21); path.lineTo(3, 17);
+        path.addRect(QRectF(8, 8, 8, 8));
+        break;
+    case Magnify:
+        path.addEllipse(QPointF(10.5, 10.5), 6, 6);
+        path.moveTo(15, 15);  path.lineTo(20.5, 20.5);
+        path.moveTo(10.5, 7.8); path.lineTo(10.5, 13.2);
+        path.moveTo(7.8, 10.5); path.lineTo(13.2, 10.5);
+        break;
+    case Sparkle:
+        path.moveTo(12, 2.5);
+        path.lineTo(13.7, 10.3);
+        path.lineTo(21.5, 12);
+        path.lineTo(13.7, 13.7);
+        path.lineTo(12, 21.5);
+        path.lineTo(10.3, 13.7);
+        path.lineTo(2.5, 12);
+        path.lineTo(10.3, 10.3);
+        path.closeSubpath();
+        break;
+    case Wave:
+        // Speech waveform crossed out: noise removed.
+        path.moveTo(3, 14);
+        path.cubicTo(5, 9, 7, 19, 9, 14);
+        path.cubicTo(11, 9, 13, 19, 15, 14);
+        path.cubicTo(16.2, 11.6, 17.4, 13.4, 18, 13.4);
+        path.moveTo(7, 18.5); path.lineTo(18.5, 7);
+        break;
+    case SearchClock:
+        path.addEllipse(QPointF(10.5, 10.5), 6, 6);
+        path.moveTo(15, 15); path.lineTo(20.5, 20.5);
+        path.moveTo(10.5, 10.5); path.lineTo(10.5, 7.2);
+        path.moveTo(10.5, 10.5); path.lineTo(13.2, 11.8);
+        break;
+    case Export:
+        path.moveTo(12, 3.5);  path.lineTo(12, 14);
+        path.moveTo(8, 10);    path.lineTo(12, 14); path.lineTo(16, 10);
+        path.moveTo(4.5, 16);  path.lineTo(4.5, 19.5);
+        path.lineTo(19.5, 19.5); path.lineTo(19.5, 16);
+        break;
     }
     strokePath(p, path, color, w);
     return pm;

@@ -24,7 +24,17 @@ QPixmap appLogo(int size);
 enum Glyph {
     User, Lock, Eye, Gear, Search, Grid1, Grid4, Grid9,
     Close, Expand, Refresh, ChevronDown, ArrowRight, Sun, Moon,
-    WinMin, WinMax, WinRestore
+    WinMin, WinMax, WinRestore,
+    // AI control-bar icon set (16 px line icons, theme-coloured).
+    AiScan,      // corner brackets + centre dot: AI 检查
+    FastSkip,    // double chevron: 无人快进
+    Ocr,         // text lines + scan corners: OCR 识别
+    Roi,         // frame with corner handles: ROI 圈选
+    Magnify,     // magnifier with plus: 电子放大
+    Sparkle,     // four-point star: 画质锐化
+    Wave,        // waveform with slash: 语音降噪
+    SearchClock, // magnifier with clock: 智能检索
+    Export       // arrow into tray: 导出证据
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 

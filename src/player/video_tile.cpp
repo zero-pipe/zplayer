@@ -3,6 +3,7 @@
 #include "player/shaders.h"
 #include "ui/analysis_overlay.h"
 #include "ui/icons.h"
+#include "ui/theme.h"
 #include "ui/timeline_slider.h"
 
 #include <QHBoxLayout>
@@ -26,6 +27,8 @@
 #include <QFileInfo>
 #include <QDebug>
 #include <QSignalBlocker>
+#include <QTimer>
+#include <QSettings>
 #include <QEvent>
 #include <QRegExp>
 
@@ -144,6 +147,7 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
 
     connect(m_player, &IMediaPlayer::started, this, [this]() {
         m_hasPlayed = true;
+        maybeShowHint();
         setState(Playing, tr("播放中"));
         m_stage->setCurrentWidget(m_video ? m_video : m_overlay);
     });
@@ -346,6 +350,21 @@ void VideoTile::buildControlBar()
         b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
+    // Consistent 16 px line icons for the action groups. Checked buttons get
+    // the accent colour through the icon's On state, without any extra code.
+    auto barIcon = [](icons::Glyph g) {
+        const auto tk = ThemeManager::instance().tokens();
+        QIcon ic;
+        ic.addPixmap(icons::glyph(g, tk.text2, 16), QIcon::Normal, QIcon::Off);
+        ic.addPixmap(icons::glyph(g, tk.accent, 16), QIcon::Normal, QIcon::On);
+        ic.addPixmap(icons::glyph(g, tk.accent, 16), QIcon::Active, QIcon::Off);
+        return ic;
+    };
+    auto dressBtn = [barIcon](QToolButton *b, icons::Glyph g) {
+        b->setIcon(barIcon(g));
+        b->setIconSize(QSize(16, 16));
+        b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    };
     auto addSep = [this, row]() {
         auto *line = new QFrame(m_footer);
         line->setObjectName(QStringLiteral("BarSep"));
@@ -434,22 +453,21 @@ void VideoTile::buildControlBar()
         trow->addWidget(m_speedBtn);
     }
 
-    // ---- right group 1: AI strategy ----
-    m_aiBtn = makeBtn(tr("AI 跳播"));
+    // ---- right group 1: AI check (one switch + settings menu) ----
+    // The old "AI skip" toggle and its separate caret are merged here: the
+    // button itself is the master switch, the menu decides what counts as a
+    // target and which actions fire (fast-forward when empty, pause on hit).
+    m_aiBtn = makeBtn(tr("AI 检查"));
+    dressBtn(m_aiBtn, icons::AiScan);
     m_aiBtn->setCheckable(true);
-    m_aiBtn->setToolTip(tr("无人时自动跳过（本地/回放）；目标与行为在右侧 ▾ 设置"));
+    m_aiBtn->setToolTip(tr("开启 AI 检查（框选目标、无人快进、检出暂停）"));
     connect(m_aiBtn, &QToolButton::toggled, this, [this](bool on) {
         setAiSkipEnabled(on);
-        emit statusMessage(m_channel, on ? tr("AI 跳播：开") : tr("AI 跳播：关"));
+        emit statusMessage(m_channel, on ? tr("AI 检查：开") : tr("AI 检查：关"));
     });
-
-    // Settings bubble for AI skip: which targets count, and what happens on a
-    // hit (resume 1x or pause for a closer look).
-    m_aiClasses.insert(0);   // people by default
-    m_aiMenuBtn = makeBtn(QString::fromUtf8("▾"));
-    m_aiMenuBtn->setToolTip(tr("AI 跳播设置：目标与命中行为"));
     {
-        auto *aiMenu = new QMenu(m_aiMenuBtn);
+        auto *aiMenu = new QMenu(m_aiBtn);
+        aiMenu->addAction(tr("检查目标"))->setEnabled(false);
         auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
                                         bool on) {
             QAction *a = aiMenu->addAction(label);
@@ -463,37 +481,37 @@ void VideoTile::buildControlBar()
                         m_aiClasses.remove(id);
                     }
                 }
-                emit statusMessage(m_channel, tr("AI 跳播目标已更新"));
+                emit statusMessage(m_channel, tr("AI 检查目标已更新"));
             });
         };
         addTarget(tr("人"), {0}, true);
-        addTarget(tr("车"), {2, 3, 5, 7}, false);
-        addTarget(tr("狗"), {16}, false);
+        addTarget(tr("车"), {2, 3, 5, 7}, true);
+        addTarget(tr("狗"), {16}, true);
         aiMenu->addSeparator();
-        QAction *resumeAct = aiMenu->addAction(tr("命中后：恢复正常播放"));
-        QAction *pauseAct = aiMenu->addAction(tr("命中后：自动暂停"));
-        resumeAct->setCheckable(true);
+        QAction *skipAct = aiMenu->addAction(tr("无人时快进跳过"));
+        skipAct->setCheckable(true);
+        skipAct->setChecked(m_aiSkipEmpty);
+        connect(skipAct, &QAction::toggled, this, [this](bool on) {
+            m_aiSkipEmpty = on;
+            emit statusMessage(m_channel, on ? tr("无人快进：开") : tr("无人快进：关"));
+        });
+        QAction *pauseAct = aiMenu->addAction(tr("检出自动暂停"));
         pauseAct->setCheckable(true);
-        resumeAct->setChecked(true);
-        auto *group = new QActionGroup(aiMenu);
-        group->addAction(resumeAct);
-        group->addAction(pauseAct);
-        group->setExclusive(true);
-        connect(resumeAct, &QAction::toggled, this, [this](bool on) {
-            if (on) {
-                m_aiPauseOnHit = false;
-            }
-        });
+        pauseAct->setChecked(m_aiPauseOnHit);
         connect(pauseAct, &QAction::toggled, this, [this](bool on) {
-            if (on) {
-                m_aiPauseOnHit = true;
-            }
+            m_aiPauseOnHit = on;
+            emit statusMessage(m_channel, on ? tr("检出自动暂停：开") : tr("检出自动暂停：关"));
         });
-        m_aiMenuBtn->setMenu(aiMenu);
-        m_aiMenuBtn->setPopupMode(QToolButton::InstantPopup);
+        m_aiBtn->setMenu(aiMenu);
+        // Main area toggles the switch, the caret opens the settings.
+        m_aiBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    }
+    for (int id : {0, 2, 3, 5, 7, 16}) {
+        m_aiClasses.insert(id);
     }
 
     m_ocrBtn = makeBtn(tr("OCR识别"));
+    dressBtn(m_ocrBtn, icons::Ocr);
     m_ocrBtn->setCheckable(true);
     m_ocrBtn->setToolTip(tr("识别画面中的文字/车牌；配合 ROI 可只识别局部"));
     connect(m_ocrBtn, &QToolButton::toggled, this, [this](bool on) {
@@ -502,6 +520,7 @@ void VideoTile::buildControlBar()
     });
 
     m_roiBtn = makeBtn(tr("ROI框"));
+    dressBtn(m_roiBtn, icons::Roi);
     m_roiBtn->setCheckable(true);
     m_roiBtn->setToolTip(tr("圈选重点分析区域：点击后拖动框选，再点一次清除"));
     connect(m_roiBtn, &QToolButton::clicked, this, [this](bool checked) {
@@ -531,6 +550,7 @@ void VideoTile::buildControlBar()
 
     // ---- right group 2: picture ----
     m_zoomBtn = makeBtn(tr("电子放大"));
+    dressBtn(m_zoomBtn, icons::Magnify);
     m_zoomBtn->setToolTip(tr("点击循环 1x/2x/4x；放大后可滚轮切换倍数、拖动平移画面"));
     m_zoomBtn->setEnabled(m_player && m_player->supportsVideoCrop());
     connect(m_zoomBtn, &QToolButton::clicked, this, [this]() {
@@ -538,6 +558,7 @@ void VideoTile::buildControlBar()
     });
 
     m_sharpenBtn = makeBtn(tr("画质锐化"));
+    dressBtn(m_sharpenBtn, icons::Sparkle);
     m_sharpenBtn->setCheckable(true);
     m_sharpenBtn->setToolTip(tr("GPU 锐化增强（配合电子放大观看细节）"));
     connect(m_sharpenBtn, &QToolButton::toggled, this, [this](bool on) {
@@ -550,6 +571,7 @@ void VideoTile::buildControlBar()
 
     // Voice denoising: rnnoise through the engine's audio filter chain.
     m_denoiseBtn = makeBtn(tr("语音降噪"));
+    dressBtn(m_denoiseBtn, icons::Wave);
     m_denoiseBtn->setCheckable(true);
     m_denoiseBtn->setToolTip(tr("rnnoise 实时降噪：抑制风噪/机械底噪，突出人声"));
     m_denoiseBtn->setEnabled(m_player && m_player->supportsDenoise());
@@ -572,6 +594,7 @@ void VideoTile::buildControlBar()
 
     // ---- right group 3: search & evidence ----
     m_scanBtn = makeBtn(tr("智能检索"));
+    dressBtn(m_scanBtn, icons::SearchClock);
     m_scanBtn->setCheckable(true);
     m_scanBtn->setToolTip(tr("快速扫描全片，在时间轴标出有人物的片段"));
     connect(m_scanBtn, &QToolButton::clicked, this, [this](bool checked) {
@@ -590,6 +613,7 @@ void VideoTile::buildControlBar()
     connect(m_snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
 
     m_evidenceBtn = makeBtn(tr("导出证据"));
+    dressBtn(m_evidenceBtn, icons::Export);
     m_evidenceBtn->setToolTip(tr("导出事件列表与截图（HTML + JSON）"));
     connect(m_evidenceBtn, &QToolButton::clicked, this, [this]() {
         emit evidenceExportRequested(m_channel);
@@ -599,7 +623,6 @@ void VideoTile::buildControlBar()
     // above this bar) ----
     row->addStretch(1);
     row->addWidget(m_aiBtn);
-    row->addWidget(m_aiMenuBtn);
     row->addWidget(m_ocrBtn);
     row->addWidget(m_roiBtn);
     addSep();
@@ -660,6 +683,31 @@ void VideoTile::buildControlBar()
     updateEvidenceBadge();
 }
 
+void VideoTile::maybeShowHint()
+{
+    if (m_hint) {
+        return;
+    }
+    QSettings settings;
+    if (settings.value(QStringLiteral("ui/aiHintShown"), false).toBool()) {
+        return;
+    }
+    settings.setValue(QStringLiteral("ui/aiHintShown"), true);
+    m_hint = new QLabel(m_video);
+    m_hint->setObjectName(QStringLiteral("VideoHint"));
+    m_hint->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_hint->setText(tr("提示：底栏可开启 AI 检查 / OCR 识别 / ROI 圈选，悬停按钮可查看说明"));
+    m_hint->adjustSize();
+    m_hint->show();
+    positionControlBar();
+    QTimer::singleShot(6500, this, [this]() {
+        if (m_hint) {
+            m_hint->deleteLater();
+            m_hint = nullptr;
+        }
+    });
+}
+
 void VideoTile::positionControlBar()
 {
     if (!m_video || !m_footer) {
@@ -689,6 +737,14 @@ void VideoTile::positionControlBar()
     // on-demand playback: live preview has no seekable timeline.
     const bool showTransport = m_transportBar && m_hasTransport && m_isVod;
 
+    if (m_hint) {
+        m_hint->adjustSize();
+        const int top = (showTransport && m_transportBar->isVisible())
+                            ? m_transportBar->geometry().top() : fy;
+        m_hint->move(qMax(margin, (r.width() - m_hint->width()) / 2),
+                     qMax(margin, top - m_hint->height() - 8));
+        m_hint->raise();
+    }
     if (showTransport) {
         const int th = qMax(30, m_transportBar->sizeHint().height());
         m_transportBar->setGeometry(margin, fy - th - 6, w, th);
@@ -948,17 +1004,22 @@ void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)
     if (present) {
         m_lastPresenceMs = now;
         if (m_aiSkipping) {
-            // A configured target appeared after a skip: honour the chosen
-            // behaviour — either settle back to normal speed, or stop so the
-            // operator can look at the event.
+            // A configured target appeared after a skip: settle back to normal
+            // speed so the operator can actually watch what showed up.
             m_aiSkipping = false;
-            if (m_aiPauseOnHit) {
-                m_player->pause();
-                emit statusMessage(m_channel, tr("AI 跳播：命中目标，已暂停"));
-            } else if (m_player->speed() > 1.001) {
+            if (m_player->speed() > 1.001) {
                 m_player->setSpeed(1.0);
             }
         }
+        if (m_aiPauseOnHit && !m_aiPausedForHit && !m_scanning) {
+            m_aiPausedForHit = true;
+            m_player->pause();
+            emit statusMessage(m_channel, tr("AI 检查：检出目标，已暂停"));
+        }
+        return;
+    }
+    m_aiPausedForHit = false;
+    if (!m_aiSkipEmpty) {
         return;
     }
     if (m_lastPresenceMs == 0) {

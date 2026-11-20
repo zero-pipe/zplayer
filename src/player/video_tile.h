@@ -182,7 +182,6 @@ private:
     QMenu *m_speedMenu = nullptr;
     QToolButton *m_snapBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
-    QToolButton *m_aiMenuBtn = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
     QToolButton *m_roiBtn = nullptr;
     QToolButton *m_ocrBtn = nullptr;
@@ -193,6 +192,8 @@ private:
     bool m_scrubbing = false;
     bool m_hasPlayed = false;   // a stream has been shown (keep last frame)
     bool m_hovered = false;     // pointer over the video (small-tile bar)
+    QLabel *m_hint = nullptr;   // one-time usage hint over the video
+    void maybeShowHint();
 
     // ROI selection (normalized to the video widget).
     bool m_roiMode = false;       // waiting for / receiving a drag
@@ -218,9 +219,11 @@ private:
     double m_scanPrevPos = 0.0;
     QVector<PresenceSample> m_scanSamples;
 
-    // AI fast-forward state.
-    bool m_aiSkip = false;
-    bool m_aiPauseOnHit = false;      // pause instead of resuming 1x on a hit
+    // AI check state (the single master switch drives every AI action below).
+    bool m_aiSkip = false;            // master switch ("AI 检查")
+    bool m_aiSkipEmpty = false;       // fast-forward while nothing is present
+    bool m_aiPauseOnHit = false;      // pause when a target appears
+    bool m_aiPausedForHit = false;    // already paused for the current episode
     bool m_aiSkipping = false;        // a skip just happened, awaiting a hit
     QSet<int> m_aiClasses;            // class ids that count as "present"
     qint64 m_lastPresenceMs = 0;
