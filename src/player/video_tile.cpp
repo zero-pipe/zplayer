@@ -162,6 +162,15 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
         m_overlayText->setToolTip(msg);
     });
 
+    connect(m_player, &IMediaPlayer::stateChanged, this, [this](MediaState s) {
+        updateTransportUi();
+        emit playbackStateChanged(m_channel, s == MediaState::Playing);
+        if (s == MediaState::Paused && m_video) {
+            // Paused keeps the current frame on screen (mpv does not clear it).
+            m_stage->setCurrentWidget(m_video);
+        }
+    });
+
     setState(Idle, tr("未连接"));
     refreshSelectionStyle();
 }
@@ -259,7 +268,6 @@ void VideoTile::setState(State state, const QString &text)
         m_stage->setCurrentWidget(m_overlay);
     }
     updateTransportUi();
-    emit playbackStateChanged(m_channel, state == Playing);
 }
 
 void VideoTile::setSelected(bool selected)
@@ -871,7 +879,10 @@ void VideoTile::cancelScan()
 void VideoTile::updateTransportUi()
 {
     if (m_playBtn) {
-        const bool playing = m_state == Playing;
+        // The engine is the source of truth: after pausing it reports Paused,
+        // which is what flips the icon (the tile's own state only tracks the
+        // higher-level display states).
+        const bool playing = m_player && m_player->state() == MediaState::Playing;
         m_playBtn->setIcon(QIcon(icons::playPause(
             playing, playing ? QColor(0x2F, 0x81, 0xF7) : QColor(0xD5, 0xDE, 0xEA), 15)));
         m_playBtn->setToolTip(playing ? tr("暂停") : tr("播放"));

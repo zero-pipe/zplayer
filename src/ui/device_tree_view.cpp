@@ -80,6 +80,12 @@ DeviceTreeView::DeviceTreeView(QWidget *parent)
         "QTreeView#DeviceTree::branch:open:has-children:has-siblings,"
         "QTreeView#DeviceTree::branch:open:has-children:!has-siblings {"
         "  background: transparent; image: url(:/resources/branch-open.svg);"
+        "}"
+        // Last, so it wins for the pressed state regardless of the row's
+        // selection/hover state (the platform style would otherwise paint its
+        // highlight colour into the cell while the mouse button is down).
+        "QTreeView#DeviceTree::branch:pressed {"
+        "  background: transparent; border: none;"
         "}"));
 
     auto *vl = new QVBoxLayout(this);

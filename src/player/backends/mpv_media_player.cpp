@@ -342,7 +342,12 @@ void MpvMediaPlayer::play()
         return;
     }
     const char *cmd[] = {"set", "pause", "no", nullptr};
-    mpv_command(m_holder->h, cmd);
+    if (mpv_command(m_holder->h, cmd) >= 0 && m_state == MediaState::Paused) {
+        // Resuming is the common case here (a fresh file goes through
+        // file-loaded -> PLAYBACK_RESTART instead). Report the transition so
+        // the UI flips the play/pause icon immediately.
+        setState(MediaState::Playing);
+    }
 }
 
 void MpvMediaPlayer::pause()
@@ -351,7 +356,12 @@ void MpvMediaPlayer::pause()
         return;
     }
     const char *cmd[] = {"set", "pause", "yes", nullptr};
-    mpv_command(m_holder->h, cmd);
+    if (mpv_command(m_holder->h, cmd) >= 0 && m_state == MediaState::Playing) {
+        // Without this the engine keeps reporting "playing" and the tile's
+        // play/pause button can never switch back (it would call pause again).
+        setState(MediaState::Paused);
+        emit paused();
+    }
 }
 
 void MpvMediaPlayer::stop()
