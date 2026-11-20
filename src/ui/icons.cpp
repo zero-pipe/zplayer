@@ -353,6 +353,38 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.lineTo(14.5, 4.5); path.lineTo(15.5, 7);
         path.addEllipse(QPointF(12, 13), 3.2, 3.2);
         break;
+    case Layout1:
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 2.5, 2.5);
+        break;
+    case Layout2x2:
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 2, 2);
+        path.moveTo(12, 3);  path.lineTo(12, 21);
+        path.moveTo(3, 12);  path.lineTo(21, 12);
+        break;
+    case Layout3x3:
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 2, 2);
+        path.moveTo(9, 3);   path.lineTo(9, 21);
+        path.moveTo(15, 3);  path.lineTo(15, 21);
+        path.moveTo(3, 9);   path.lineTo(21, 9);
+        path.moveTo(3, 15);  path.lineTo(21, 15);
+        break;
+    case Layout4x4:
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 2, 2);
+        for (int i = 1; i < 4; ++i) {
+            const qreal d = 3.0 + 18.0 * i / 4.0;
+            path.moveTo(d, 3);  path.lineTo(d, 21);
+            path.moveTo(3, d);  path.lineTo(21, d);
+        }
+        break;
+    case Layout1p5:
+        // Big pane = top-left 2x2 of a 3x3; two small panes down the right
+        // column; three small panes across the bottom row.
+        path.addRoundedRect(QRectF(3, 3, 18, 18), 2, 2);
+        path.moveTo(15, 3);  path.lineTo(15, 21);   // big | right column
+        path.moveTo(3, 15);  path.lineTo(21, 15);   // big/right | bottom row
+        path.moveTo(9, 15);  path.lineTo(9, 21);    // bottom row column split
+        path.moveTo(15, 9);  path.lineTo(21, 9);    // right column split
+        break;
     }
     strokePath(p, path, color, w);
     return pm;

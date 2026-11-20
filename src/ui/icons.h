@@ -35,7 +35,13 @@ enum Glyph {
     Wave,        // waveform with slash: 语音降噪
     SearchClock, // magnifier with clock: 智能检索
     Export,      // arrow into tray: 导出证据
-    Snapshot     // line camera: 抓图
+    Snapshot,    // line camera: 抓图
+    // Split-layout pictograms for the layout bar.
+    Layout1,     // single pane
+    Layout2x2,   // 2x2 grid
+    Layout3x3,   // 3x3 grid
+    Layout4x4,   // 4x4 grid
+    Layout1p5    // one big pane + five small panes
 };
 QPixmap glyph(Glyph g, const QColor &color, int size = 18);
 

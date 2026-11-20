@@ -35,6 +35,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolButton>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -362,18 +363,42 @@ void PlayerWindow::buildUi()
 
     m_layoutGroup = new QButtonGroup(this);
     m_layoutGroup->setExclusive(true);
-    // Clear text labels so the split count is obvious at a glance.
-    static const char *kLayoutLabels[] = {"1", "4", "9", "16", "1+5"};
+    // Split-layout pictograms instead of bare numbers: a 20 px grid silhouette
+    // per option reads at a glance and stays legible when the bar is compact.
+    static const icons::Glyph kLayoutGlyphs[] = {
+        icons::Layout1, icons::Layout2x2, icons::Layout3x3,
+        icons::Layout4x4, icons::Layout1p5
+    };
+    QList<QToolButton *> layoutBtns;
+    static const char *kLayoutHints[] = {
+        "单屏", "4 分屏", "9 分屏", "16 分屏", "1+5 分屏"
+    };
     for (int i = 0; i < 5; ++i) {
         auto *b = new QToolButton(layoutBar);
         b->setObjectName(QStringLiteral("LayoutBtn"));
         b->setCheckable(true);
         b->setCursor(Qt::PointingHandCursor);
-        b->setToolTip(tr("分屏布局 %1").arg(QLatin1String(kLayoutNames[i])));
-        b->setText(QString::fromLatin1(kLayoutLabels[i]));
+        b->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        b->setIconSize(QSize(20, 20));
+        // Hover shows the split count briefly, then auto-hides (handled in
+        // eventFilter). A persistent tooltip felt noisy over the icons.
+        b->setProperty("layoutHint", tr(kLayoutHints[i]));
+        b->installEventFilter(this);
+        layoutBtns.append(b);
         m_layoutGroup->addButton(b, i);
         lb->addWidget(b);
     }
+    auto refreshLayoutIcons = [layoutBtns]() {
+        const ThemeTokens &t = ThemeManager::instance().tokens();
+        for (int i = 0; i < layoutBtns.size(); ++i) {
+            QIcon ic;
+            ic.addPixmap(icons::glyph(kLayoutGlyphs[i], t.text2, 20), QIcon::Normal, QIcon::Off);
+            ic.addPixmap(icons::glyph(kLayoutGlyphs[i], t.accent, 20), QIcon::Normal, QIcon::On);
+            layoutBtns[i]->setIcon(ic);
+        }
+    };
+    refreshLayoutIcons();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, refreshLayoutIcons);
     if (auto *b = m_layoutGroup->button(2)) b->setChecked(true);  // default 3x3
     connect(m_layoutGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
             this, &PlayerWindow::onLayoutButtonClicked);
@@ -522,6 +547,21 @@ void PlayerWindow::resizeEvent(QResizeEvent *event)
 
 bool PlayerWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // Layout buttons: show the split count on hover for a moment, then let it
+    // auto-hide after ~1.6 s even while the pointer stays on the button.
+    if (auto *btn = qobject_cast<QToolButton *>(watched)) {
+        const QVariant hint = btn->property("layoutHint");
+        if (hint.isValid()) {
+            if (event->type() == QEvent::Enter) {
+                QToolTip::showText(btn->mapToGlobal(QPoint(btn->width() / 2,
+                                                           btn->height() + 6)),
+                                   hint.toString(), btn, QRect(), 1600);
+            } else if (event->type() == QEvent::Leave) {
+                QToolTip::hideText();
+            }
+        }
+    }
+
     if (watched != m_topBar) {
         return QMainWindow::eventFilter(watched, event);
     }

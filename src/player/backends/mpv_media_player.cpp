@@ -251,6 +251,9 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "duration", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "speed", MPV_FORMAT_DOUBLE);
+        // With keep-open=yes the file pauses at the end instead of ending, so
+        // watch eof-reached to report the real (paused) state to the UI.
+        mpv_observe_property(m_holder->h, 0, "eof-reached", MPV_FORMAT_FLAG);
         // Picture placement inside the render target (letterbox bars).
         mpv_observe_property(m_holder->h, 0, "video-params/aspect", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "osd-dimensions", MPV_FORMAT_NODE);
@@ -667,10 +670,23 @@ bool MpvMediaPlayer::seek(double seconds)
     if (!m_holder || !m_holder->h || seconds < 0.0) {
         return false;
     }
+    mpv_handle *h = m_holder->h;
+    // With keep-open the file pauses at EOF. Dragging the playhead (typically
+    // back to the start) should resume playback rather than leave it parked.
+    int eof = 0;
+    const bool wasAtEof =
+        mpv_get_property(h, "eof-reached", MPV_FORMAT_FLAG, &eof) >= 0 && eof != 0;
+
     // Writing time-pos performs an exact (keyframe-accurate) seek, which is
     // what evidence / fast-forward needs (relative seeks would drift).
     double pos = seconds;
-    return mpv_set_property(m_holder->h, "time-pos", MPV_FORMAT_DOUBLE, &pos) >= 0;
+    const bool ok = mpv_set_property(h, "time-pos", MPV_FORMAT_DOUBLE, &pos) >= 0;
+    if (ok && wasAtEof) {
+        const char *cmd[] = {"set", "pause", "no", nullptr};
+        mpv_command(h, cmd);
+        setState(MediaState::Playing);
+    }
+    return ok;
 }
 
 void MpvMediaPlayer::setSpeed(double speed)
@@ -842,6 +858,14 @@ void MpvMediaPlayer::handleEvent(void *ev)
                 emit speedChanged(value);
             } else if (name == QByteArrayLiteral("video-params/aspect")) {
                 m_aspect = value;
+            }
+        } else if (pc->format == MPV_FORMAT_FLAG
+                   && name == QByteArrayLiteral("eof-reached")) {
+            // keep-open pauses at the end; reflect that so the play/pause icon
+            // flips to "play" and the user can restart by seeking back.
+            if (*static_cast<int *>(pc->data) != 0 && m_state == MediaState::Playing) {
+                setState(MediaState::Paused);
+                emit paused();
             }
         } else if (pc->format == MPV_FORMAT_NODE
                    && name == QByteArrayLiteral("osd-dimensions")) {

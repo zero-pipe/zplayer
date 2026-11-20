@@ -336,6 +336,7 @@ void VideoTile::buildControlBar()
     }
     m_footer = new QWidget(m_video);
     m_footer->setObjectName(QStringLiteral("TileBar"));
+    m_footer->setProperty("dock", QStringLiteral("bottom"));
     m_footer->setAttribute(Qt::WA_StyledBackground, true);
     m_footer->installEventFilter(this);
     auto *row = new QHBoxLayout(m_footer);
@@ -415,15 +416,27 @@ void VideoTile::buildControlBar()
         m_posSlider->setCursor(Qt::PointingHandCursor);
         m_posSlider->setToolTip(tr("拖动定位；点击人物/车辆色块可跳转"));
         connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
-            if (m_player) {
-                m_player->seek(t);
+            if (!m_player) {
+                return;
+            }
+            // Jumping to a segment should start playing there, not wait for a
+            // separate play click.
+            m_player->seek(t);
+            if (m_player->state() != MediaState::Playing) {
+                m_player->play();
             }
         });
         connect(m_posSlider, &QSlider::sliderPressed, this, [this]() { m_scrubbing = true; });
         connect(m_posSlider, &QSlider::sliderReleased, this, [this]() {
             m_scrubbing = false;
             if (m_player && m_duration > 0) {
+                // Release-to-seek-and-play: scrub to a new spot and playback
+                // resumes there immediately (mainstream player behaviour),
+                // even if it was paused beforehand.
                 m_player->seek(m_posSlider->value() / 1000.0);
+                if (m_player->state() != MediaState::Playing) {
+                    m_player->play();
+                }
             }
         });
         connect(m_posSlider, &QSlider::valueChanged, this, [this](int v) {
@@ -748,10 +761,12 @@ void VideoTile::positionControlBar()
     }
 
     const int margin = 8;
-    const int w = qMax(120, r.width() - 2 * margin);
+    // Action bar is docked: full width, flush to the bottom of the video, so a
+    // solid strip covers the letterbox instead of a translucent pill floating
+    // over it. The transport row above stays a floating pill.
     const int fh = qMax(30, m_footer->sizeHint().height());
-    const int fy = r.height() - fh - margin;
-    m_footer->setGeometry(margin, fy, w, fh);
+    const int fy = r.height() - fh;
+    m_footer->setGeometry(0, fy, r.width(), fh);
     m_footer->show();
     m_footer->raise();
 
@@ -769,7 +784,8 @@ void VideoTile::positionControlBar()
     }
     if (showTransport) {
         const int th = qMax(30, m_transportBar->sizeHint().height());
-        m_transportBar->setGeometry(margin, fy - th - 6, w, th);
+        const int tw = qMax(120, r.width() - 2 * margin);
+        m_transportBar->setGeometry(margin, fy - th - 6, tw, th);
         m_transportBar->show();
         m_transportBar->raise();
     } else if (m_transportBar) {
