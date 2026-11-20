@@ -52,6 +52,36 @@ DeviceTreeView::DeviceTreeView(QWidget *parent)
     m_view->setAnimated(true);
     m_view->setExpandsOnDoubleClick(false);
 
+    // Take over the branch (indent) column completely. Without explicit rules
+    // for :selected / :hover, Qt falls back to the style's primitive and paints
+    // the whole cell with the highlight colour — the solid blue block seen when
+    // a directory row is clicked. Every state is listed so the fallback never
+    // happens, and the arrows are our own chevrons so they match the theme.
+    m_view->setStyleSheet(QStringLiteral(
+        "QTreeView#DeviceTree::branch {"
+        "  background: transparent; border: none;"
+        "}"
+        "QTreeView#DeviceTree::branch:hover,"
+        "QTreeView#DeviceTree::branch:selected,"
+        "QTreeView#DeviceTree::branch:selected:hover {"
+        "  background: transparent; border: none; image: none;"
+        "}"
+        "QTreeView#DeviceTree::branch:has-siblings:!adjoins-item,"
+        "QTreeView#DeviceTree::branch:has-siblings:adjoins-item,"
+        "QTreeView#DeviceTree::branch:!has-children:!has-siblings:adjoins-item {"
+        "  background: transparent; border: none; image: none;"
+        "}"
+        "QTreeView#DeviceTree::branch:closed:has-children,"
+        "QTreeView#DeviceTree::branch:closed:has-children:has-siblings,"
+        "QTreeView#DeviceTree::branch:closed:has-children:!has-siblings {"
+        "  background: transparent; image: url(:/resources/branch-closed.svg);"
+        "}"
+        "QTreeView#DeviceTree::branch:open:has-children,"
+        "QTreeView#DeviceTree::branch:open:has-children:has-siblings,"
+        "QTreeView#DeviceTree::branch:open:has-children:!has-siblings {"
+        "  background: transparent; image: url(:/resources/branch-open.svg);"
+        "}"));
+
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(12, 14, 10, 12);
     vl->setSpacing(8);

@@ -3,5 +3,7 @@
     <qresource prefix="/resources">
         <file>theme.qss</file>
         <file>check.svg</file>
+        <file>branch-closed.svg</file>
+        <file>branch-open.svg</file>
     </qresource>
 </RCC>
