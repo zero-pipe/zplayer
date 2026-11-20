@@ -179,7 +179,11 @@ void VideoTile::play(const QUrl &url)
         setState(Failed, tr("地址无效"));
         return;
     }
+    // Local files are on-demand; platform streams are live previews and get
+    // no transport controls.
+    m_isVod = url.isLocalFile();
     setState(Connecting, tr("连接中…"));
+    positionControlBar();
     m_player->open(url);
     m_player->play();
 }
@@ -255,6 +259,7 @@ void VideoTile::setState(State state, const QString &text)
         m_stage->setCurrentWidget(m_overlay);
     }
     updateTransportUi();
+    emit playbackStateChanged(m_channel, state == Playing);
 }
 
 void VideoTile::setSelected(bool selected)
@@ -343,10 +348,19 @@ void VideoTile::buildControlBar()
 
     m_hasTransport = m_player && m_player->supportsPlaybackControl();
 
-    // ---- left: transport ----
+    // ---- transport row (own row, above the action bar, VOD only) ----
+    m_transportBar = new QWidget(m_video);
+    m_transportBar->setObjectName(QStringLiteral("TileBar"));
+    m_transportBar->setAttribute(Qt::WA_StyledBackground, true);
+    auto *trow = new QHBoxLayout(m_transportBar);
+    trow->setContentsMargins(10, 4, 10, 4);
+    trow->setSpacing(6);
+
     if (m_hasTransport) {
-        m_playBtn = makeBtn(QString());
+        m_playBtn = new QToolButton(m_transportBar);
         m_playBtn->setObjectName(QStringLiteral("BarPlay"));
+        m_playBtn->setCursor(Qt::PointingHandCursor);
+        m_playBtn->setFocusPolicy(Qt::NoFocus);
         m_playBtn->setIcon(QIcon(icons::playPause(false, QColor(0xD5DEEA), 15)));
         m_playBtn->setIconSize(QSize(15, 15));
         m_playBtn->setToolTip(tr("播放 / 暂停"));
@@ -361,31 +375,15 @@ void VideoTile::buildControlBar()
             }
         });
 
-        m_timeLabel = new QLabel(QStringLiteral("--:-- / --:--"), m_footer);
+        m_timeLabel = new QLabel(QStringLiteral("0:00 / 0:00"), m_transportBar);
         m_timeLabel->setObjectName(QStringLiteral("BarTime"));
 
-        // Speed: dropdown with the standard ladder.
-        m_speedBtn = makeBtn(QStringLiteral("1.0x"));
-        m_speedBtn->setToolTip(tr("播放速度"));
-        m_speedMenu = new QMenu(m_speedBtn);
-        for (double s : {1.0, 2.0, 4.0, 8.0, 16.0}) {
-            QAction *a = m_speedMenu->addAction(QStringLiteral("%1x").arg(s, 0, 'g', 2));
-            a->setCheckable(true);
-            a->setChecked(qFuzzyCompare(s, 1.0));
-            connect(a, &QAction::triggered, this, [this, s]() { setSpeed(s); });
-        }
-        m_speedBtn->setMenu(m_speedMenu);
-        m_speedBtn->setPopupMode(QToolButton::InstantPopup);
-    }
-
-    // ---- middle: smart timeline ----
-    if (m_hasTransport) {
-        m_posSlider = new TimelineSlider(Qt::Horizontal, m_footer);
+        m_posSlider = new TimelineSlider(Qt::Horizontal, m_transportBar);
         m_posSlider->setObjectName(QStringLiteral("BarSeek"));
         m_posSlider->setRange(0, 0);
         m_posSlider->setMinimumWidth(90);
         m_posSlider->setCursor(Qt::PointingHandCursor);
-        m_posSlider->setToolTip(tr("进度：点击人物/车辆色块可跳转"));
+        m_posSlider->setToolTip(tr("拖动定位；点击人物/车辆色块可跳转"));
         connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
             if (m_player) {
                 m_player->seek(t);
@@ -404,6 +402,28 @@ void VideoTile::buildControlBar()
                                      + QStringLiteral(" / ") + formatTime(m_duration));
             }
         });
+
+        // Speed: dropdown with the standard ladder.
+        m_speedBtn = new QToolButton(m_transportBar);
+        m_speedBtn->setObjectName(QStringLiteral("BarBtn"));
+        m_speedBtn->setText(QStringLiteral("1.0x"));
+        m_speedBtn->setCursor(Qt::PointingHandCursor);
+        m_speedBtn->setFocusPolicy(Qt::NoFocus);
+        m_speedBtn->setToolTip(tr("播放速度"));
+        m_speedMenu = new QMenu(m_speedBtn);
+        for (double s : {1.0, 2.0, 4.0, 8.0, 16.0}) {
+            QAction *a = m_speedMenu->addAction(QStringLiteral("%1x").arg(s, 0, 'g', 2));
+            a->setCheckable(true);
+            a->setChecked(qFuzzyCompare(s, 1.0));
+            connect(a, &QAction::triggered, this, [this, s]() { setSpeed(s); });
+        }
+        m_speedBtn->setMenu(m_speedMenu);
+        m_speedBtn->setPopupMode(QToolButton::InstantPopup);
+
+        trow->addWidget(m_playBtn);
+        trow->addWidget(m_timeLabel);
+        trow->addWidget(m_posSlider, 1);
+        trow->addWidget(m_speedBtn);
     }
 
     // ---- right group 1: AI strategy ----
@@ -567,17 +587,9 @@ void VideoTile::buildControlBar()
         emit evidenceExportRequested(m_channel);
     });
 
-    // ---- assemble: left · timeline · AI · picture · evidence ----
-    if (m_hasTransport) {
-        row->addWidget(m_playBtn);
-        row->addWidget(m_timeLabel);
-        row->addSpacing(2);
-        row->addWidget(m_posSlider, 1);
-        row->addWidget(m_speedBtn);
-        addSep();
-    } else {
-        row->addStretch(1);
-    }
+    // ---- assemble: action groups, right-aligned (transport has its own row
+    // above this bar) ----
+    row->addStretch(1);
     row->addWidget(m_aiBtn);
     row->addWidget(m_aiMenuBtn);
     row->addWidget(m_ocrBtn);
@@ -646,19 +658,37 @@ void VideoTile::positionControlBar()
         return;
     }
     const QRect r = m_video->rect();
-    // Small tiles (4x4 layouts) keep the bar hidden until the pointer is over
+    // Small tiles (4x4 layouts) keep the bars hidden until the pointer is over
     // the tile, so a 16-way grid stays clean but every tile remains reachable.
     const bool small = r.width() < 380 || r.height() < 150;
     if (small && !m_hovered) {
         m_footer->hide();
+        if (m_transportBar) {
+            m_transportBar->hide();
+        }
         return;
     }
-    const int h = qMax(30, m_footer->sizeHint().height());
+
     const int margin = 8;
-    m_footer->setGeometry(margin, r.height() - h - margin,
-                          qMax(120, r.width() - 2 * margin), h);
+    const int w = qMax(120, r.width() - 2 * margin);
+    const int fh = qMax(30, m_footer->sizeHint().height());
+    const int fy = r.height() - fh - margin;
+    m_footer->setGeometry(margin, fy, w, fh);
     m_footer->show();
     m_footer->raise();
+
+    // Transport lives on its own row above the action bar, and only exists for
+    // on-demand playback: live preview has no seekable timeline.
+    const bool showTransport = m_transportBar && m_hasTransport && m_isVod;
+
+    if (showTransport) {
+        const int th = qMax(30, m_transportBar->sizeHint().height());
+        m_transportBar->setGeometry(margin, fy - th - 6, w, th);
+        m_transportBar->show();
+        m_transportBar->raise();
+    } else if (m_transportBar) {
+        m_transportBar->hide();
+    }
 }
 
 void VideoTile::updateEvidenceBadge()

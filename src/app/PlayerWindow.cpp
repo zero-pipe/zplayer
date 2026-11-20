@@ -386,41 +386,21 @@ void PlayerWindow::buildUi()
     m_ptz = new PtzPanel(body);
     m_ptz->setMinimumWidth(260);
     m_ptz->setMaximumWidth(360);
-
-    // Thin collapse handle docked on the PTZ panel's left edge: click to fold
-    // the panel away, click again to bring it back. Stays visible either way.
-    auto *ptzHandle = new QToolButton(body);
-    ptzHandle->setObjectName(QStringLiteral("PtzHandle"));
-    ptzHandle->setCursor(Qt::PointingHandCursor);
-    ptzHandle->setFixedWidth(16);
-    ptzHandle->setIconSize(QSize(14, 14));
-    ptzHandle->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    auto updateHandle = [this, ptzHandle]() {
-        const bool shown = m_ptz && m_ptz->isVisible();
-        ptzHandle->setIcon(QIcon(icons::chevron(shown,
-                             ThemeManager::instance().tokens().text2, 14)));
-        ptzHandle->setToolTip(shown ? tr("收起云台面板") : tr("展开云台面板"));
-    };
-    updateHandle();
-    connect(ptzHandle, &QToolButton::clicked, this, [this, updateHandle]() {
-        const bool shown = m_ptz && m_ptz->isVisible();
-        if (m_ptz) m_ptz->setVisible(!shown);
-        updateHandle();
-    });
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, ptzHandle, updateHandle);
+    // Hidden until a PTZ-capable live channel is actually playing (see
+    // updatePtzPanel). An empty or irrelevant panel just wastes space and
+    // invites mis-clicks.
+    m_ptz->hide();
 
     auto *splitter = new QSplitter(Qt::Horizontal, body);
     splitter->setObjectName(QStringLiteral("BodySplitter"));
     splitter->setHandleWidth(1);
     splitter->addWidget(m_tree);
     splitter->addWidget(centerCol);
-    splitter->addWidget(ptzHandle);
     splitter->addWidget(m_ptz);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setStretchFactor(3, 0);
-    splitter->setSizes({280, 864, 16, 300});
+    splitter->setSizes({280, 864, 300});
 
     bodyLay->addWidget(splitter);
     rootLay->addWidget(body, 1);
@@ -435,6 +415,12 @@ void PlayerWindow::buildUi()
     });
 
     connect(m_grid, &VideoGrid::activeChannelChanged, this, &PlayerWindow::onActiveChannelChanged);
+    connect(m_grid, &VideoGrid::tilePlaybackStateChanged, this,
+            [this](const zp::ChannelRef &ch, bool) {
+                if (ch == m_active) {
+                    updatePtzPanel();
+                }
+            });
     connect(m_grid, &VideoGrid::retryRequested, this, &PlayerWindow::onRetryRequested);
     connect(m_grid, &VideoGrid::maximizeRequested, this, &PlayerWindow::onMaximizeRequested);
     connect(m_grid, &VideoGrid::snapshotTaken, this,
@@ -656,10 +642,27 @@ void PlayerWindow::onStreamFailed(const ChannelRef &ch, const QString &message)
     toastError(tr("播放失败：%1").arg(message));
 }
 
+void PlayerWindow::updatePtzPanel()
+{
+    bool show = false;
+    if (m_active.isValid() && m_activePtzCapable) {
+        if (VideoTile *t = m_grid->tileFor(m_active)) {
+            // Live preview only: a real-time stream cannot be paused, and
+            // recorded playback must not drive the camera.
+            show = t->isPlaying() && !t->isVod();
+        }
+    }
+    if (m_ptz) {
+        m_ptz->setVisible(show);
+    }
+}
+
 void PlayerWindow::onActiveChannelChanged(const ChannelRef &ch, const QString &name, bool ptzCapable)
 {
     m_active = ch;
+    m_activePtzCapable = ptzCapable;
     m_ptz->setTarget(ch, name, ptzCapable);
+    updatePtzPanel();
     if (ch.isValid()) {
         setWindowTitle(QStringLiteral("Zeroo Player — %1").arg(name));
         statusBar()->showMessage(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));

@@ -102,6 +102,11 @@ private:
     QHash<QString, QString> m_channelNames;   // ch.key() -> name
     QHash<QString, bool> m_channelPtz;
     ChannelRef m_active;
+    bool m_activePtzCapable = false;
+    // The PTZ panel is only meaningful for a live channel that is actually on
+    // screen: hidden otherwise (real-time previews cannot pause; recorded
+    // playback has no PTZ).
+    void updatePtzPanel();
     ChannelRef m_pending;                     // channel awaiting playStarted
     QString m_pendingName;
     bool m_pendingPtz = false;

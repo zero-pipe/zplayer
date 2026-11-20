@@ -89,6 +89,11 @@ public:
     void setSharpenEnabled(bool on);        // same as clicking 超分
     void setDenoiseEnabled(bool on);        // same as clicking 语音降噪
 
+    // Live preview (platform stream) vs on-demand file. The PTZ panel only
+    // makes sense for live streams; transport controls only for files.
+    bool isVod() const { return m_isVod; }
+    bool isPlaying() const { return m_state == Playing; }
+
     // ---- Smart timeline ----
     // Fast offline pass over the file at high playback speed, recording when
     // people are on screen; the result is painted on the transport slider.
@@ -114,6 +119,9 @@ signals:
     void scanFinished(const zp::ChannelRef &ch, int segments);
     // Transient status text for the window-level toast.
     void statusMessage(const zp::ChannelRef &ch, const QString &text);
+    // Playing state changed (used to gate the PTZ panel). `playing` is true for
+    // MediaState::Playing only.
+    void playbackStateChanged(const zp::ChannelRef &ch, bool playing);
 
 protected:
     void mousePressEvent(QMouseEvent *e) override;
@@ -163,8 +171,10 @@ private:
 
     AnalysisOverlay *m_aiOverlay = nullptr;   // detection boxes over the video
 
-    // Transport.
+    // Transport (own row above the action bar; visible for VOD only).
+    QWidget *m_transportBar = nullptr;
     bool m_hasTransport = false;
+    bool m_isVod = false;
     QToolButton *m_playBtn = nullptr;
     TimelineSlider *m_posSlider = nullptr;
     QLabel *m_timeLabel = nullptr;

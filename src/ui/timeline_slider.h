@@ -27,8 +27,14 @@ signals:
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
+    // Media time under an x position, or -1 when the groove is not laid out.
+    double timeAt(int x) const;
+    static QString formatTime(double seconds);
+
     QVector<TimelineSegment> m_segments;
     double m_duration = 0.0;
 };

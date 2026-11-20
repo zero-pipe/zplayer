@@ -1,6 +1,7 @@
 #include "ui/timeline_slider.h"
 
 #include <QMouseEvent>
+#include <QToolTip>
 #include <QPainter>
 #include <QStyle>
 #include <QStyleOptionSlider>
@@ -63,6 +64,53 @@ void TimelineSlider::paintEvent(QPaintEvent *event)
         c.setAlpha(qBound(110, 110 + seg.peak * 35, 220));
         p.fillRect(r, c);
     }
+}
+
+double TimelineSlider::timeAt(int x) const
+{
+    if (m_duration <= 0.0) {
+        return -1.0;
+    }
+    QStyleOptionSlider opt;
+    initStyleOption(&opt);
+    const QRect groove = style()->subControlRect(QStyle::CC_Slider, &opt,
+                                                 QStyle::SC_SliderGroove, this);
+    if (groove.isEmpty()) {
+        return -1.0;
+    }
+    const double frac = double(x - groove.left()) / qMax(1, groove.width());
+    return qBound(0.0, frac, 1.0) * m_duration;
+}
+
+QString TimelineSlider::formatTime(double seconds)
+{
+    const int t = qMax(0, int(seconds + 0.5));
+    const int h = t / 3600;
+    const int m = (t / 60) % 60;
+    const int sec = t % 60;
+    if (h > 0) {
+        return QStringLiteral("%1:%2:%3").arg(h)
+            .arg(m, 2, 10, QLatin1Char('0')).arg(sec, 2, 10, QLatin1Char('0'));
+    }
+    return QStringLiteral("%1:%2").arg(m).arg(sec, 2, 10, QLatin1Char('0'));
+}
+
+void TimelineSlider::mouseMoveEvent(QMouseEvent *event)
+{
+    const double t = timeAt(event->pos().x());
+    if (t >= 0.0) {
+        // Precise scrub position under the pointer, like desktop players.
+        QToolTip::showText(event->globalPos(), formatTime(t), this);
+    } else {
+        QToolTip::hideText();
+    }
+    QSlider::mouseMoveEvent(event);
+}
+
+void TimelineSlider::leaveEvent(QEvent *event)
+{
+    QToolTip::hideText();
+    QSlider::leaveEvent(event);
 }
 
 void TimelineSlider::mousePressEvent(QMouseEvent *event)

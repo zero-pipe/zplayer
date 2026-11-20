@@ -82,6 +82,8 @@ signals:
     void streamScanFinished(const zp::ChannelRef &ch, int segments);
     // Transient tile status text (control-bar toggles), shown as a toast.
     void tileStatus(const zp::ChannelRef &ch, const QString &text);
+    // A tile started/stopped playing (used to gate the PTZ panel).
+    void tilePlaybackStateChanged(const zp::ChannelRef &ch, bool playing);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };
