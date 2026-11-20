@@ -18,32 +18,34 @@ ThemeTokens ThemeTokens::light()
     ThemeTokens t;
     t.name = QStringLiteral("light");
 
-    t.bgRoot     = c("#F2F6FB");
+    // Zeroo identity palette: calm Google-grade neutrals with a single blue
+    // accent, red/green/yellow reserved for status.
+    t.bgRoot     = c("#F8F9FA");
     t.bgPanel    = c("#FFFFFF");
     t.bgElevated = c("#FFFFFF");
-    t.bgInput    = c("#F5F8FC");
-    t.bgHover    = c("#EEF4FB");
-    t.border       = c("#E2E8F0");
-    t.borderStrong = c("#CBD5E1");
-    t.divider      = c("#EAF0F7");
+    t.bgInput    = c("#F1F3F4");
+    t.bgHover    = c("#E8EAED");
+    t.border       = c("#E8EAED");
+    t.borderStrong = c("#DADCE0");
+    t.divider      = c("#F1F3F4");
 
-    t.text  = c("#1E293B");
-    t.text2 = c("#5B6B80");
-    t.muted = c("#94A3B8");
+    t.text  = c("#202124");
+    t.text2 = c("#5F6368");
+    t.muted = c("#80868B");
 
-    t.accent      = c("#1565C0");
-    t.accent2     = c("#1E88E5");
-    t.accentSoft  = QColor(21, 101, 192, 20);
-    t.accentSoft2 = QColor(21, 101, 192, 46);
+    t.accent      = c("#1A73E8");
+    t.accent2     = c("#1967D2");
+    t.accentSoft  = QColor(26, 115, 232, 20);
+    t.accentSoft2 = QColor(26, 115, 232, 46);
 
-    t.success     = c("#16A34A");
-    t.successSoft = QColor(22, 163, 74, 26);
-    t.warning     = c("#D97706");
-    t.warningSoft = QColor(217, 119, 6, 26);
-    t.danger      = c("#E11D48");
-    t.dangerSoft  = QColor(225, 29, 72, 26);
+    t.success     = c("#34A853");
+    t.successSoft = QColor(52, 168, 83, 26);
+    t.warning     = c("#FBBC05");
+    t.warningSoft = QColor(251, 188, 5, 32);
+    t.danger      = c("#EA4335");
+    t.dangerSoft  = QColor(234, 67, 53, 26);
 
-    t.videoBg = c("#EAF1F8");
+    t.videoBg = c("#F1F3F4");
     return t;
 }
 
@@ -65,17 +67,17 @@ ThemeTokens ThemeTokens::dark()
     t.text2 = c("#9AA7B6");
     t.muted = c("#5F6B7A");
 
-    t.accent      = c("#3B8EF8");
-    t.accent2     = c("#22B8CF");
-    t.accentSoft  = QColor(59, 142, 248, 36);
-    t.accentSoft2 = QColor(59, 142, 248, 66);
+    t.accent      = c("#8AB4F8");
+    t.accent2     = c("#AECBFA");
+    t.accentSoft  = QColor(138, 180, 248, 36);
+    t.accentSoft2 = QColor(138, 180, 248, 66);
 
-    t.success     = c("#2ECC71");
-    t.successSoft = QColor(46, 204, 113, 31);
-    t.warning     = c("#E3B341");
-    t.warningSoft = QColor(227, 179, 65, 31);
-    t.danger      = c("#F85149");
-    t.dangerSoft  = QColor(248, 81, 73, 31);
+    t.success     = c("#81C995");
+    t.successSoft = QColor(129, 201, 149, 31);
+    t.warning     = c("#FDD663");
+    t.warningSoft = QColor(253, 214, 99, 31);
+    t.danger      = c("#F28B82");
+    t.dangerSoft  = QColor(242, 139, 130, 31);
 
     t.videoBg = c("#121A24");
     return t;

@@ -24,7 +24,7 @@ LoginDialog::LoginDialog(QWidget *parent)
 {
     setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground, true);
-    setWindowTitle(tr("登录 - Zero AI Player"));
+    setWindowTitle(tr("登录 - Zeroo Player"));
     setObjectName(QStringLiteral("LoginDialog"));
     buildUi();
 }
@@ -44,7 +44,7 @@ void LoginDialog::buildUi()
 
     auto *shadow = new QGraphicsDropShadowEffect(card);
     shadow->setBlurRadius(56);
-    shadow->setColor(QColor(21, 60, 120, 60));
+    shadow->setColor(QColor(32, 33, 36, 45));
     shadow->setOffset(0, 14);
     card->setGraphicsEffect(shadow);
 
@@ -73,19 +73,11 @@ void LoginDialog::buildUi()
     bv->addWidget(hero);
     bv->addSpacing(26);
 
-    auto *name = new QLabel(QStringLiteral("Zero AI Player"), brand);
+    auto *name = new QLabel(QStringLiteral("Zeroo Player"), brand);
     name->setObjectName(QStringLiteral("BrandName"));
     bv->addWidget(name);
 
-    auto *sub = new QLabel(tr("智能物联 · 视觉引擎"), brand);
-    sub->setObjectName(QStringLiteral("BrandSub"));
-    bv->addSpacing(8);
-    bv->addWidget(sub);
-
     bv->addStretch(1);
-    auto *foot = new QLabel(tr("Intelligent IoT Vision Engine"), brand);
-    foot->setObjectName(QStringLiteral("BrandFoot"));
-    bv->addWidget(foot);
 
     cardLay->addWidget(brand);
 
@@ -113,11 +105,6 @@ void LoginDialog::buildUi()
     title->setObjectName(QStringLiteral("FormTitle"));
     fv->addSpacing(8);
     fv->addWidget(title);
-
-    auto *subtitle = new QLabel(tr("登录以接入您的物联视觉平台"), form);
-    subtitle->setObjectName(QStringLiteral("FormSubtitle"));
-    fv->addSpacing(8);
-    fv->addWidget(subtitle);
     fv->addSpacing(28);
 
     m_user = new IconField(form);

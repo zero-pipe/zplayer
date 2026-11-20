@@ -3,8 +3,6 @@
 
 #include <QPainter>
 #include <QPainterPath>
-#include <QLinearGradient>
-#include <QPolygonF>
 #include <QtMath>
 
 namespace zp {
@@ -113,28 +111,36 @@ QIcon camera(bool online)
     return icon;
 }
 
-// The "smart IoT engine" mark: rounded-square gradient tile with a hexagon
-// body, a central sensing eye and satellite nodes.
+// Zeroo Player mark: dark rounded tile, a white ring and the red play
+// triangle. Drawn from the 32-unit brand grid so every size stays crisp.
 QPixmap appLogo(int size)
 {
-    const ThemeTokens t = tokens();
     QPixmap pm(size, size);
     pm.fill(Qt::transparent);
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing, true);
+    p.scale(size / 32.0, size / 32.0);
 
-    const qreal s = size;
-    QLinearGradient g(0, 0, s, s);
-    g.setColorAt(0, t.accent2);
-    g.setColorAt(1, t.accent);
     p.setPen(Qt::NoPen);
-    p.setBrush(g);
-    p.drawRoundedRect(QRectF(0, 0, s, s), s * 0.28, s * 0.28);
+    p.setBrush(QColor(0x20, 0x21, 0x24));
+    p.drawRoundedRect(QRectF(0, 0, 32, 32), 8, 8);
 
-    p.setBrush(QColor(255, 255, 255, 240));
-    p.drawEllipse(QPointF(s * 0.5, s * 0.5), s * 0.22, s * 0.22);
-    p.setBrush(t.accent);
-    p.drawEllipse(QPointF(s * 0.5, s * 0.5), s * 0.11, s * 0.11);
+    QPen ring(Qt::white, 2.6);
+    p.setPen(ring);
+    p.setBrush(Qt::NoBrush);
+    p.drawEllipse(QPointF(16, 16), 9.5, 9.5);
+
+    QPainterPath tri;
+    tri.moveTo(14.2, 12.6);
+    tri.cubicTo(14.2, 12.2, 14.65, 11.95, 15.0, 12.16);
+    tri.lineTo(20.2, 15.32);
+    tri.cubicTo(20.52, 15.52, 20.52, 15.98, 20.2, 16.18);
+    tri.lineTo(15.0, 19.34);
+    tri.cubicTo(14.65, 19.55, 14.2, 19.3, 14.2, 18.9);
+    tri.closeSubpath();
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0xEA, 0x43, 0x35));
+    p.drawPath(tri);
 
     return pm;
 }
@@ -378,57 +384,8 @@ QPixmap chevron(bool right, const QColor &color, int size)
 
 QPixmap brandHero(int size)
 {
-    const ThemeTokens t = tokens();
-    QPixmap pm(size, size);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing, true);
-
-    const qreal s = size;
-    const QPointF c(s * 0.5, s * 0.5);
-    auto hex = [&](qreal r) {
-        QPolygonF poly;
-        for (int i = 0; i < 6; ++i) {
-            const qreal a = M_PI / 180.0 * (60 * i - 90);
-            poly << QPointF(c.x() + r * std::cos(a), c.y() + r * std::sin(a));
-        }
-        return poly;
-    };
-
-    // Outer faint hexagon.
-    QPen faint(t.accent, s * 0.008);
-    faint.setColor(QColor(t.accent.red(), t.accent.green(), t.accent.blue(), 70));
-    p.setPen(faint);
-    p.setBrush(Qt::NoBrush);
-    p.drawPolygon(hex(s * 0.46));
-
-    // Node spokes.
-    for (int i = 0; i < 6; ++i) {
-        const qreal a = M_PI / 180.0 * (60 * i - 90);
-        p.drawLine(c, QPointF(c.x() + s * 0.46 * std::cos(a), c.y() + s * 0.46 * std::sin(a)));
-        p.setBrush(t.accent);
-        p.setPen(Qt::NoPen);
-        p.drawEllipse(QPointF(c.x() + s * 0.46 * std::cos(a), c.y() + s * 0.46 * std::sin(a)),
-                      s * 0.028, s * 0.028);
-    }
-
-    // Solid hexagon body.
-    QLinearGradient g(0, 0, s, s);
-    g.setColorAt(0, t.accent2);
-    g.setColorAt(1, t.accent);
-    p.setBrush(g);
-    p.setPen(Qt::NoPen);
-    p.drawPolygon(hex(s * 0.30));
-
-    // Sensing eye.
-    p.setBrush(QColor(255, 255, 255));
-    p.drawEllipse(c, s * 0.15, s * 0.15);
-    p.setBrush(t.accent);
-    p.drawEllipse(c, s * 0.075, s * 0.075);
-    p.setBrush(QColor(255, 255, 255, 200));
-    p.drawEllipse(QPointF(c.x() - s * 0.03, c.y() - s * 0.03), s * 0.025, s * 0.025);
-
-    return pm;
+    // The login brand panel reuses the app mark for one consistent identity.
+    return appLogo(size);
 }
 
 } // namespace icons

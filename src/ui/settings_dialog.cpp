@@ -125,7 +125,7 @@ QWidget *SettingsDialog::buildAboutPage()
         l->setObjectName(QStringLiteral("VsFieldLabel"));
         v->addWidget(l);
     };
-    addLine(tr("产品"), QStringLiteral("Zero AI Player"));
+    addLine(tr("产品"), QStringLiteral("Zeroo Player"));
     addLine(tr("媒体引擎"),
             media::resolveBackendName(MediaBackend::Auto));
     addLine(tr("授权"), tr("对接 zero-web-server 平台"));

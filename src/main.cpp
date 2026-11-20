@@ -1,6 +1,7 @@
 #include "app/PlayerWindow.h"
 #include "app/SessionManager.h"
 #include "ui/theme.h"
+#include "ui/icons.h"
 #include "ui/login_dialog.h"
 #include "platform/platform_api.h"
 #include "platform/web_platform_api.h"
@@ -10,6 +11,7 @@
 
 #include <QApplication>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QScreen>
 #include <QPointer>
 #include <QTimer>
@@ -244,6 +246,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("zero-player"));
     app.setOrganizationName(QStringLiteral("zero"));
+    app.setWindowIcon(QIcon(zp::icons::appLogo(256)));
 
     qRegisterMetaType<zp::ChannelRef>("zp::ChannelRef");
     qRegisterMetaType<zp::Session>("zp::Session");

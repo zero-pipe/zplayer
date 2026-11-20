@@ -56,7 +56,7 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     // Frameless: the native title bar is dropped and replaced by the custom bar
     // built in buildUi() (brand + theme/settings/user + window controls).
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    setWindowTitle(QStringLiteral("Zero AI Player"));
+    setWindowTitle(QStringLiteral("Zeroo Player"));
     resize(1440, 880);
     setMinimumSize(1024, 640);
     setAcceptDrops(true);
@@ -240,7 +240,7 @@ void PlayerWindow::buildUi()
     logo->setPixmap(icons::appLogo(28));
     logo->setFixedSize(28, 28);
     logo->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    auto *appName = new QLabel(QStringLiteral("Zero AI Player"), topBar);
+    auto *appName = new QLabel(QStringLiteral("Zeroo Player"), topBar);
     appName->setObjectName(QStringLiteral("AppName"));
     appName->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     tb->addWidget(logo);
@@ -661,10 +661,10 @@ void PlayerWindow::onActiveChannelChanged(const ChannelRef &ch, const QString &n
     m_active = ch;
     m_ptz->setTarget(ch, name, ptzCapable);
     if (ch.isValid()) {
-        setWindowTitle(QStringLiteral("Zero AI Player — %1").arg(name));
+        setWindowTitle(QStringLiteral("Zeroo Player — %1").arg(name));
         statusBar()->showMessage(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));
     } else {
-        setWindowTitle(QStringLiteral("Zero AI Player"));
+        setWindowTitle(QStringLiteral("Zeroo Player"));
     }
 }
 
