@@ -135,6 +135,14 @@ void LoginDialog::buildUi()
 
     auto *optRow = new QHBoxLayout();
     m_remember = new QCheckBox(tr("记住登录"), form);
+    // Generous hit area so the option is easy to toggle on scaled displays,
+    // and the choice is persisted the moment it changes (not only on a
+    // successful login), so "remember me" never silently loses the setting.
+    m_remember->setMinimumHeight(26);
+    m_remember->setCursor(Qt::PointingHandCursor);
+    connect(m_remember, &QCheckBox::toggled, this, [](bool on) {
+        SessionManager::instance().saveLoginPrefs(on);
+    });
 
     auto *serverBtn = new QToolButton(form);
     serverBtn->setObjectName(QStringLiteral("ServerCfg"));

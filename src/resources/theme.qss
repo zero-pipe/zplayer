@@ -111,7 +111,10 @@ QCheckBox::indicator {
 }
 QCheckBox::indicator:hover { border-color: %accent%; }
 QCheckBox::indicator:checked {
-    background: %bgPanel%;
+    /* Filled accent state: stays unmistakably "on" even on machines where the
+       SVG check glyph fails to render (missing image plugin / partial Qt
+       deployment), which otherwise looks like the checkbox does nothing. */
+    background: %accent%;
     border-color: %accent%;
     image: url(:/resources/check.svg);
 }
