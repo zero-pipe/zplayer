@@ -90,21 +90,21 @@ signals:
 build.bat
 ```
 
-脚本会：链接 mpv-sdk → qmake + nmake 构建到 `build/` → windeployqt + 拷贝 Qt/mpv 运行时 DLL 到 `out/`。
-产物：`out\zero-player.exe`。
+脚本会：链接 mpv-sdk → qmake + nmake 构建到 `build/` → windeployqt + 拷贝 Qt/mpv 运行时 DLL 到 `zplayer/`。
+产物：`zplayer\zero-player.exe`。
 
 > 注意：libmpv 运行时 DLL（`libmpv-2.dll` + ffmpeg/libass 等）不入库，首次构建前需把
-> `3rdpart/mpv-sdk/bin/x64/*.dll` 放到可被部署的位置（脚本会自动拷到 `out/`）。
+> `3rdpart/mpv-sdk/bin/x64/*.dll` 放到可被部署的位置（脚本会自动拷到 `zplayer/`）。
 
 ## 运行 / 验证
 
 ```bat
 :: 正常：启动登录页 → 输入服务器地址/账号 → 进入播放页
-out\zero-player.exe
+zplayer\zero-player.exe
 
 :: 直接播放本地文件或流（便于自测）
-out\zero-player.exe D:\test.mp4
-out\zero-player.exe rtsp://user:pass@host:554/stream
+zplayer\zero-player.exe D:\test.mp4
+zplayer\zero-player.exe rtsp://user:pass@host:554/stream
 ```
 
 开发调试用环境变量（不填则无影响）：
