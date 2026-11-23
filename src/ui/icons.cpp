@@ -111,8 +111,11 @@ QIcon camera(bool online)
     return icon;
 }
 
-// Zeroo Player mark: dark rounded tile, a white ring and the red play
+// Zeroo Player mark: Google-blue rounded tile, a white ring and the play
 // triangle. Drawn from the 32-unit brand grid so every size stays crisp.
+// (The old near-black tile read as an unrelated dark blob against both the
+// light title bar and the dark theme; the blue tile follows the Google
+// product palette like the rest of the Zeroo marks.)
 QPixmap appLogo(int size)
 {
     QPixmap pm(size, size);
@@ -122,7 +125,7 @@ QPixmap appLogo(int size)
     p.scale(size / 32.0, size / 32.0);
 
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0x20, 0x21, 0x24));
+    p.setBrush(QColor(0x1A, 0x73, 0xE8));
     p.drawRoundedRect(QRectF(0, 0, 32, 32), 8, 8);
 
     QPen ring(Qt::white, 2.6);
@@ -139,7 +142,7 @@ QPixmap appLogo(int size)
     tri.cubicTo(14.65, 19.55, 14.2, 19.3, 14.2, 18.9);
     tri.closeSubpath();
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0xEA, 0x43, 0x35));
+    p.setBrush(Qt::white);
     p.drawPath(tri);
 
     return pm;
