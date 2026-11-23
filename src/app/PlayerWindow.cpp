@@ -18,6 +18,8 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QButtonGroup>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -86,8 +88,18 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     // built in buildUi() (brand + theme/settings/user + window controls).
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     setWindowTitle(QStringLiteral("Zeroo Player"));
-    resize(1440, 880);
-    setMinimumSize(1024, 640);
+    // Fit the default size to the actual screen: a hard-coded 1440x880 overflows
+    // smaller laptop panels (content gets clipped / panels squeezed together).
+    QRect avail = QRect(0, 0, 1440, 880);
+    if (QScreen *scr = QGuiApplication::primaryScreen()) {
+        avail = scr->availableGeometry();
+    }
+    const int defW = qBound(960, int(avail.width() * 0.96), 1440);
+    const int defH = qBound(600, int(avail.height() * 0.96), 880);
+    resize(defW, defH);
+    // Never demand more than the screen can give, otherwise the OS clips us.
+    setMinimumSize(qMin(900, avail.width()), qMin(560, avail.height()));
+    move(avail.center() - QPoint(defW / 2, defH / 2));
     setAcceptDrops(true);
 
     // Local on-demand playback entry: Ctrl+O opens a recording. Dropping a file
@@ -406,7 +418,7 @@ void PlayerWindow::buildUi()
     bodyLay->setSpacing(0);
 
     m_tree = new DeviceTreeView(body);
-    m_tree->setMinimumWidth(240);
+    m_tree->setMinimumWidth(200);
     m_tree->setMaximumWidth(420);
 
     // Middle column: a slim split-layout bar above the video grid.
@@ -470,7 +482,7 @@ void PlayerWindow::buildUi()
     centerLay->addWidget(m_grid, 1);
 
     m_ptz = new PtzPanel(body);
-    m_ptz->setMinimumWidth(250);
+    m_ptz->setMinimumWidth(220);
     m_ptz->setMaximumWidth(360);
 
     // Right tool dock: the PTZ controls and the local failed-sample list share
@@ -478,7 +490,7 @@ void PlayerWindow::buildUi()
     m_toolDock = new QTabWidget(body);
     m_toolDock->setObjectName(QStringLiteral("ToolDock"));
     m_toolDock->setDocumentMode(true);
-    m_toolDock->setMinimumWidth(270);
+    m_toolDock->setMinimumWidth(230);
     m_toolDock->setMaximumWidth(380);
     m_toolDock->addTab(m_ptz, tr("云台"));
 
@@ -554,7 +566,15 @@ void PlayerWindow::buildUi()
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
     splitter->setStretchFactor(3, 0);
-    splitter->setSizes({280, 840, 320, 0});
+    // Size the columns relative to the real width so narrow laptops don't get a
+    // 1440-wide splitter squeezed into a 1100-wide window.
+    {
+        const int availW = qMax(720, width());
+        const int left = qBound(200, int(availW * 0.19), 320);
+        const int right = qBound(230, int(availW * 0.22), 360);
+        const int mid = qMax(320, availW - left - right);
+        splitter->setSizes({left, mid, right, 0});
+    }
     m_bodySplitter = splitter;
 
     // Global capture switch (persisted); tiles follow it and can flip it from

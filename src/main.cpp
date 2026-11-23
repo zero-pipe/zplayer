@@ -249,6 +249,19 @@ int main(int argc, char *argv[])
 {
     installFileLogger();
 
+    // High-DPI: laptops often run at 125%/150% scaling. Without this Qt renders
+    // at 96 DPI and the OS bitmap-scales the whole window, which makes the
+    // layout look squeezed/overlapping. Set the rounding policy to PassThrough
+    // so fractional factors lay out accurately. Opt out with ZP_NO_HIDPI=1.
+    if (!qEnvironmentVariableIsSet("ZP_NO_HIDPI")) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+            Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+#endif
+        QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+        QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    }
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("zero-player"));
     app.setOrganizationName(QStringLiteral("zero"));

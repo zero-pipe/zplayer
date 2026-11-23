@@ -47,3 +47,6 @@ ui_*.h
 !/3rdpart/mpv-sdk/lib/**/*.lib
 /3rdpart/models
 /3rdpart/onnxruntime
+# 本地 AI 引导文件，不入库（保留本地）
+Claude.md
+CLAUDE.md
