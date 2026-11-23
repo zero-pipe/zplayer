@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QUrl>
 #include <QSet>
+#include <QStringList>
 #include <QVector>
 #include <QHash>
 #include "platform/platform_api.h"
@@ -19,6 +20,7 @@ class QStackedLayout;
 class QPushButton;
 class QSlider;
 class QMenu;
+class QAction;
 class TimelineSlider;
 class QHBoxLayout;
 QT_END_NAMESPACE
@@ -92,6 +94,15 @@ public:
     // (failed-sample collection). reason = "manual" | "low_conf".
     void captureSample(const QString &reason = QStringLiteral("manual"));
 
+    // Class names of the active detector (index order). Empty/COCO-80 keeps the
+    // person/vehicle/animal semantics; anything else is treated as a custom
+    // model where every class counts as a generic "target".
+    void setClassNames(const QStringList &names);
+    // Global "collect failure samples" switch. Automatic low-confidence
+    // collection only runs while this is on; the 采集 button needs it too.
+    void setCaptureEnabled(bool on);
+    bool captureEnabled() const { return m_captureEnabled; }
+
     // Live preview (platform stream) vs on-demand file. The PTZ panel only
     // makes sense for live streams; transport controls only for files.
     bool isVod() const { return m_isVod; }
@@ -113,6 +124,8 @@ signals:
     void snapshotTaken(const zp::ChannelRef &ch, const QString &path, bool ok);
     // Emitted after a failed-sample capture into the local dataset.
     void sampleCaptured(const zp::ChannelRef &ch, bool ok);
+    // The user flipped the "collect samples" menu entry; window persists it.
+    void captureSettingChanged(bool on);
     // User pressed the evidence button; the window picks a folder, then calls
     // exportEvidence() and reports the result.
     void evidenceExportRequested(const zp::ChannelRef &ch);
@@ -153,6 +166,13 @@ private:
     void updateEvidence(double pts, const QVector<AnalysisBox> &boxes);
     void closeOpenEvidence(double atPts, bool all);
     QString captureEvidenceThumbnail();
+    // Capture button enablement (needs AI check + global capture + playback).
+    void updateCaptureUi();
+    // Default "targets" set: COCO person/vehicle/dog ids, or all classes when
+    // the active model is not the standard COCO-80 detector.
+    void applyDefaultAiClasses();
+    bool cocoModel() const;
+    void buildAiMenu();
 
     // Smart timeline: scan driving.
     void finishScan();
@@ -187,6 +207,9 @@ private:
     QMenu *m_speedMenu = nullptr;
     QToolButton *m_snapBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
+    QMenu *m_aiMenu = nullptr;
+    QToolButton *m_captureBtn = nullptr;
+    QAction *m_captureAct = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
     QToolButton *m_roiBtn = nullptr;
     QToolButton *m_ocrBtn = nullptr;
@@ -235,6 +258,8 @@ private:
     QVector<AnalysisBox> m_lastBoxes; // last detection result (for capture)
     double m_capturePts = -1.0;       // media time of the captured frame
     qint64 m_lastCaptureMs = 0;        // throttle for auto failed-sample capture
+    QStringList m_classNames;         // active detector class names (index order)
+    bool m_captureEnabled = false;    // global "collect failure samples" switch
     qint64 m_lastPresenceMs = 0;
     qint64 m_lastSeekMs = 0;
 

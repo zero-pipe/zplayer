@@ -8,6 +8,7 @@
 #include "platform/mock_platform_api.h"
 #include "player/media_player.h"
 #include "analysis/analyzer.h"
+#include "train/dataset_store.h"
 
 #include <QApplication>
 #include <QGuiApplication>
@@ -259,6 +260,16 @@ int main(int argc, char *argv[])
     qRegisterMetaType<zp::PresetInfo>("zp::PresetInfo");
     qRegisterMetaType<zp::MediaState>("zp::MediaState");
     qRegisterMetaType<zp::AnalysisResult>("zp::AnalysisResult");
+
+    // Dev: ZP_DATASET_EXPORT=<dir> exports the current dataset to YOLO layout
+    // and exits — lets the export/remap path be verified headlessly.
+    const QString exportDir = qEnvironmentVariable("ZP_DATASET_EXPORT");
+    if (!exportDir.isEmpty()) {
+        QString err;
+        const bool ok = zp::DatasetStore::instance().exportYolo(exportDir, 0.2, &err);
+        qInfo().noquote() << "[export]" << (ok ? "OK" : "FAILED") << err;
+        return ok ? 0 : 1;
+    }
 
     zp::ThemeManager::instance().apply(app);
     // Dev: ZP_THEME=light|dark pins the theme for headless screenshots.

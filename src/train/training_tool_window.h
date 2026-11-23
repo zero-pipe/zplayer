@@ -9,6 +9,7 @@
 QT_BEGIN_NAMESPACE
 class QButtonGroup;
 class QComboBox;
+class QGridLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -61,6 +62,8 @@ private:
     void saveCurrent();
     void showPage(int index);
     void refreshQc();
+    void rebuildClassButtons();
+    void openClassManager();
     void exportDataset();
     void startTraining();
     void onTrainFinished(int exitCode);
@@ -99,6 +102,7 @@ private:
     QLabel *m_boxCount = nullptr;
     QListWidget *m_boxList = nullptr;
     QButtonGroup *m_classGroup = nullptr;
+    QGridLayout *m_classGrid = nullptr;   // rebuilt when the class table changes
     bool m_syncingInspector = false;
 
     // QC page
@@ -107,8 +111,9 @@ private:
     QLabel *m_kpiTodo = nullptr;
     QLabel *m_kpiBoxes = nullptr;
     QLabel *m_qcBadge = nullptr;
-    QProgressBar *m_distBars[4] = {nullptr, nullptr, nullptr, nullptr};
-    QLabel *m_distVals[4] = {nullptr, nullptr, nullptr, nullptr};
+    QVector<QProgressBar *> m_distBars;
+    QVector<QLabel *> m_distVals;
+    QVBoxLayout *m_distHost = nullptr;   // holds one row per project class
     QLabel *m_qcPath = nullptr;
     QString m_lastExportDir;
 

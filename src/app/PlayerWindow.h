@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include <QHash>
+#include <QToolButton>
 #include "platform/platform_api.h"
 
 QT_BEGIN_NAMESPACE
@@ -13,6 +14,7 @@ class QButtonGroup;
 class QSizeGrip;
 class QTabWidget;
 class QScrollArea;
+class QSplitter;
 class QVBoxLayout;
 QT_END_NAMESPACE
 
@@ -26,6 +28,21 @@ class Toast;
 class AnalysisService;
 class IFrameAnalyzer;
 class TrainingToolWindow;
+
+// Slim vertical strip shown when the right tool dock is collapsed: icon on
+// top, optional count just below. (A stock QToolButton with text-under-icon
+// spreads the two across the full height, which reads badly in a tall strip.)
+class DockStripButton : public QToolButton {
+public:
+    explicit DockStripButton(QWidget *parent = nullptr) : QToolButton(parent) {}
+    void setCount(int n) { m_count = n; update(); }
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+
+private:
+    int m_count = 0;
+};
 
 class PlayerWindow : public QMainWindow {
     Q_OBJECT
@@ -80,6 +97,9 @@ private:
     void updateSampleBadge();
     void refreshSampleList();
     void selectSampleTab();
+    void syncSampleTab(int count);
+    void collapseToolDock();
+    void expandToolDock();
     void reloadDetector();
 
     // Frameless custom title bar helpers.
@@ -96,8 +116,13 @@ private:
     QTabWidget *m_toolDock = nullptr;
     QScrollArea *m_sampleScroll = nullptr;
     QVBoxLayout *m_sampleLay = nullptr;   // holds the sample cards + trailing stretch
+    QWidget *m_samplePage = nullptr;      // "样本" tab body (added dynamically)
+    QLabel *m_sampleCount = nullptr;      // header count text inside the tab
+    DockStripButton *m_dockReopen = nullptr;  // slim strip shown while the dock is collapsed
+    QSplitter *m_bodySplitter = nullptr;  // tree | grid | tool dock | reopen strip
+    bool m_dockCollapsed = false;
+    int m_dockWidth = 320;                // last expanded dock width
     int m_sampleShown = -1;          // last rendered sample count
-    QToolButton *m_sampleBtn = nullptr;
     TrainingToolWindow *m_trainTool = nullptr;
     AnalysisService *m_analysis = nullptr;   // per-window AI scheduler
     IFrameAnalyzer *m_detector = nullptr;    // owned; YOLO analyzer (may be null)

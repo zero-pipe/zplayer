@@ -11,6 +11,26 @@
 
 namespace zp {
 
+void VideoGrid::setClassNames(const QStringList &names)
+{
+    m_classNames = names;
+    for (VideoTile *t : m_tiles) {
+        if (t) {
+            t->setClassNames(names);
+        }
+    }
+}
+
+void VideoGrid::setCaptureEnabled(bool on)
+{
+    m_captureEnabled = on;
+    for (VideoTile *t : m_tiles) {
+        if (t) {
+            t->setCaptureEnabled(on);
+        }
+    }
+}
+
 void VideoGrid::setAnalysisService(AnalysisService *service)
 {
     m_analysis = service;
@@ -215,6 +235,10 @@ VideoTile *VideoGrid::createTile(const ChannelRef &ch, const QString &name, bool
 {
     auto *tile = new VideoTile(ch, name, ptz, m_gridHost);
     tile->applyVideoSettings(m_settings);  // inherit the grid's defaults
+    tile->setClassNames(m_classNames);     // detector class list (may be empty)
+    tile->setCaptureEnabled(m_captureEnabled);
+    connect(tile, &VideoTile::captureSettingChanged, this, &VideoGrid::captureSettingChanged);
+    connect(tile, &VideoTile::sampleCaptured, this, &VideoGrid::sampleCaptured);
     connect(tile, &VideoTile::clickedTile, this,
             [this](const zp::ChannelRef &c) {
                 const int idx = indexOf(c);

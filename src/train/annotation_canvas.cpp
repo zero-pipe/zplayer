@@ -64,7 +64,8 @@ void AnnotationCanvas::addBoxCentered()
 {
     AnalysisBox b;
     b.classId = m_currentClass;
-    b.label = QStringLiteral("#%1").arg(m_currentClass);
+    b.label = m_currentClassLabel.isEmpty() ? QStringLiteral("#%1").arg(m_currentClass)
+                                            : m_currentClassLabel;
     b.rect = QRectF(0.40, 0.38, 0.20, 0.24);
     b.score = 0.f;
     m_boxes.append(b);
@@ -74,12 +75,19 @@ void AnnotationCanvas::addBoxCentered()
     emit selectionChanged(m_sel);
 }
 
-void AnnotationCanvas::setCurrentClass(int classId) { m_currentClass = classId; }
+void AnnotationCanvas::setCurrentClass(int classId, const QString &label)
+{
+    m_currentClass = classId;
+    m_currentClassLabel = label;
+}
 
-void AnnotationCanvas::setSelectedClass(int classId)
+void AnnotationCanvas::setSelectedClass(int classId, const QString &label)
 {
     if (m_sel >= 0 && m_sel < m_boxes.size()) {
         m_boxes[m_sel].classId = classId;
+        if (!label.isEmpty()) {
+            m_boxes[m_sel].label = label;
+        }
         update();
         emit boxesChanged();
     }
@@ -264,7 +272,8 @@ void AnnotationCanvas::mouseDoubleClickEvent(QMouseEvent *e)
     AnalysisBox b;
     b.classId = m_currentClass;
     b.rect = QRectF(qBound(0.0, n.x() - 0.10, 0.80), qBound(0.0, n.y() - 0.12, 0.80), 0.20, 0.24);
-    b.label = QStringLiteral("#%1").arg(m_currentClass);
+    b.label = m_currentClassLabel.isEmpty() ? QStringLiteral("#%1").arg(m_currentClass)
+                                            : m_currentClassLabel;
     b.score = 0.f;
     m_boxes.append(b);
     m_sel = m_boxes.size() - 1;

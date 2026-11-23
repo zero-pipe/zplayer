@@ -38,6 +38,8 @@ public:
 
     AnalysisResult analyze(const AnalysisFrame &frame) override;
     QString name() const override;
+    // Class names of the loaded model, in index order (empty when not loaded).
+    QStringList classNames() const override;
 
     void setConfidenceThreshold(float t);
     void setNmsThreshold(float t);
@@ -47,6 +49,10 @@ public:
     static QColor classColor(int classId);
     static QString classNameFor(int classId);   // global COCO names
     static QString localizedClassName(int classId);  // Chinese label, English fallback
+    // True when `names` is the standard COCO-80 list (person..toothbrush).
+    // Only then do class ids carry the person/vehicle/animal semantics this
+    // product's AI-skip / scan logic relies on.
+    static bool looksLikeCoco(const QStringList &names);
 
 private:
     struct Impl;

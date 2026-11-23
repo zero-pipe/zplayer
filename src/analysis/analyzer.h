@@ -61,6 +61,10 @@ public:
     virtual ~IFrameAnalyzer() = default;
     virtual AnalysisResult analyze(const AnalysisFrame &frame) = 0;
     virtual QString name() const = 0;
+    // Class names in model index order, when the analyzer has a fixed class
+    // list (YOLO). Empty = unknown / not a detector. UI reads this to show
+    // model-provided labels instead of assuming COCO ids.
+    virtual QStringList classNames() const { return QStringList(); }
 };
 
 } // namespace zp

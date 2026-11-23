@@ -25,9 +25,9 @@ public:
     void setBoxes(const QVector<AnalysisBox> &boxes);
     QVector<AnalysisBox> boxes() const { return m_boxes; }
 
-    void setCurrentClass(int classId);
+    void setCurrentClass(int classId, const QString &label = QString());
     int selectedIndex() const { return m_sel; }
-    void setSelectedClass(int classId);
+    void setSelectedClass(int classId, const QString &label = QString());
     // Programmatic selection (inspector list -> canvas). -1 clears.
     void selectBox(int index);
     // Append a default box near the centre using the current class.
@@ -54,6 +54,7 @@ private:
     QVector<AnalysisBox> m_boxes;
     int m_sel = -1;
     int m_currentClass = 0;
+    QString m_currentClassLabel;   // display label for new boxes
 
     enum Mode { None, Move, Resize } m_mode = None;
     QPointF m_pressNorm;

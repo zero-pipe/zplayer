@@ -2,6 +2,7 @@
 #include "train/dataset_store.h"
 #include "player/media_factory.h"
 #include "player/shaders.h"
+#include "analysis/yolo_detector.h"
 #include "ui/analysis_overlay.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
@@ -242,11 +243,50 @@ void VideoTile::captureSample(const QString &reason)
         return;
     }
     DatasetStore &ds = DatasetStore::instance();
+    // Detections carry the model's own class index, which is only a COCO id for
+    // the bundled model. Project samples must reference the project class table,
+    // so resolve each box by label (and auto-register unseen classes, e.g. 安全帽
+    // coming from a freshly retrained model).
+    QVector<AnalysisBox> boxes = m_lastBoxes;
+    const QVector<ClassDef> cls = ds.classes();
+    for (AnalysisBox &b : boxes) {
+        bool matched = false;
+        for (const ClassDef &c : cls) {
+            if ((!b.label.isEmpty() && b.label.compare(c.name, Qt::CaseInsensitive) == 0)
+                || (!b.label.isEmpty() && !c.zh.isEmpty() && b.label == c.zh)) {
+                b.classId = c.id;
+                b.label = c.zh.isEmpty() ? c.name : c.zh;
+                matched = true;
+                break;
+            }
+        }
+        if (matched) {
+            continue;
+        }
+        if (ds.classIndex(b.classId) >= 0) {
+            b.label = ds.className(b.classId);
+            continue;
+        }
+        if (!b.label.isEmpty()) {
+            bool nonAscii = false;
+            for (const QChar ch : b.label) {
+                if (ch.unicode() > 0x7F) {
+                    nonAscii = true;
+                    break;
+                }
+            }
+            const int id = ds.addClass(nonAscii ? QString() : b.label,
+                                       nonAscii ? b.label : QString(), nullptr);
+            if (id >= 0) {
+                b.classId = id;
+            }
+        }
+    }
     const QString name = m_name.isEmpty() ? m_channel.channelId : m_name;
     const QString path = ds.newFramePath(name);
     const bool ok = m_player->grabSnapshot(path);
     if (ok) {
-        ds.add(path, name, m_capturePts, reason, m_lastBoxes);
+        ds.add(path, name, m_capturePts, reason, boxes);
     }
     emit sampleCaptured(m_channel, ok);
 }
@@ -289,6 +329,7 @@ void VideoTile::setState(State state, const QString &text)
         m_stage->setCurrentWidget(m_overlay);
     }
     updateTransportUi();
+    updateCaptureUi();
 }
 
 void VideoTile::setSelected(bool selected)
@@ -431,7 +472,7 @@ void VideoTile::buildControlBar()
         m_posSlider->setRange(0, 0);
         m_posSlider->setMinimumWidth(90);
         m_posSlider->setCursor(Qt::PointingHandCursor);
-        m_posSlider->setToolTip(tr("拖动定位；点击人物/车辆色块可跳转"));
+        m_posSlider->setToolTip(tr("拖动定位；点击时间轴色块可跳转"));
         connect(m_posSlider, &TimelineSlider::segmentActivated, this, [this](double t) {
             if (!m_player) {
                 return;
@@ -493,76 +534,35 @@ void VideoTile::buildControlBar()
     m_aiBtn = makeBtn(tr("AI 检查"));
     dressBtn(m_aiBtn, icons::AiScan);
     m_aiBtn->setCheckable(true);
-    m_aiBtn->setToolTip(tr("开启 AI 检查（框选目标、无人快进、检出暂停）"));
+    m_aiBtn->setToolTip(tr("开启 AI 检查（框选目标、无目标快进、检出暂停）"));
     connect(m_aiBtn, &QToolButton::toggled, this, [this](bool on) {
         setAiSkipEnabled(on);
         emit statusMessage(m_channel, on ? tr("AI 检查：开") : tr("AI 检查：关"));
     });
-    {
-        // Persisted similarity threshold (percent). Default 80% — low-confidence
-        // boxes around 30% were too noisy to read.
-        m_aiMinScore = qBound(0.30f, QSettings().value(QStringLiteral("ai/minScorePct"), 80).toInt() / 100.0f, 0.95f);
+    // Persisted similarity threshold (percent). Default 80% — low-confidence
+    // boxes around 30% were too noisy to read.
+    m_aiMinScore = qBound(0.30f, QSettings().value(QStringLiteral("ai/minScorePct"), 80).toInt() / 100.0f, 0.95f);
+    applyDefaultAiClasses();
+    buildAiMenu();
 
-        auto *aiMenu = new QMenu(m_aiBtn);
-        aiMenu->addAction(tr("检查目标"))->setEnabled(false);
-        auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
-                                        bool on) {
-            QAction *a = aiMenu->addAction(label);
-            a->setCheckable(true);
-            a->setChecked(on);
-            connect(a, &QAction::toggled, this, [this, ids](bool on2) {
-                for (int id : ids) {
-                    if (on2) {
-                        m_aiClasses.insert(id);
-                    } else {
-                        m_aiClasses.remove(id);
-                    }
-                }
-                emit statusMessage(m_channel, tr("AI 检查目标已更新"));
-            });
-        };
-        addTarget(tr("人"), {0}, true);
-        addTarget(tr("车"), {2, 3, 5, 7}, true);
-        addTarget(tr("狗"), {16}, true);
-
-        QMenu *scoreMenu = aiMenu->addMenu(tr("相似度阈值"));
-        auto *scoreGroup = new QActionGroup(scoreMenu);
-        scoreGroup->setExclusive(true);
-        const int curPct = qRound(m_aiMinScore * 100.0f);
-        for (int pct : {30, 40, 50, 60, 70, 80}) {
-            QAction *a = scoreMenu->addAction(QStringLiteral("%1%").arg(pct));
-            a->setCheckable(true);
-            a->setActionGroup(scoreGroup);
-            a->setChecked(pct == curPct);
-            connect(a, &QAction::triggered, this, [this, pct]() {
-                m_aiMinScore = pct / 100.0f;
-                QSettings().setValue(QStringLiteral("ai/minScorePct"), pct);
-                emit statusMessage(m_channel, tr("相似度阈值：%1%").arg(pct));
-            });
+    // 采集: save the current frame (+ last detections) as a training sample.
+    // Only meaningful with AI check on and the global capture switch on.
+    m_captureBtn = makeBtn(tr("采集"));
+    dressBtn(m_captureBtn, icons::Layers);
+    m_captureBtn->setToolTip(tr("采集当前画面为训练样本（需开启 AI 检查与样本采集）"));
+    connect(m_captureBtn, &QToolButton::clicked, this, [this]() {
+        if (!m_aiSkip) {
+            emit statusMessage(m_channel, tr("请先开启 AI 检查"));
+            return;
         }
-
-        aiMenu->addSeparator();
-        QAction *skipAct = aiMenu->addAction(tr("无人时快进跳过"));
-        skipAct->setCheckable(true);
-        skipAct->setChecked(m_aiSkipEmpty);
-        connect(skipAct, &QAction::toggled, this, [this](bool on) {
-            m_aiSkipEmpty = on;
-            emit statusMessage(m_channel, on ? tr("无人快进：开") : tr("无人快进：关"));
-        });
-        QAction *pauseAct = aiMenu->addAction(tr("检出自动暂停"));
-        pauseAct->setCheckable(true);
-        pauseAct->setChecked(m_aiPauseOnHit);
-        connect(pauseAct, &QAction::toggled, this, [this](bool on) {
-            m_aiPauseOnHit = on;
-            emit statusMessage(m_channel, on ? tr("检出自动暂停：开") : tr("检出自动暂停：关"));
-        });
-        m_aiBtn->setMenu(aiMenu);
-        // Main area toggles the switch, the caret opens the settings.
-        m_aiBtn->setPopupMode(QToolButton::MenuButtonPopup);
-    }
-    for (int id : {0, 2, 3, 5, 7, 16}) {
-        m_aiClasses.insert(id);
-    }
+        if (!m_captureEnabled) {
+            emit statusMessage(m_channel, tr("请在 AI 检查菜单中开启「样本采集」"));
+            return;
+        }
+        captureSample(QStringLiteral("manual"));
+        updateCaptureUi();
+    });
+    updateCaptureUi();
 
     m_ocrBtn = makeBtn(tr("OCR识别"));
     dressBtn(m_ocrBtn, icons::Ocr);
@@ -650,7 +650,7 @@ void VideoTile::buildControlBar()
     m_scanBtn = makeBtn(tr("智能检索"));
     dressBtn(m_scanBtn, icons::SearchClock);
     m_scanBtn->setCheckable(true);
-    m_scanBtn->setToolTip(tr("快速扫描全片，在时间轴标出有人物的片段"));
+    m_scanBtn->setToolTip(tr("快速扫描全片，在时间轴标出有目标的片段"));
     connect(m_scanBtn, &QToolButton::clicked, this, [this](bool checked) {
         if (checked) {
             startScan();
@@ -675,6 +675,7 @@ void VideoTile::buildControlBar()
     // above this bar) ----
     row->addStretch(1);
     row->addWidget(m_aiBtn);
+    row->addWidget(m_captureBtn);
     row->addWidget(m_ocrBtn);
     row->addWidget(m_roiBtn);
     addSep();
@@ -1029,8 +1030,16 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
     if (m_scanning && result.pts >= 0.0) {
         PresenceSample s;
         s.t = result.pts;
+        const bool coco = cocoModel();
         for (const AnalysisBox &b : result.boxes) {
             if (b.score < m_aiMinScore) {
+                continue;
+            }
+            if (!coco) {
+                // Custom model: any configured class counts as presence.
+                if (m_aiClasses.contains(b.classId)) {
+                    s.persons++;
+                }
                 continue;
             }
             switch (b.classId) {
@@ -1048,8 +1057,9 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
 
     // Auto-collect "hard" samples: a plausible but low-confidence box (below
     // the display threshold) is exactly what retraining benefits from most.
-    // Throttled per tile so a busy scene cannot flood the dataset.
-    if (!m_scanning && m_state == Playing && m_player
+    // Only runs while the user has switched 样本采集 on, and is throttled per
+    // tile so a busy scene cannot flood the dataset.
+    if (m_captureEnabled && !m_scanning && m_state == Playing && m_player
         && m_player->supportsFrameTap()) {
         bool suspicious = false;
         for (const AnalysisBox &b : result.boxes) {
@@ -1077,6 +1087,155 @@ void VideoTile::setAiSkipEnabled(bool on)
     if (m_aiBtn && m_aiBtn->isChecked() != on) {
         m_aiBtn->setChecked(on);
     }
+    updateCaptureUi();
+}
+
+// ---------------------------------------------------------------------------
+// Sample collection (capture switch + manual 采集 button)
+// ---------------------------------------------------------------------------
+bool VideoTile::cocoModel() const
+{
+    // An empty list means "no detector metadata" (e.g. the dev stats analyzer);
+    // keep the COCO semantics then so existing behaviour is unchanged.
+    return m_classNames.isEmpty() || YoloDetector::looksLikeCoco(m_classNames);
+}
+
+void VideoTile::setClassNames(const QStringList &names)
+{
+    if (m_classNames == names) {
+        return;
+    }
+    m_classNames = names;
+    applyDefaultAiClasses();
+    buildAiMenu();   // target semantics / labels depend on the model's classes
+}
+
+void VideoTile::setCaptureEnabled(bool on)
+{
+    m_captureEnabled = on;
+    if (m_captureAct && m_captureAct->isChecked() != on) {
+        const QSignalBlocker blocker(m_captureAct);
+        m_captureAct->setChecked(on);
+    }
+    updateCaptureUi();
+}
+
+void VideoTile::applyDefaultAiClasses()
+{
+    m_aiClasses.clear();
+    if (cocoModel()) {
+        for (int id : {0, 2, 3, 5, 7, 16}) {
+            m_aiClasses.insert(id);
+        }
+    } else {
+        for (int i = 0; i < m_classNames.size(); ++i) {
+            m_aiClasses.insert(i);
+        }
+    }
+}
+
+void VideoTile::updateCaptureUi()
+{
+    if (!m_captureBtn) {
+        return;
+    }
+    const bool ready = m_aiSkip && m_captureEnabled && m_state == Playing
+                       && m_player != nullptr;
+    m_captureBtn->setEnabled(ready);
+}
+
+void VideoTile::buildAiMenu()
+{
+    if (!m_aiBtn) {
+        return;
+    }
+    if (m_aiMenu) {
+        m_aiBtn->setMenu(nullptr);
+        m_aiMenu->deleteLater();
+        m_aiMenu = nullptr;
+    }
+    auto *aiMenu = new QMenu(m_aiBtn);
+    m_aiMenu = aiMenu;
+    const bool coco = cocoModel();
+
+    if (coco) {
+        aiMenu->addAction(tr("检查目标"))->setEnabled(false);
+        auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
+                                        bool on) {
+            QAction *a = aiMenu->addAction(label);
+            a->setCheckable(true);
+            a->setChecked(on);
+            connect(a, &QAction::toggled, this, [this, ids](bool on2) {
+                for (int id : ids) {
+                    if (on2) {
+                        m_aiClasses.insert(id);
+                    } else {
+                        m_aiClasses.remove(id);
+                    }
+                }
+                emit statusMessage(m_channel, tr("AI 检查目标已更新"));
+            });
+        };
+        addTarget(tr("人"), {0}, m_aiClasses.contains(0));
+        addTarget(tr("车"), {2, 3, 5, 7}, m_aiClasses.contains(2));
+        addTarget(tr("狗"), {16}, m_aiClasses.contains(16));
+    } else {
+        // Custom / retrained model: its class ids have no COCO meaning, so
+        // "人/车/狗" would be wrong. Every class is a target instead.
+        QAction *note = aiMenu->addAction(tr("自定义类别模型：全部类别参与检查"));
+        note->setEnabled(false);
+    }
+
+    QMenu *scoreMenu = aiMenu->addMenu(tr("相似度阈值"));
+    auto *scoreGroup = new QActionGroup(scoreMenu);
+    scoreGroup->setExclusive(true);
+    const int curPct = qRound(m_aiMinScore * 100.0f);
+    for (int pct : {30, 40, 50, 60, 70, 80}) {
+        QAction *a = scoreMenu->addAction(QStringLiteral("%1%").arg(pct));
+        a->setCheckable(true);
+        a->setActionGroup(scoreGroup);
+        a->setChecked(pct == curPct);
+        connect(a, &QAction::triggered, this, [this, pct]() {
+            m_aiMinScore = pct / 100.0f;
+            QSettings().setValue(QStringLiteral("ai/minScorePct"), pct);
+            emit statusMessage(m_channel, tr("相似度阈值：%1%").arg(pct));
+        });
+    }
+
+    aiMenu->addSeparator();
+    const QString skipText = coco ? tr("无人时快进跳过") : tr("无目标时快进跳过");
+    QAction *skipAct = aiMenu->addAction(skipText);
+    skipAct->setCheckable(true);
+    skipAct->setChecked(m_aiSkipEmpty);
+    connect(skipAct, &QAction::toggled, this, [this, skipText](bool on) {
+        m_aiSkipEmpty = on;
+        emit statusMessage(m_channel,
+                           on ? tr("%1：开").arg(skipText) : tr("%1：关").arg(skipText));
+    });
+    QAction *pauseAct = aiMenu->addAction(tr("检出目标自动暂停"));
+    pauseAct->setCheckable(true);
+    pauseAct->setChecked(m_aiPauseOnHit);
+    connect(pauseAct, &QAction::toggled, this, [this](bool on) {
+        m_aiPauseOnHit = on;
+        emit statusMessage(m_channel, on ? tr("检出自动暂停：开") : tr("检出自动暂停：关"));
+    });
+
+    // Sample collection switch: automatic low-confidence frames + the 采集
+    // button. Off by default; the choice is global (window persists it).
+    aiMenu->addSeparator();
+    m_captureAct = aiMenu->addAction(tr("样本采集（保存失败帧）"));
+    m_captureAct->setCheckable(true);
+    m_captureAct->setChecked(m_captureEnabled);
+    m_captureAct->setToolTip(tr("开启后自动收集低置信帧，并允许用「采集」按钮手动保存当前画面"));
+    connect(m_captureAct, &QAction::toggled, this, [this](bool on) {
+        setCaptureEnabled(on);
+        emit captureSettingChanged(on);
+        emit statusMessage(m_channel, on ? tr("样本采集：开") : tr("样本采集：关"));
+    });
+
+    m_aiBtn->setMenu(aiMenu);
+    // Main area toggles the switch, the caret opens the settings.
+    m_aiBtn->setPopupMode(QToolButton::MenuButtonPopup);
 }
 
 void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)

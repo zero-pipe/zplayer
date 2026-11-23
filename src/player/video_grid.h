@@ -65,6 +65,16 @@ public:
     // OCR models are absent, in which case the toggle simply does nothing).
     void setOcrAnalyzer(IFrameAnalyzer *analyzer) { m_ocrAnalyzer = analyzer; }
 
+    // Class names of the active detector (index order). Tiles use them to show
+    // model-provided labels and to decide whether COCO semantics (人/车/狗) apply.
+    void setClassNames(const QStringList &names);
+    QStringList classNames() const { return m_classNames; }
+
+    // Global "collect failure samples" switch (persisted by the window). Applies
+    // to every tile, now and in the future.
+    void setCaptureEnabled(bool on);
+    bool captureEnabled() const { return m_captureEnabled; }
+
     // Tile lookup for window-level actions (AI toggle, evidence export).
     VideoTile *tileFor(const zp::ChannelRef &ch) const;
     VideoTile *activeTile() const;
@@ -84,6 +94,11 @@ signals:
     void tileStatus(const zp::ChannelRef &ch, const QString &text);
     // A tile started/stopped playing (used to gate the PTZ panel).
     void tilePlaybackStateChanged(const zp::ChannelRef &ch, bool playing);
+    // A tile flipped the global "collect samples" switch; the window persists
+    // it and calls setCaptureEnabled() so every tile follows.
+    void captureSettingChanged(bool on);
+    // A frame was collected into the dataset (manual or automatic).
+    void sampleCaptured(const zp::ChannelRef &ch, bool ok);
 
 private:
     struct Slot { int row, col, rowSpan, colSpan; };
@@ -104,6 +119,8 @@ private:
     VideoSettings m_settings;
     AnalysisService *m_analysis = nullptr;
     IFrameAnalyzer *m_ocrAnalyzer = nullptr;
+    QStringList m_classNames;
+    bool m_captureEnabled = false;
 
     QStackedLayout *m_stack = nullptr;
     QWidget *m_gridHost = nullptr;

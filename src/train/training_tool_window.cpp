@@ -46,6 +46,7 @@ namespace zp {
 
 namespace {
 
+using uikit::ChipBad;
 using uikit::ChipMuted;
 using uikit::ChipOk;
 using uikit::ChipWarn;
@@ -137,17 +138,6 @@ QLabel *fieldLabel(const QString &text, QWidget *parent)
     auto *l = new QLabel(text, parent);
     l->setObjectName(QStringLiteral("FieldLabel"));
     return l;
-}
-
-QString className(int id)
-{
-    switch (id) {
-    case 0: return QCoreApplication::translate("TrainingToolWindow", "人");
-    case 2: case 3: case 5: case 7:
-        return QCoreApplication::translate("TrainingToolWindow", "车");
-    case 16: return QCoreApplication::translate("TrainingToolWindow", "狗");
-    default: return QCoreApplication::translate("TrainingToolWindow", "其他");
-    }
 }
 
 QColor classColor(int id)
@@ -257,8 +247,9 @@ void TrainingToolWindow::buildUi()
             if (auto *btn = m_classGroup ? m_classGroup->button(i) : nullptr) {
                 btn->setChecked(true);
                 const int id = btn->property("classId").toInt();
-                m_canvas->setCurrentClass(id);
-                m_canvas->setSelectedClass(id);
+                const QString label = btn->property("classLabel").toString();
+                m_canvas->setCurrentClass(id, label);
+                m_canvas->setSelectedClass(id, label);
                 refreshInspector();
             }
         });
@@ -614,30 +605,22 @@ QWidget *TrainingToolWindow::buildAnnotatePage()
     iv->addWidget(m_boxList, 1);
 
     iv->addWidget(fieldLabel(tr("类别选择器"), inspector));
-    auto *grid = new QGridLayout();
-    grid->setSpacing(4);
+    auto *clsHead = new QHBoxLayout();
+    clsHead->setSpacing(6);
+    auto *manageBtn = new QPushButton(tr("管理类别…"), inspector);
+    manageBtn->setObjectName(QStringLiteral("LinkBtn"));
+    manageBtn->setCursor(Qt::PointingHandCursor);
+    clsHead->addWidget(fieldLabel(tr("类别"), inspector));
+    clsHead->addStretch(1);
+    clsHead->addWidget(manageBtn);
+    iv->addLayout(clsHead);
+
     m_classGroup = new QButtonGroup(this);
     m_classGroup->setExclusive(true);
-    struct ClsDef { QString text; QString hint; int id; };
-    const ClsDef cls[] = {
-        {tr("人"), QStringLiteral("[1]"), 0},
-        {tr("车"), QStringLiteral("[2]"), 2},
-        {tr("狗"), QStringLiteral("[3]"), 16},
-        {tr("其他"), QStringLiteral("[4]"), -1},
-    };
-    for (int i = 0; i < 4; ++i) {
-        auto *b = new QToolButton(inspector);
-        b->setObjectName(QStringLiteral("ClassBtn"));
-        b->setText(QStringLiteral("%1   %2").arg(cls[i].text, cls[i].hint));
-        b->setProperty("classId", cls[i].id);
-        b->setCheckable(true);
-        b->setCursor(Qt::PointingHandCursor);
-        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_classGroup->addButton(b, i);
-        grid->addWidget(b, i / 2, i % 2);
-    }
-    m_classGroup->button(0)->setChecked(true);
-    iv->addLayout(grid);
+    m_classGrid = new QGridLayout();
+    m_classGrid->setSpacing(4);
+    iv->addLayout(m_classGrid);
+    rebuildClassButtons();
 
     bodyLay->addWidget(inspector);
     v->addWidget(body, 1);
@@ -688,13 +671,164 @@ QWidget *TrainingToolWindow::buildAnnotatePage()
     connect(m_classGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), this, [this](int) {
         if (auto *btn = m_classGroup->checkedButton()) {
             const int id = btn->property("classId").toInt();
-            m_canvas->setCurrentClass(id);
-            m_canvas->setSelectedClass(id);
+            const QString label = btn->property("classLabel").toString();
+            m_canvas->setCurrentClass(id, label);
+            m_canvas->setSelectedClass(id, label);
             refreshInspector();
         }
     });
+    connect(manageBtn, &QPushButton::clicked, this, &TrainingToolWindow::openClassManager);
 
     return page;
+}
+
+void TrainingToolWindow::rebuildClassButtons()
+{
+    if (!m_classGrid || !m_classGroup) {
+        return;
+    }
+    for (QAbstractButton *b : m_classGroup->buttons()) {
+        m_classGroup->removeButton(b);
+        if (QWidget *w = qobject_cast<QWidget *>(b)) {
+            w->deleteLater();
+        }
+    }
+    while (QLayoutItem *it = m_classGrid->takeAt(0)) {
+        delete it;   // widgets were scheduled for deletion above
+    }
+    QWidget *host = m_classGrid->parentWidget();
+    const QVector<ClassDef> cls = DatasetStore::instance().classes();
+    int i = 0;
+    for (const ClassDef &c : cls) {
+        auto *b = new QToolButton(host);
+        b->setObjectName(QStringLiteral("ClassBtn"));
+        const QString label = c.zh.isEmpty() ? c.name : c.zh;
+        b->setText(QStringLiteral("%1   [%2]").arg(label).arg(i + 1));
+        b->setProperty("classId", c.id);
+        b->setProperty("classLabel", label);
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_classGroup->addButton(b, i);
+        m_classGrid->addWidget(b, i / 2, i % 2);
+        ++i;
+    }
+    if (i > 0) {
+        auto *first = qobject_cast<QToolButton *>(m_classGroup->button(0));
+        first->setChecked(true);
+        if (m_canvas) {
+            m_canvas->setCurrentClass(first->property("classId").toInt(),
+                                      first->property("classLabel").toString());
+        }
+    }
+}
+
+void TrainingToolWindow::openClassManager()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("管理类别"));
+    dlg.setMinimumWidth(460);
+    auto *v = new QVBoxLayout(&dlg);
+    v->setContentsMargins(16, 14, 16, 14);
+    v->setSpacing(8);
+    auto *hint = new QLabel(tr("类别会写进导出数据集与训练出的模型。中文名用于界面与检测框显示。"), &dlg);
+    hint->setObjectName(QStringLiteral("VsHint"));
+    hint->setWordWrap(true);
+    v->addWidget(hint);
+
+    auto *list = new QListWidget(&dlg);
+    list->setObjectName(QStringLiteral("BoxList"));
+    list->setMinimumHeight(150);
+    v->addWidget(list, 1);
+
+    auto refresh = [list]() {
+        list->clear();
+        for (const ClassDef &c : DatasetStore::instance().classes()) {
+            const QString display = c.zh.isEmpty() ? c.name : c.zh;
+            auto *it = new QListWidgetItem(
+                QStringLiteral("%1   ·   %2").arg(display, c.name), list);
+            it->setData(Qt::UserRole, c.id);
+        }
+    };
+    refresh();
+
+    auto *err = new QLabel(&dlg);
+    err->setObjectName(QStringLiteral("ErrorLabel"));
+    v->addWidget(err);
+
+    auto *inputRow = new QHBoxLayout();
+    inputRow->setSpacing(6);
+    auto *nameEdit = new QLineEdit(&dlg);
+    nameEdit->setObjectName(QStringLiteral("ParamBox"));
+    nameEdit->setPlaceholderText(tr("英文名，如 helmet"));
+    auto *zhEdit = new QLineEdit(&dlg);
+    zhEdit->setObjectName(QStringLiteral("ParamBox"));
+    zhEdit->setPlaceholderText(tr("中文名，如 安全帽"));
+    auto *addBtn = new QPushButton(tr("添加"), &dlg);
+    addBtn->setObjectName(QStringLiteral("PrimaryButton"));
+    inputRow->addWidget(nameEdit, 1);
+    inputRow->addWidget(zhEdit, 1);
+    inputRow->addWidget(addBtn);
+    v->addLayout(inputRow);
+
+    auto *bottom = new QHBoxLayout();
+    auto *delBtn = new QPushButton(tr("删除选中"), &dlg);
+    delBtn->setObjectName(QStringLiteral("GhostBtn"));
+    auto *closeBtn = new QPushButton(tr("关闭"), &dlg);
+    closeBtn->setObjectName(QStringLiteral("GhostBtn"));
+    bottom->addWidget(delBtn);
+    bottom->addStretch(1);
+    bottom->addWidget(closeBtn);
+    v->addLayout(bottom);
+
+    connect(addBtn, &QPushButton::clicked, &dlg, [&]() {
+        QString e;
+        const QString zh = zhEdit->text().trimmed();
+        const QString name = nameEdit->text().trimmed();
+        if (DatasetStore::instance().addClass(name, zh, &e) < 0) {
+            err->setText(e);
+            return;
+        }
+        err->clear();
+        nameEdit->clear();
+        zhEdit->clear();
+        refresh();
+    });
+    connect(delBtn, &QPushButton::clicked, &dlg, [&]() {
+        QListWidgetItem *it = list->currentItem();
+        if (!it) {
+            err->setText(tr("先选中要删除的类别"));
+            return;
+        }
+        const int id = it->data(Qt::UserRole).toInt();
+        for (const SampleRecord &r : DatasetStore::instance().load()) {
+            for (const AnalysisBox &b : r.boxes) {
+                if (b.classId == id) {
+                    err->setText(tr("该类别已被样本使用，不能删除"));
+                    return;
+                }
+            }
+        }
+        QVector<ClassDef> cls = DatasetStore::instance().classes();
+        if (cls.size() <= 1) {
+            err->setText(tr("至少保留一个类别"));
+            return;
+        }
+        for (int i = 0; i < cls.size(); ++i) {
+            if (cls[i].id == id) {
+                cls.remove(i);
+                break;
+            }
+        }
+        DatasetStore::instance().setClasses(cls);
+        err->clear();
+        refresh();
+    });
+    connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    dlg.exec();
+
+    rebuildClassButtons();
+    refreshInspector();
 }
 
 void TrainingToolWindow::refreshInspector()
@@ -711,10 +845,11 @@ void TrainingToolWindow::refreshInspector()
     for (int i = 0; i < boxes.size(); ++i) {
         const AnalysisBox &b = boxes[i];
         const QColor col = (i == sel) ? QColor(0x25, 0x63, 0xEB) : classColor(b.classId);
-        QString text = className(b.classId);
-        if (!b.label.isEmpty() && !b.label.startsWith(QLatin1Char('#'))) {
-            text += QStringLiteral(" ") + b.label;
+        QString name = DatasetStore::instance().className(b.classId);
+        if (name.isEmpty()) {
+            name = b.label.isEmpty() ? QStringLiteral("#%1").arg(b.classId) : b.label;
         }
+        QString text = name;
         if (b.score > 0.f) {
             text += QStringLiteral("   %1%").arg(int(b.score * 100));
         }
@@ -783,31 +918,9 @@ QWidget *TrainingToolWindow::buildQcPage()
     dv->setContentsMargins(14, 12, 14, 12);
     dv->setSpacing(10);
     dv->addWidget(cardTitle(tr("类别分布"), dist));
-    const QString names[4] = {tr("人 (person)"), tr("车 (car)"), tr("狗 (dog)"),
-                              tr("其他 (other)")};
-    for (int i = 0; i < 4; ++i) {
-        auto *row = new QWidget(dist);
-        auto *rv = new QVBoxLayout(row);
-        rv->setContentsMargins(0, 0, 0, 0);
-        rv->setSpacing(4);
-        auto *top = new QHBoxLayout();
-        top->setSpacing(6);
-        auto *n = fieldLabel(names[i], row);
-        m_distVals[i] = new QLabel(QStringLiteral("0"), row);
-        m_distVals[i]->setObjectName(QStringLiteral("MonoValue"));
-        m_distVals[i]->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        top->addWidget(n);
-        top->addStretch(1);
-        top->addWidget(m_distVals[i]);
-        m_distBars[i] = new QProgressBar(row);
-        m_distBars[i]->setObjectName(QStringLiteral("DistBar"));
-        m_distBars[i]->setRange(0, 100);
-        m_distBars[i]->setValue(0);
-        m_distBars[i]->setTextVisible(false);
-        rv->addLayout(top);
-        rv->addWidget(m_distBars[i]);
-        dv->addWidget(row);
-    }
+    m_distHost = new QVBoxLayout();
+    m_distHost->setSpacing(10);
+    dv->addLayout(m_distHost);
     v->addWidget(dist);
     v->addStretch(1);
 
@@ -1255,7 +1368,17 @@ void TrainingToolWindow::openRecord(int index)
     const SampleRecord &r = m_records[index];
     QImage img(r.framePath);
     m_canvas->setImage(img);
-    m_canvas->setBoxes(r.boxes);
+    // Normalise placeholder labels ("#N") or empty ones to the project class
+    // name so the canvas chips read the same as the inspector.
+    QVector<AnalysisBox> boxes = r.boxes;
+    for (AnalysisBox &b : boxes) {
+        const QString fallback = DatasetStore::instance().className(b.classId);
+        if (!fallback.isEmpty()
+            && (b.label.isEmpty() || b.label.startsWith(QLatin1Char('#')))) {
+            b.label = fallback;
+        }
+    }
+    m_canvas->setBoxes(boxes);
     m_annoName->setText(r.channel);
     uikit::setChip(m_annoReason,
                    r.reason.isEmpty() ? tr("manual") : r.reason,
@@ -1290,19 +1413,19 @@ void TrainingToolWindow::saveCurrent()
 void TrainingToolWindow::refreshQc()
 {
     const QVector<SampleRecord> recs = DatasetStore::instance().load();
-    int done = 0, boxes = 0;
-    int counts[4] = {0, 0, 0, 0};   // person / car / dog / other
+    const QVector<ClassDef> cls = DatasetStore::instance().classes();
+    int done = 0, boxes = 0, unknown = 0;
+    QHash<int, int> counts;   // class id -> box count
     for (const SampleRecord &r : recs) {
         if (r.done) {
             ++done;
         }
         for (const AnalysisBox &b : r.boxes) {
             ++boxes;
-            switch (b.classId) {
-            case 0: ++counts[0]; break;
-            case 2: case 3: case 5: case 7: ++counts[1]; break;
-            case 16: ++counts[2]; break;
-            default: ++counts[3]; break;
+            if (DatasetStore::instance().classIndex(b.classId) >= 0) {
+                ++counts[b.classId];
+            } else {
+                ++unknown;
             }
         }
     }
@@ -1325,27 +1448,67 @@ void TrainingToolWindow::refreshQc()
     if (m_qcBadge) {
         if (recs.isEmpty()) {
             uikit::setChip(m_qcBadge, tr("暂无样本"), ChipMuted);
+        } else if (unknown > 0) {
+            uikit::setChip(m_qcBadge, tr("有 %1 个框类别无效").arg(unknown), ChipBad);
         } else if (done == recs.size()) {
             uikit::setChip(m_qcBadge, tr("✓ 质检通过"), ChipOk);
         } else {
             uikit::setChip(m_qcBadge, tr("待完善 %1/%2").arg(done).arg(recs.size()), ChipWarn);
         }
     }
-    const QColor barColors[4] = {tk.accent, tk.success, tk.warning, tk.borderStrong};
-    for (int i = 0; i < 4; ++i) {
-        const int pct = boxes > 0 ? int(100.0 * counts[i] / boxes + 0.5) : 0;
-        if (m_distBars[i]) {
-            m_distBars[i]->setValue(pct);
-            m_distBars[i]->setStyleSheet(QStringLiteral(
-                "QProgressBar::chunk { background: %1; border-radius: 4px; }")
-                                             .arg(barColors[i].name()));
+
+    // Distribution: one row per project class (custom classes included).
+    if (m_distHost) {
+        while (QLayoutItem *it = m_distHost->takeAt(0)) {
+            if (QWidget *w = it->widget()) {
+                w->deleteLater();
+            }
+            delete it;
         }
-        if (m_distVals[i]) {
-            m_distVals[i]->setText(QStringLiteral("%1 (%2%)").arg(counts[i]).arg(pct));
-            m_distVals[i]->setStyleSheet(counts[i] == 0
+        m_distBars.clear();
+        m_distVals.clear();
+        QWidget *host = m_distHost->parentWidget();
+        const QColor palette[] = {tk.accent, tk.success, tk.warning,
+                                  QColor(0x8B, 0x5C, 0xF6), QColor(0x0E, 0xA5, 0xE9),
+                                  QColor(0xF9, 0x73, 0x16)};
+        const int paletteN = int(sizeof(palette) / sizeof(palette[0]));
+        for (int i = 0; i < cls.size(); ++i) {
+            const ClassDef &c = cls[i];
+            const int count = counts.value(c.id, 0);
+            const int pct = boxes > 0 ? int(100.0 * count / boxes + 0.5) : 0;
+            const QString display = c.zh.isEmpty() ? c.name : c.zh;
+
+            auto *row = new QWidget(host);
+            auto *rv = new QVBoxLayout(row);
+            rv->setContentsMargins(0, 0, 0, 0);
+            rv->setSpacing(4);
+            auto *top = new QHBoxLayout();
+            top->setSpacing(6);
+            auto *n = fieldLabel(QStringLiteral("%1 (%2)").arg(display, c.name), row);
+            auto *val = new QLabel(QStringLiteral("%1 (%2%)").arg(count).arg(pct), row);
+            val->setObjectName(QStringLiteral("MonoValue"));
+            val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            val->setStyleSheet(count == 0
                 ? QStringLiteral("color:%1;").arg(tk.muted.name()) : QString());
+            top->addWidget(n);
+            top->addStretch(1);
+            top->addWidget(val);
+            auto *bar = new QProgressBar(row);
+            bar->setObjectName(QStringLiteral("DistBar"));
+            bar->setRange(0, 100);
+            bar->setValue(pct);
+            bar->setTextVisible(false);
+            bar->setStyleSheet(QStringLiteral(
+                "QProgressBar::chunk { background: %1; border-radius: 4px; }")
+                                   .arg(palette[i % paletteN].name()));
+            rv->addLayout(top);
+            rv->addWidget(bar);
+            m_distHost->addWidget(row);
+            m_distBars.append(bar);
+            m_distVals.append(val);
         }
     }
+
     if (m_navQcBadge) {
         m_navQcBadge->setText(tr("%1框").arg(boxes));
         m_navQcBadge->setVisible(boxes > 0);

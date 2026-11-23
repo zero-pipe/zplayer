@@ -39,6 +39,7 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QSettings>
 #include <QSizeGrip>
 #include <QSplitter>
 #include <QStatusBar>
@@ -58,6 +59,22 @@ const VideoGrid::Layout kLayoutKinds[] = {
     VideoGrid::L1x1, VideoGrid::L2x2, VideoGrid::L3x3, VideoGrid::L4x4, VideoGrid::L1p5
 };
 } // namespace
+
+void DockStripButton::paintEvent(QPaintEvent *e)
+{
+    QToolButton::paintEvent(e);
+    if (m_count <= 0) {
+        return;
+    }
+    QPainter p(this);
+    p.setPen(ThemeManager::instance().tokens().text2);
+    QFont f = font();
+    f.setPixelSize(10);
+    f.setBold(true);
+    p.setFont(f);
+    p.drawText(QRect(0, height() / 2 + 12, width(), 16),
+               Qt::AlignHCenter | Qt::AlignTop, QString::number(m_count));
+}
 
 PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *parent)
     : QMainWindow(parent)
@@ -105,7 +122,7 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
         }
         const bool on = !t->aiSkipEnabled();
         t->setAiSkipEnabled(on);
-        toastInfo(on ? tr("AI 快放：开（无人时自动跳过）") : tr("AI 快放：关"));
+        toastInfo(on ? tr("AI 快放：开（无目标时自动跳过）") : tr("AI 快放：关"));
     });
     addAction(aiAct);
 
@@ -115,6 +132,10 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     // Dev: ZP_SAMPLETAB=1 opens on the sample tab (headless screenshots).
     if (qEnvironmentVariableIsSet("ZP_SAMPLETAB")) {
         selectSampleTab();
+    }
+    // Dev: ZP_DOCK_COLLAPSED=1 starts with the tool dock collapsed.
+    if (qEnvironmentVariableIsSet("ZP_DOCK_COLLAPSED")) {
+        QTimer::singleShot(300, this, &PlayerWindow::collapseToolDock);
     }
     auto *sampleTimer = new QTimer(this);
     sampleTimer->setInterval(4000);
@@ -155,8 +176,12 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
             if (det->load(modelPath, classesPath, &loadErr)) {
                 m_detector = det;
                 m_analysis->setAnalyzer(det);
+                // Tiles use the model's own class list (custom models must not
+                // be interpreted as COCO ids).
+                m_grid->setClassNames(det->classNames());
                 qInfo().noquote() << "[ai] detector ready:" << modelPath
-                                  << "backend=" << det->backendName();
+                                  << "backend=" << det->backendName()
+                                  << "classes=" << det->classNames().size();
             } else {
                 delete det;
                 toastError(tr("AI 模型加载失败：%1").arg(loadErr));
@@ -199,10 +224,10 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     connect(m_grid, &VideoGrid::streamScanFinished, this,
             [this](const zp::ChannelRef &, int segments) {
                 if (segments > 0) {
-                    toastSuccess(tr("扫描完成：发现 %1 个有人物的时间段，点击进度条色块跳转")
+                    toastSuccess(tr("扫描完成：发现 %1 个目标时间段，点击进度条色块跳转")
                                      .arg(segments));
                 } else {
-                    toastInfo(tr("扫描完成：未发现人物片段"));
+                    toastInfo(tr("扫描完成：未发现目标片段"));
                 }
             });
 
@@ -282,32 +307,8 @@ void PlayerWindow::buildUi()
 
     tb->addStretch(1);
 
-    // Failed-sample entry: opens the independent local training/labelling tool.
-    m_sampleBtn = new QToolButton(topBar);
-    m_sampleBtn->setObjectName(QStringLiteral("ToolChip"));
-    m_sampleBtn->setCursor(Qt::PointingHandCursor);
-    m_sampleBtn->setToolTip(tr("失败样本 · 标注 / 训练"));
-    m_sampleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    connect(m_sampleBtn, &QToolButton::clicked, this, &PlayerWindow::selectSampleTab);
-    tb->addWidget(m_sampleBtn);
-
-    auto *captureBtn = new QToolButton(topBar);
-    captureBtn->setObjectName(QStringLiteral("ToolChip"));
-    captureBtn->setText(tr("＋样本"));
-    captureBtn->setToolTip(tr("把当前画面加入待标注"));
-    captureBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    captureBtn->setCursor(Qt::PointingHandCursor);
-    connect(captureBtn, &QToolButton::clicked, this, [this]() {
-        VideoTile *t = m_grid ? m_grid->activeTile() : nullptr;
-        if (!t) {
-            toastInfo(tr("请先选择一路画面"));
-            return;
-        }
-        t->captureSample(QStringLiteral("manual"));
-        updateSampleBadge();
-    });
-    tb->addWidget(captureBtn);
-    tb->addSpacing(4);
+    // (Sample capture / dataset entry lives in the per-tile AI controls now:
+    //  AI 检查 menu → 样本采集, and the 采集 button next to it.)
 
     // Theme quick-toggle (sun/moon) — icon button, toggles directly.
     auto *themeBtn = new QToolButton(topBar);
@@ -482,9 +483,30 @@ void PlayerWindow::buildUi()
     m_toolDock->addTab(m_ptz, tr("云台"));
 
     auto *samplePage = new QWidget(m_toolDock);
+    m_samplePage = samplePage;
     auto *sampleLay = new QVBoxLayout(samplePage);
     sampleLay->setContentsMargins(10, 10, 10, 10);
     sampleLay->setSpacing(8);
+
+    // Header: title + live count + collapse affordance.
+    auto *sampleHead = new QHBoxLayout();
+    sampleHead->setSpacing(6);
+    auto *sampleTitle = new QLabel(tr("样本"), samplePage);
+    sampleTitle->setObjectName(QStringLiteral("CardTitle"));
+    m_sampleCount = new QLabel(QString(), samplePage);
+    m_sampleCount->setObjectName(QStringLiteral("PageSub"));
+    auto *collapseBtn = new QToolButton(samplePage);
+    collapseBtn->setObjectName(QStringLiteral("IconBtn"));
+    collapseBtn->setIcon(QIcon(icons::chevron(true,
+                                              ThemeManager::instance().tokens().text2, 14)));
+    collapseBtn->setCursor(Qt::PointingHandCursor);
+    collapseBtn->setToolTip(tr("收起样本面板"));
+    connect(collapseBtn, &QToolButton::clicked, this, &PlayerWindow::collapseToolDock);
+    sampleHead->addWidget(sampleTitle);
+    sampleHead->addWidget(m_sampleCount);
+    sampleHead->addStretch(1);
+    sampleHead->addWidget(collapseBtn);
+    sampleLay->addLayout(sampleHead);
 
     // Card list: one compact card per captured sample (see refreshSampleList).
     m_sampleScroll = new QScrollArea(samplePage);
@@ -506,7 +528,20 @@ void PlayerWindow::buildUi()
     openBtn->setCursor(Qt::PointingHandCursor);
     connect(openBtn, &QPushButton::clicked, this, &PlayerWindow::openTrainingTool);
     sampleLay->addWidget(openBtn);
-    m_toolDock->addTab(samplePage, tr("样本"));
+    // The tab itself is added dynamically: only while the dataset is non-empty.
+
+    // Slim strip shown while the dock is collapsed; one click restores it.
+    m_dockReopen = new DockStripButton(body);
+    m_dockReopen->setObjectName(QStringLiteral("DockReopen"));
+    m_dockReopen->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_dockReopen->setIcon(QIcon(icons::glyph(icons::Layers,
+                                             ThemeManager::instance().tokens().text2, 16)));
+    m_dockReopen->setIconSize(QSize(16, 16));
+    m_dockReopen->setCursor(Qt::PointingHandCursor);
+    m_dockReopen->setToolTip(tr("展开样本面板"));
+    m_dockReopen->setFixedWidth(36);
+    m_dockReopen->setVisible(false);
+    connect(m_dockReopen, &QToolButton::clicked, this, &PlayerWindow::expandToolDock);
 
     auto *splitter = new QSplitter(Qt::Horizontal, body);
     splitter->setObjectName(QStringLiteral("BodySplitter"));
@@ -514,10 +549,18 @@ void PlayerWindow::buildUi()
     splitter->addWidget(m_tree);
     splitter->addWidget(centerCol);
     splitter->addWidget(m_toolDock);
+    splitter->addWidget(m_dockReopen);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
     splitter->setStretchFactor(2, 0);
-    splitter->setSizes({280, 840, 320});
+    splitter->setStretchFactor(3, 0);
+    splitter->setSizes({280, 840, 320, 0});
+    m_bodySplitter = splitter;
+
+    // Global capture switch (persisted); tiles follow it and can flip it from
+    // the AI menu — the window re-broadcasts so every tile stays in sync.
+    m_grid->setCaptureEnabled(QSettings().value(QStringLiteral("ai/captureSamples"),
+                                                false).toBool());
 
     bodyLay->addWidget(splitter);
     rootLay->addWidget(body, 1);
@@ -555,6 +598,21 @@ void PlayerWindow::buildUi()
         SessionManager::instance().setLastLayout(index);
         setActiveLayoutButton(index);
     });
+    // Sample collection: the switch is global (persisted) and every tile obeys.
+    connect(m_grid, &VideoGrid::captureSettingChanged, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("ai/captureSamples"), on);
+        m_grid->setCaptureEnabled(on);
+    });
+    connect(m_grid, &VideoGrid::sampleCaptured, this,
+            [this](const zp::ChannelRef &, bool ok) {
+                if (ok) {
+                    toastSuccess(tr("已采集样本，可在右侧「样本」中查看"));
+                    m_sampleShown = -1;
+                    updateSampleBadge();
+                } else {
+                    toastInfo(tr("采集失败：需在播放状态且已有检测结果"));
+                }
+            });
 
     connect(m_ptz, &PtzPanel::commandIssued, this, &PlayerWindow::onPtzCommand);
     connect(m_ptz, &PtzPanel::presetQuery, this, [this](const zp::ChannelRef &ch) {
@@ -623,15 +681,72 @@ void PlayerWindow::openTrainingTool()
 void PlayerWindow::updateSampleBadge()
 {
     const int n = DatasetStore::instance().count();
-    if (m_sampleBtn) {
-        m_sampleBtn->setText(n > 0 ? tr("样本 %1").arg(n) : tr("样本"));
+    syncSampleTab(n);
+    if (m_sampleCount) {
+        m_sampleCount->setText(n > 0 ? tr("（%1 条）").arg(n) : tr("（空）"));
     }
-    if (m_toolDock) {
-        m_toolDock->setTabText(1, n > 0 ? tr("样本 %1").arg(n) : tr("样本"));
+    if (m_dockReopen) {
+        m_dockReopen->setCount(n);
+        m_dockReopen->setToolTip(n > 0 ? tr("展开样本面板（%1 条）").arg(n)
+                                       : tr("展开样本面板"));
     }
     if (n != m_sampleShown) {
         m_sampleShown = n;
         refreshSampleList();
+    }
+}
+
+// Adds/removes the 样本 tab so an empty dataset leaves no dead tab behind.
+void PlayerWindow::syncSampleTab(int count)
+{
+    if (!m_toolDock || !m_samplePage) {
+        return;
+    }
+    const int idx = m_toolDock->indexOf(m_samplePage);
+    if (count > 0 && idx < 0) {
+        m_toolDock->addTab(m_samplePage, tr("样本 %1").arg(count));
+    } else if (count == 0 && idx >= 0) {
+        m_toolDock->removeTab(idx);
+    } else if (count > 0 && idx >= 0) {
+        m_toolDock->setTabText(idx, tr("样本 %1").arg(count));
+    }
+}
+
+void PlayerWindow::collapseToolDock()
+{
+    if (!m_toolDock || !m_dockReopen || m_dockCollapsed) {
+        return;
+    }
+    m_dockCollapsed = true;
+    if (m_bodySplitter) {
+        const QList<int> sz = m_bodySplitter->sizes();
+        if (sz.size() == 4 && sz.at(2) > 0) {
+            m_dockWidth = sz.at(2);
+        }
+        m_bodySplitter->setSizes({sz.value(0, 280), sz.value(1, 840), 0, 36});
+    }
+    m_toolDock->hide();
+    m_dockReopen->show();
+}
+
+void PlayerWindow::expandToolDock()
+{
+    if (!m_toolDock || !m_dockReopen || !m_dockCollapsed) {
+        return;
+    }
+    m_dockCollapsed = false;
+    m_dockReopen->hide();
+    if (m_bodySplitter) {
+        const QList<int> sz = m_bodySplitter->sizes();
+        const int target = qMax(240, m_dockWidth);
+        const int middle = qMax(0, sz.value(1, 840) + sz.value(3, 36) - target);
+        m_bodySplitter->setSizes({sz.value(0, 280), middle, target, 0});
+    }
+    m_toolDock->show();
+    if (m_sampleCount) {
+        m_sampleCount->setText(DatasetStore::instance().count() > 0
+                                   ? tr("（%1 条）").arg(DatasetStore::instance().count())
+                                   : tr("（空）"));
     }
 }
 
@@ -653,7 +768,7 @@ void PlayerWindow::refreshSampleList()
     const int insertAt = m_sampleLay->count() - 1;   // before the stretch
     if (recs.isEmpty()) {
         auto *empty = new QLabel(
-            tr("暂无失败样本。\nAI 低置信帧或点顶栏「＋样本」后会出现在这里。"),
+            tr("暂无样本。\n开启画面「AI 检查」菜单里的「样本采集」后，\n低置信帧会自动收进这里；也可点底栏「采集」手动保存。"),
             m_sampleLay->parentWidget());
         empty->setObjectName(QStringLiteral("SampleEmpty"));
         empty->setWordWrap(true);
@@ -721,9 +836,15 @@ void PlayerWindow::refreshSampleList()
 
 void PlayerWindow::selectSampleTab()
 {
-    if (m_toolDock) {
-        m_toolDock->setCurrentIndex(1);
+    if (!m_toolDock || !m_samplePage) {
+        return;
+    }
+    syncSampleTab(DatasetStore::instance().count());
+    expandToolDock();
+    const int idx = m_toolDock->indexOf(m_samplePage);
+    if (idx >= 0) {
         m_toolDock->show();
+        m_toolDock->setCurrentIndex(idx);
     }
 }
 
@@ -750,6 +871,7 @@ void PlayerWindow::reloadDetector()
     IFrameAnalyzer *old = m_detector;
     m_detector = det;
     m_analysis->setAnalyzer(det);
+    m_grid->setClassNames(det->classNames());
     qInfo().noquote() << "[ai] detector reloaded:" << modelPath
                       << "backend=" << det->backendName();
     const QString ver = QFileInfo(modelPath).dir().dirName();
@@ -968,8 +1090,11 @@ void PlayerWindow::updatePtzPanel()
         // The dock is always present; just enable/disable the PTZ page and
         // fall back to the samples page when the channel has no PTZ.
         m_toolDock->setTabEnabled(0, show);
-        if (!show && m_toolDock->currentIndex() == 0) {
-            m_toolDock->setCurrentIndex(1);
+        if (!show && m_toolDock->currentIndex() == 0 && m_samplePage) {
+            const int sampleIdx = m_toolDock->indexOf(m_samplePage);
+            if (sampleIdx >= 0) {
+                m_toolDock->setCurrentIndex(sampleIdx);
+            }
         }
     }
 }

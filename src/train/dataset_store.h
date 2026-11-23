@@ -20,6 +20,15 @@ struct SampleRecord {
     QVector<AnalysisBox> boxes;
 };
 
+// A project class. `id` is stable inside the dataset (COCO ids for the built-in
+// person/car/dog, unused ids for custom classes like 安全帽); `name` is the
+// ASCII name written to data.yaml / the trained model, `zh` the UI label.
+struct ClassDef {
+    int id = -1;
+    QString name;
+    QString zh;
+};
+
 // Local, single-machine dataset of failed / suspicious frames. Stores images +
 // a JSONL manifest under AppData/.../dataset. No server involved.
 class DatasetStore {
@@ -46,6 +55,15 @@ public:
     // Write the (edited) boxes as a YOLO txt next to the frame.
     bool saveLabels(const SampleRecord &rec, const QVector<AnalysisBox> &boxes) const;
 
+    // ---- project class table (classes.json in the dataset root) ----
+    // Defaults to person/car/dog on first use; users can add e.g. 安全帽.
+    QVector<ClassDef> classes() const;
+    void setClasses(const QVector<ClassDef> &classes);
+    QString className(int id) const;          // display label for an id
+    int classIndex(int id) const;             // YOLO index in the current table (-1 unknown)
+    // Append a class if the name is new. Returns its id, or -1 + error.
+    int addClass(const QString &name, const QString &zh, QString *error = nullptr);
+
     // Export a train/val YOLO dataset (images + labels + data.yaml) to outDir.
     // Split is grouped by channel so frames from one camera do not leak across
     // the train/val boundary.
@@ -58,6 +76,7 @@ public:
 private:
     DatasetStore();
     QString manifestPath() const;
+    QString classesPath() const;
     QString sanitize(const QString &s) const;
 
     QString m_root;

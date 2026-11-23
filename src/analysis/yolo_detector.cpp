@@ -125,6 +125,13 @@ QString YoloDetector::localizedClassName(int classId)
     return zh.isEmpty() ? classNameFor(classId) : zh;
 }
 
+bool YoloDetector::looksLikeCoco(const QStringList &names)
+{
+    return names.size() == 80
+        && names.value(0) == QLatin1String("person")
+        && names.value(16) == QLatin1String("dog");
+}
+
 // ---------------------------------------------------------------------------
 // Implementation (ONNX Runtime C API — the C++ API needs a newer toolchain).
 // ---------------------------------------------------------------------------
@@ -186,6 +193,11 @@ bool YoloDetector::isLoaded() const
 QString YoloDetector::backendName() const { return m->backend; }
 QString YoloDetector::modelPath() const { return m->modelPath; }
 QString YoloDetector::name() const { return QStringLiteral("yolo"); }
+
+QStringList YoloDetector::classNames() const
+{
+    return m ? m->names : QStringList();
+}
 
 void YoloDetector::setConfidenceThreshold(float t) { m->conf = qBound(0.01f, t, 0.99f); }
 void YoloDetector::setNmsThreshold(float t) { m->nms = qBound(0.01f, t, 0.99f); }
@@ -505,10 +517,17 @@ AnalysisResult YoloDetector::analyze(const AnalysisFrame &frame)
         AnalysisBox box;
         box.rect = QRectF(x1 / imgW, y1 / imgH, (x2 - x1) / imgW, (y2 - y1) / imgH);
         box.classId = c.cls;
-        const QString zh = localizedClassName(c.cls);
-        box.label = (!zh.isEmpty() && zh != QString::number(c.cls))
-                        ? zh
-                        : m->names.value(c.cls, QString::number(c.cls));
+        // Chinese COCO labels only make sense for the standard 80-class model;
+        // a custom / published model carries its own names (possibly Chinese
+        // already), so use those verbatim.
+        if (looksLikeCoco(m->names)) {
+            const QString zh = localizedClassName(c.cls);
+            box.label = (!zh.isEmpty() && zh != QString::number(c.cls))
+                            ? zh
+                            : m->names.value(c.cls, QString::number(c.cls));
+        } else {
+            box.label = m->names.value(c.cls, QString::number(c.cls));
+        }
         box.score = c.score;
         result.boxes.push_back(box);
     }

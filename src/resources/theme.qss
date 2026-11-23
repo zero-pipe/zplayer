@@ -996,3 +996,13 @@ QComboBox#ParamCombo::down-arrow {
     height: 10px;
 }
 QComboBox#ParamCombo::down-arrow:on { image: url(:/resources/chevron-down.svg); }
+
+/* Collapsed right dock: slim vertical strip that re-opens the panel */
+QToolButton#DockReopen {
+    background: %bgPanel%;
+    border: none;
+    border-left: 1px solid %borderStrong%;
+    color: %text2%;
+    font-weight: 700;
+}
+QToolButton#DockReopen:hover { background: %accentSoft%; color: %accent%; }
