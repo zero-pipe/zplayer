@@ -247,6 +247,26 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_set_option_string(m_holder->h, "terminal", "no");
         mpv_set_option_string(m_holder->h, "keep-open", "yes");
         mpv_set_option_string(m_holder->h, "hwdec", "auto-safe");
+
+        // --- Live latency budget ---
+        // mpv's stock defaults (demuxer-readahead-secs=1 + cache-secs=auto)
+        // add roughly a second on top of the server's own end-to-end delay,
+        // which is most of the gap between ZMS (WebRTC ~0.06s / FLV ~0.45s)
+        // and what the desktop client shows. 0.5s readahead keeps enough
+        // margin to absorb jitter on a LAN/wired link while cutting the
+        // steady-state delay roughly in half. Applies to playback too: the
+        // recordings come off the same media server, so the same budget is a
+        // reasonable compromise rather than a separate profile.
+        // Bound the memory rather than the time so a high-bitrate stream
+        // cannot balloon the cache while the readahead window is small.
+        mpv_set_option_string(m_holder->h, "cache", "yes");
+        mpv_set_option_string(m_holder->h, "demuxer-readahead-secs", "0.5");
+        mpv_set_option_string(m_holder->h, "demuxer-max-bytes", "16MiB");
+        mpv_set_option_string(m_holder->h, "demuxer-max-back-bytes", "8MiB");
+        // Resume as soon as the readahead window is filled instead of waiting
+        // for the (now tiny) cache to reach an internal target.
+        mpv_set_option_string(m_holder->h, "cache-pause-initial", "no");
+
         mpv_initialize(m_holder->h);
         mpv_observe_property(m_holder->h, 0, "time-pos", MPV_FORMAT_DOUBLE);
         mpv_observe_property(m_holder->h, 0, "duration", MPV_FORMAT_DOUBLE);
