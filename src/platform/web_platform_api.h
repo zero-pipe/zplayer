@@ -33,6 +33,14 @@ public:
     void addPreset(const zp::ChannelRef &ch, int presetId) override;
     void deletePreset(const zp::ChannelRef &ch, int presetId) override;
 
+    void queryRecordings(const zp::ChannelRef &ch, qint64 startMs,
+                         qint64 endMs) override;
+    void startPlayback(const zp::ChannelRef &ch, qlonglong recordId,
+                       qint64 startMs) override;
+    void seekPlayback(const zp::ChannelRef &ch, qlonglong recordId,
+                      qint64 seekMs) override;
+    void stopPlayback(const zp::ChannelRef &ch, qlonglong recordId) override;
+
 private:
     static QList<DeviceNode> parseNodes(const QJsonValue &data);
     static QString ptzCommandName(PtzCommand::Type type);

@@ -7,6 +7,7 @@
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
 #include "ui/evidence_dialog.h"
+#include "ui/playback_dialog.h"
 #include "ui/ui_kit.h"
 #include "player/video_grid.h"
 #include "player/video_tile.h"
@@ -138,6 +139,12 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     });
     addAction(aiAct);
 
+    // 云端回放（当前选中通道，按日查片段）。客户端才是回放主战场，Web 不做。
+    auto *playbackAct = new QAction(this);
+    playbackAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
+    connect(playbackAct, &QAction::triggered, this, &PlayerWindow::openCloudPlayback);
+    addAction(playbackAct);
+
     buildUi();
 
     updateSampleBadge();
@@ -256,6 +263,9 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     connect(m_api, &IPlatformApi::childrenReady, this, &PlayerWindow::onChildrenReady);
     connect(m_api, &IPlatformApi::playStarted, this, &PlayerWindow::onPlayStarted);
     connect(m_api, &IPlatformApi::streamFailed, this, &PlayerWindow::onStreamFailed);
+    connect(m_api, &IPlatformApi::recordingsReady, this, &PlayerWindow::onRecordingsReady);
+    connect(m_api, &IPlatformApi::playbackStarted, this, &PlayerWindow::onPlaybackStarted);
+    connect(m_api, &IPlatformApi::playbackStopped, this, &PlayerWindow::onPlaybackStopped);
     connect(m_api, &IPlatformApi::ptzAcknowledged, this, &PlayerWindow::onPtzAcknowledged);
     connect(m_api, &IPlatformApi::sessionExpired, this, &PlayerWindow::onSessionExpired);
     connect(m_api, &IPlatformApi::errorOccurred, this, &PlayerWindow::onError);
@@ -1167,8 +1177,95 @@ void PlayerWindow::onSessionExpired()
 
 void PlayerWindow::onError(const QString &scope, const QString &message)
 {
-    Q_UNUSED(scope)
     toastError(message);
+    if (scope == QLatin1String("playback") && m_pbDialog) {
+        m_pbDialog->setPlaybackError(message);
+    }
+}
+
+void PlayerWindow::openCloudPlayback()
+{
+    if (m_api == nullptr) {
+        return;
+    }
+    ChannelRef target = m_active;
+    if (target.channelId.endsWith(QStringLiteral("@playback")) && m_pbChannel.isValid()) {
+        target = m_pbChannel; // 焦点落在回放瓦片上时，沿用上次查询的通道
+    }
+    if (!target.isValid()) {
+        toastError(tr("请先在左侧选择要回放的通道"));
+        return;
+    }
+    if (target.platformId <= 0) {
+        toastError(tr("该通道缺少平台 id，无法查询云端录像"));
+        return;
+    }
+    m_pbChannel = target;
+
+    if (!m_pbDialog) {
+        m_pbDialog = new PlaybackDialog(this);
+        connect(m_pbDialog, &PlaybackDialog::queryRequested, this,
+                [this](qint64 s, qint64 e) { m_api->queryRecordings(m_pbChannel, s, e); });
+        connect(m_pbDialog, &PlaybackDialog::playSegmentRequested, this,
+                [this](qlonglong id, qint64 startMs) {
+                    m_pbRecordId = id;
+                    m_api->startPlayback(m_pbChannel, id, startMs);
+                });
+        connect(m_pbDialog, &PlaybackDialog::seekRequested, this,
+                [this](qint64 absMs) {
+                    if (m_pbRecordId > 0) {
+                        m_api->seekPlayback(m_pbChannel, m_pbRecordId, absMs);
+                    }
+                });
+        connect(m_pbDialog, &PlaybackDialog::stopRequested, this, [this]() {
+            if (m_pbRecordId > 0) {
+                m_api->stopPlayback(m_pbChannel, m_pbRecordId);
+            }
+            m_grid->closeStream(m_pbRef);
+            m_pbRecordId = 0;
+        });
+    }
+    const QString name = m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId);
+    m_pbDialog->setChannelName(name);
+    m_pbDialog->show();
+    m_pbDialog->raise();
+    m_pbDialog->activateWindow();
+}
+
+void PlayerWindow::onRecordingsReady(const ChannelRef &ch,
+                                     const QList<RecordingSegment> &segments)
+{
+    if (!m_pbDialog || ch.key() != m_pbChannel.key()) {
+        return;
+    }
+    m_pbDialog->setSegments(segments);
+}
+
+void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
+                                     const QUrl &url, const QString &transport,
+                                     qint64 segStartMs, qint64 segDurationMs)
+{
+    Q_UNUSED(transport)
+    if (ch.key() != m_pbChannel.key()) {
+        return;
+    }
+    m_pbRecordId = recordId;
+    m_pbRef = m_pbChannel;
+    m_pbRef.channelId = m_pbChannel.channelId + QStringLiteral("@playback");
+    const QString name = m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId)
+            + tr("（回放）");
+    // 定位/重开时先关旧瓦片，确保按新 offset 重新拉流。
+    m_grid->closeStream(m_pbRef);
+    m_grid->openStream(m_pbRef, name, false, url);
+    if (m_pbDialog) {
+        m_pbDialog->setPlaying(recordId, segStartMs, segDurationMs);
+    }
+}
+
+void PlayerWindow::onPlaybackStopped(const ChannelRef &ch, qlonglong recordId)
+{
+    Q_UNUSED(ch)
+    Q_UNUSED(recordId)
 }
 
 void PlayerWindow::openDirect(const QUrl &url)

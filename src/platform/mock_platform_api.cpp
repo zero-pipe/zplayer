@@ -167,4 +167,37 @@ void MockPlatformApi::deletePreset(const ChannelRef &ch, int presetId)
     QTimer::singleShot(50, this, [this, ch]() { queryPresets(ch); });
 }
 
+void MockPlatformApi::queryRecordings(const ChannelRef &ch, qint64 startMs, qint64 endMs)
+{
+    Q_UNUSED(startMs)
+    Q_UNUSED(endMs)
+    // 演示模式无云录像：返回空列表。
+    QTimer::singleShot(50, this, [this, ch]() {
+        emit recordingsReady(ch, QList<RecordingSegment>());
+    });
+}
+
+void MockPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qint64 startMs)
+{
+    Q_UNUSED(startMs)
+    const QUrl url(demoUrl());
+    QTimer::singleShot(50, this, [this, ch, recordId, url, startMs]() {
+        emit playbackStarted(ch, recordId, url, QStringLiteral("演示"), startMs, 60000);
+    });
+}
+
+void MockPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint64 seekMs)
+{
+    Q_UNUSED(ch)
+    Q_UNUSED(recordId)
+    Q_UNUSED(seekMs)
+}
+
+void MockPlatformApi::stopPlayback(const ChannelRef &ch, qlonglong recordId)
+{
+    QTimer::singleShot(20, this, [this, ch, recordId]() {
+        emit playbackStopped(ch, recordId);
+    });
+}
+
 } // namespace zp

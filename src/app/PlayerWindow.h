@@ -28,6 +28,7 @@ class Toast;
 class AnalysisService;
 class IFrameAnalyzer;
 class TrainingToolWindow;
+class PlaybackDialog;
 
 // Slim vertical strip shown when the right tool dock is collapsed: icon on
 // top, optional count just below. (A stock QToolButton with text-under-icon
@@ -86,6 +87,13 @@ private slots:
     void onSessionExpired();
     void onError(const QString &scope, const QString &message);
     void onLayoutButtonClicked(int index);
+    void openCloudPlayback();
+    void onRecordingsReady(const zp::ChannelRef &ch,
+                           const QList<zp::RecordingSegment> &segments);
+    void onPlaybackStarted(const zp::ChannelRef &ch, qlonglong recordId,
+                           const QUrl &url, const QString &transport,
+                           qint64 segStartMs, qint64 segDurationMs);
+    void onPlaybackStopped(const zp::ChannelRef &ch, qlonglong recordId);
 
 private:
     void buildUi();
@@ -150,6 +158,12 @@ private:
     ChannelRef m_pending;                     // channel awaiting playStarted
     QString m_pendingName;
     bool m_pendingPtz = false;
+
+    // 云端回放状态
+    PlaybackDialog *m_pbDialog = nullptr;
+    ChannelRef m_pbChannel;                   // 查询片段所用的通道（打开回放时快照）
+    ChannelRef m_pbRef;                       // 回放瓦片使用的合成 ref（与实时区分）
+    qlonglong m_pbRecordId = 0;               // 当前回放片段 id
 };
 
 } // namespace zp

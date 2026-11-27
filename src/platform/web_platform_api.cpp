@@ -210,6 +210,8 @@ QList<DeviceNode> WebPlatformApi::parseNodes(const QJsonValue &data)
                     : treeId;
             n.ref.deviceId = parentDeviceId;
             n.ref.channelId = nodeDeviceId;
+            // 通道库 id：云端回放按它查片段（切内码后仍保留，作为查询键）。
+            n.ref.platformId = o.value(QStringLiteral("id")).toVariant().toInt();
             // GB channels are treated as PTZ-capable; the device ignores
             // unsupported commands. (ptzType isn't in the tree payload.)
             n.ptzCapable = true;
@@ -260,6 +262,90 @@ void WebPlatformApi::stopPlay(const ChannelRef &ch)
     m_http->getJson(path, [ch](bool, const QJsonValue &, const QString &, int) {
         Q_UNUSED(ch)
     });
+}
+
+void WebPlatformApi::queryRecordings(const ChannelRef &ch, qint64 startMs, qint64 endMs)
+{
+    if (ch.platformId <= 0) {
+        emit errorOccurred(QStringLiteral("playback"), tr("通道缺少平台 id，无法查询云端录像"));
+        return;
+    }
+    const QString path = QStringLiteral("/api/v1/playback/cloud/channel-segments/%1?start=%2&end=%3")
+            .arg(QString::number(ch.platformId),
+                 QString::number(startMs), QString::number(endMs));
+    m_http->getJson(path,
+        [this, ch](bool ok, const QJsonValue &data, const QString &msg, int) {
+            if (!ok) {
+                emit errorOccurred(QStringLiteral("playback"),
+                                   msg.isEmpty() ? tr("查询录像失败") : msg);
+                return;
+            }
+            QList<RecordingSegment> segs;
+            for (const QJsonValue &v : data.toArray()) {
+                const QJsonObject o = v.toObject();
+                RecordingSegment s;
+                s.recordId = qlonglong(o.value(QStringLiteral("recordId")).toVariant().toLongLong());
+                s.startMs = qint64(o.value(QStringLiteral("startTime")).toVariant().toLongLong());
+                s.endMs = qint64(o.value(QStringLiteral("endTime")).toVariant().toLongLong());
+                s.durationMs = qint64(o.value(QStringLiteral("durationMs")).toVariant().toLongLong());
+                s.container = o.value(QStringLiteral("container")).toString();
+                s.size = qint64(o.value(QStringLiteral("size")).toVariant().toLongLong());
+                segs.append(s);
+            }
+            emit recordingsReady(ch, segs);
+        });
+}
+
+void WebPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qint64 startMs)
+{
+    if (recordId <= 0) {
+        emit errorOccurred(QStringLiteral("playback"), tr("无效的录像片段"));
+        return;
+    }
+    const QString path = QStringLiteral("/api/v1/playback/cloud/start?recordId=%1&startTime=%2")
+            .arg(QString::number(recordId), QString::number(startMs));
+    m_http->getJson(path,
+        [this, ch, recordId, startMs](bool ok, const QJsonValue &data,
+                                      const QString &msg, int) {
+            if (!ok) {
+                emit errorOccurred(QStringLiteral("playback"),
+                                   msg.isEmpty() ? tr("云端回放起播失败") : msg);
+                return;
+            }
+            const QJsonObject o = data.toObject();
+            QString transport;
+            const QString url = pickPlayUrl(o, &transport);
+            if (url.isEmpty()) {
+                emit errorOccurred(QStringLiteral("playback"), tr("平台未返回可用回放地址"));
+                return;
+            }
+            const qint64 dur = qint64(o.value(QStringLiteral("duration")).toVariant().toDouble());
+            emit playbackStarted(ch, recordId, QUrl(url), transport, startMs, dur);
+        });
+}
+
+void WebPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint64 seekMs)
+{
+    if (recordId <= 0) return;
+    const QString path = QStringLiteral("/api/v1/playback/cloud/seek?recordId=%1&seekTime=%2")
+            .arg(QString::number(recordId), QString::number(seekMs));
+    m_http->getJson(path,
+        [ch](bool ok, const QJsonValue &, const QString &msg, int) {
+            Q_UNUSED(ok)
+            Q_UNUSED(ch)
+            Q_UNUSED(msg)
+        });
+}
+
+void WebPlatformApi::stopPlayback(const ChannelRef &ch, qlonglong recordId)
+{
+    if (recordId <= 0) return;
+    const QString path = QStringLiteral("/api/v1/playback/cloud/stop?recordId=%1")
+            .arg(QString::number(recordId));
+    m_http->getJson(path,
+        [this, ch, recordId](bool, const QJsonValue &, const QString &, int) {
+            emit playbackStopped(ch, recordId);
+        });
 }
 
 void WebPlatformApi::ptzControl(const ChannelRef &ch, const PtzCommand &cmd)
