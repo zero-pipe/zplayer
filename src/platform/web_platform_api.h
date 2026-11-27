@@ -3,8 +3,6 @@
 
 #include "platform/platform_api.h"
 
-#include <QHash>
-
 namespace zp {
 
 class PlatformHttpClient;
@@ -48,11 +46,6 @@ private:
     PlatformHttpClient *m_http = nullptr;
     QString m_serverId;
     QString m_username;
-
-    // GB channel id -> real parent GB device id. The group tree only exposes
-    // the organization code in parentDeviceId, which /play/start rejects
-    // ("设备不存在"), so the real device is resolved via /common/channel/one.
-    QHash<QString, QString> m_channelDevices;
 };
 
 } // namespace zp

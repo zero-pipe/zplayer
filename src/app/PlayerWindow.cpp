@@ -1602,6 +1602,9 @@ void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
     if (m_pbTimer) m_pbTimer->start(500);
 
     m_pbRef = m_pbChannel;
+    // 回放瓦片与实时瓦片互不冲突：resourceId 是 key 的主键，必须一并加后缀，
+    // 否则两者 key 相同会被 VideoGrid 当成同一路。
+    m_pbRef.resourceId = m_pbChannel.resourceId + QStringLiteral("@playback");
     m_pbRef.channelId = m_pbChannel.channelId + QStringLiteral("@playback");
     const QString name = m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId)
             + tr("（回放）");
@@ -1707,6 +1710,7 @@ void PlayerWindow::openDirect(const QUrl &url)
     ChannelRef ref;
     ref.deviceId = id;
     ref.channelId = url.fileName().isEmpty() ? id : url.fileName();
+    ref.resourceId = ref.channelId; // synthetic identity so isValid()/key() work
     const QString name = url.fileName().isEmpty() ? url.toString() : url.fileName();
     m_grid->openStream(ref, name, false, url);
     toastInfo(tr("直接播放：%1").arg(name));
@@ -1723,6 +1727,7 @@ void PlayerWindow::openLocalFile(const QString &path)
     ChannelRef ref;
     ref.deviceId = QStringLiteral("_file");
     ref.channelId = abs;   // one tile per distinct file
+    ref.resourceId = abs;  // synthetic identity so isValid()/key() are stable
     if (m_grid->contains(ref)) {
         m_grid->focusChannel(ref);
         return;
@@ -1798,6 +1803,7 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
         ChannelRef ref;
         ref.deviceId = QStringLiteral("_demo%1").arg(i);
         ref.channelId = QStringLiteral("ch%1").arg(i);
+        ref.resourceId = ref.channelId; // synthetic identity so isValid()/key() work
         m_grid->openStream(ref, tr("演示通道 %1").arg(i + 1), true, url);
     }
 

@@ -5,6 +5,7 @@
 #include <QString>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QJsonObject>
 #include <QJsonValue>
 
 #include <functional>
@@ -48,6 +49,14 @@ public:
         getJson(path, QUrlQuery(), cb);
     }
 
+    // POST the given path with optional query and a JSON object body.
+    // Used for endpoints like live/start|stop that are POST with an empty body.
+    void postJson(const QString &path, const QUrlQuery &query,
+                  const QJsonObject &body, const JsonCallback &cb);
+    void postJson(const QString &path, const QJsonObject &body, const JsonCallback &cb) {
+        postJson(path, QUrlQuery(), body, cb);
+    }
+
     static QString normalizeBaseUrl(const QString &url);
     static QString md5Hex(const QString &text);
 
@@ -56,6 +65,9 @@ signals:
 
 private:
     QNetworkReply *get(const QString &path, const QUrlQuery &query);
+    QNetworkReply *post(const QString &path, const QUrlQuery &query,
+                        const QJsonObject &body);
+    void handleReply(QNetworkReply *reply, const JsonCallback &cb);
 
     QNetworkAccessManager *m_nam = nullptr;
     QString m_baseUrl;

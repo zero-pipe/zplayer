@@ -64,6 +64,25 @@ QNetworkReply *PlatformHttpClient::get(const QString &path, const QUrlQuery &que
     return m_nam->get(req);
 }
 
+QNetworkReply *PlatformHttpClient::post(const QString &path, const QUrlQuery &query,
+                                        const QJsonObject &body)
+{
+    QUrl url(m_baseUrl + path);
+    if (!query.isEmpty()) {
+        url.setQuery(query);
+    }
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    if (!m_token.isEmpty()) {
+        req.setRawHeader("access-token", m_token.toUtf8());
+    }
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+    req.setTransferTimeout(kTimeoutMs);
+#endif
+    const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+    return m_nam->post(req, payload);
+}
+
 void PlatformHttpClient::getJson(const QString &path, const QUrlQuery &query,
                                  const JsonCallback &cb)
 {
@@ -71,8 +90,21 @@ void PlatformHttpClient::getJson(const QString &path, const QUrlQuery &query,
         cb(false, QJsonValue(), tr("未配置服务器地址"), 0);
         return;
     }
+    handleReply(get(path, query), cb);
+}
 
-    QNetworkReply *reply = get(path, query);
+void PlatformHttpClient::postJson(const QString &path, const QUrlQuery &query,
+                                  const QJsonObject &body, const JsonCallback &cb)
+{
+    if (m_baseUrl.isEmpty()) {
+        cb(false, QJsonValue(), tr("未配置服务器地址"), 0);
+        return;
+    }
+    handleReply(post(path, query, body), cb);
+}
+
+void PlatformHttpClient::handleReply(QNetworkReply *reply, const JsonCallback &cb)
+{
     connect(reply, &QNetworkReply::finished, this, [this, reply, cb]() {
         reply->deleteLater();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

@@ -17,6 +17,8 @@ DeviceNode makeChannel(const QString &deviceId, const QString &channelId,
     n.type = QStringLiteral("channel");
     n.online = online;
     n.ptzCapable = ptz;
+    // Demo resourceId = the GB channel id (numeric-ish); keeps ChannelRef valid.
+    n.ref.resourceId = channelId;
     n.ref.deviceId = deviceId;
     n.ref.channelId = channelId;
     return n;

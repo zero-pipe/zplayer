@@ -9,23 +9,39 @@
 
 namespace zp {
 
-// A playable / controllable camera channel, addressed by the GB identity pair
-// used by the web platform: (deviceId = parent device GB id,
-// channelId = channel GB id).
+// A playable / controllable camera channel. The platform now exposes a single
+// numeric resource id per channel (the directory tree channel-leaf "id"), which
+// is the ONLY key used to build control URLs (/api/v1/resources/{id}/...).
+// deviceId/channelId (GB ids) and deviceCode/channelCode (D../C.. internal
+// codes) are kept for display / compatibility but are no longer spliced into
+// any request URL.
 struct ChannelRef {
+    // Primary key: channel resource id (directory tree leaf "id", numeric).
+    QString resourceId;
+    // GB identity pair (display / backwards compat only).
     QString deviceId;
     QString channelId;
-    // 平台内码（业务身份唯一键）：设备 D... / 通道 C...。回放查片段按内码对，
-    // 不用国标编号，也不用数据库自增 id。
+    // 平台内码（业务身份唯一键）：设备 D... / 通道 C...，仅用于展示/兼容。
     QString deviceCode;
     QString channelCode;
 
-    bool isValid() const { return !deviceId.isEmpty() && !channelId.isEmpty(); }
+    // Resource id is what actually addresses a channel on the platform.
+    bool isValid() const { return !resourceId.isEmpty(); }
     bool operator==(const ChannelRef &o) const {
+        // Prefer resourceId identity; fall back to the GB pair for synthetic
+        // refs (local files, direct URLs, demo tiles) that have no resource id.
+        if (!resourceId.isEmpty() || !o.resourceId.isEmpty()) {
+            return resourceId == o.resourceId;
+        }
         return deviceId == o.deviceId && channelId == o.channelId;
     }
     bool operator!=(const ChannelRef &o) const { return !(*this == o); }
-    QString key() const { return deviceId + QLatin1Char('/') + channelId; }
+    QString key() const {
+        if (!resourceId.isEmpty()) {
+            return QStringLiteral("r:") + resourceId;
+        }
+        return deviceId + QLatin1Char('/') + channelId;
+    }
 };
 
 // Authenticated session returned by the platform.

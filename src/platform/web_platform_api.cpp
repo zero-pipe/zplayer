@@ -7,16 +7,9 @@
 #include <QVariant>
 #include <QUrlQuery>
 
-#include <memory>
-
 namespace zp {
 
 namespace {
-
-QString enc(const QString &s)
-{
-    return QString::fromLatin1(QUrl::toPercentEncoding(s));
-}
 
 QString pickPlayUrl(const QJsonObject &o, QString *transport)
 {
@@ -64,7 +57,6 @@ void WebPlatformApi::login(const QString &baseUrl, const QString &username,
     m_http->setBaseUrl(baseUrl);
     m_http->clearToken();
     m_username = username;
-    m_channelDevices.clear();
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("username"), username);
@@ -124,64 +116,9 @@ void WebPlatformApi::fetchChildren(const QString &parentId)
                 emit childrenReady(parentId, {}); // unblock UI in any case
                 return;
             }
-
-            QList<DeviceNode> nodes = parseNodes(data);
-
-            // The group tree reports the *organization* code in parentDeviceId
-            // for channel leaves, but /play/start needs the real parent GB
-            // device id. Resolve it via /common/channel/one (keyed by the tree
-            // row id) and patch the ChannelRef before handing nodes to the UI.
-            QHash<QString, QString> rowIds; // GB channel id -> tree row id
-            if (data.isArray()) {
-                for (const QJsonValue &v : data.toArray()) {
-                    const QJsonObject o = v.toObject();
-                    if (o.value(QStringLiteral("type")).toInt(0) != 1) {
-                        continue;
-                    }
-                    const QString gbChannelId = o.value(QStringLiteral("deviceId")).toString();
-                    const QString rowId = o.value(QStringLiteral("id")).toVariant().toString();
-                    if (!gbChannelId.isEmpty() && !rowId.isEmpty()) {
-                        rowIds.insert(gbChannelId, rowId);
-                    }
-                }
-            }
-
-            auto pending = std::make_shared<int>(0);
-            for (int i = 0; i < nodes.size(); ++i) {
-                if (!nodes.at(i).isChannel()) {
-                    continue;
-                }
-                const QString gbChannelId = nodes.at(i).ref.channelId;
-                if (m_channelDevices.contains(gbChannelId)) {
-                    nodes[i].ref.deviceId = m_channelDevices.value(gbChannelId);
-                    continue;
-                }
-                const QString rowId = rowIds.value(gbChannelId);
-                if (rowId.isEmpty()) {
-                    continue;
-                }
-                ++*pending;
-                QUrlQuery cq;
-                cq.addQueryItem(QStringLiteral("id"), rowId);
-                m_http->getJson(QStringLiteral("/api/v1/common/channel/one"), cq,
-                    [this, parentId, nodes, pending, i, gbChannelId](
-                        bool ok2, const QJsonValue &data2, const QString &, int) mutable {
-                        if (ok2) {
-                            const QString deviceId = data2.toObject()
-                                    .value(QStringLiteral("deviceId")).toString();
-                            if (!deviceId.isEmpty()) {
-                                m_channelDevices.insert(gbChannelId, deviceId);
-                                nodes[i].ref.deviceId = deviceId;
-                            }
-                        }
-                        if (--*pending == 0) {
-                            emit childrenReady(parentId, nodes);
-                        }
-                    });
-            }
-            if (*pending == 0) {
-                emit childrenReady(parentId, nodes);
-            }
+            // Channel leaves now carry their own resourceId in "id"; there is
+            // no secondary device lookup to patch (that endpoint was removed).
+            emit childrenReady(parentId, parseNodes(data));
         });
 }
 
@@ -205,12 +142,15 @@ QList<DeviceNode> WebPlatformApi::parseNodes(const QJsonValue &data)
 
         if (type == 1) { // channel leaf
             n.type = QStringLiteral("channel");
+            // resourceId = the directory tree leaf "id" (numeric). This is the
+            // single key used to build every control URL downstream.
+            n.ref.resourceId = o.value(QStringLiteral("id")).toVariant().toString();
             n.id = treeId.isEmpty()
-                    ? QStringLiteral("ch%1").arg(o.value(QStringLiteral("id")).toVariant().toString())
+                    ? QStringLiteral("ch%1").arg(n.ref.resourceId)
                     : treeId;
+            // GB ids + internal codes retained for display / compatibility.
             n.ref.deviceId = parentDeviceId;
             n.ref.channelId = nodeDeviceId;
-            // 业务身份内码：设备 D.../通道 C...（回放按内码对查片段）。
             n.ref.deviceCode = o.value(QStringLiteral("deviceInternalCode")).toString();
             n.ref.channelCode = o.value(QStringLiteral("internalCode")).toString();
             // GB channels are treated as PTZ-capable; the device ignores
@@ -233,10 +173,11 @@ void WebPlatformApi::startPlay(const ChannelRef &ch)
         emit streamFailed(ch, tr("通道信息不完整"));
         return;
     }
-    const QString path = QStringLiteral("/api/v1/play/start/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    // POST /api/v1/resources/{id}/live/start  body {"profileId":""}
+    const QString path = QStringLiteral("/api/v1/resources/%1/live/start")
+            .arg(ch.resourceId);
 
-    m_http->getJson(path,
+    m_http->postJson(path, QJsonObject{{QStringLiteral("profileId"), QString()}},
         [this, ch](bool ok, const QJsonValue &data, const QString &msg, int) {
             if (!ok) {
                 emit streamFailed(ch, msg.isEmpty() ? tr("取流失败") : msg);
@@ -258,21 +199,22 @@ void WebPlatformApi::stopPlay(const ChannelRef &ch)
     if (!ch.isValid() || m_http->token().isEmpty()) {
         return;
     }
-    const QString path = QStringLiteral("/api/v1/play/stop/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
-    m_http->getJson(path, [ch](bool, const QJsonValue &, const QString &, int) {
+    // POST /api/v1/resources/{id}/live/stop  (empty JSON body)
+    const QString path = QStringLiteral("/api/v1/resources/%1/live/stop")
+            .arg(ch.resourceId);
+    m_http->postJson(path, QJsonObject(), [ch](bool, const QJsonValue &, const QString &, int) {
         Q_UNUSED(ch)
     });
 }
 
 void WebPlatformApi::queryRecordings(const ChannelRef &ch, qint64 startMs, qint64 endMs)
 {
-    if (ch.deviceCode.isEmpty() || ch.channelCode.isEmpty()) {
-        emit errorOccurred(QStringLiteral("playback"), tr("通道缺少内码，无法查询云端录像"));
+    if (!ch.isValid()) {
+        emit errorOccurred(QStringLiteral("playback"), tr("通道信息不完整，无法查询云端录像"));
         return;
     }
-    const QString path = QStringLiteral("/api/v1/playback/cloud/segments/%1/%2?start=%3&end=%4")
-            .arg(enc(ch.deviceCode), enc(ch.channelCode),
+    const QString path = QStringLiteral("/api/v1/resources/%1/playback/cloud/segments?start=%2&end=%3")
+            .arg(ch.resourceId,
                  QString::number(startMs), QString::number(endMs));
     m_http->getJson(path,
         [this, ch](bool ok, const QJsonValue &data, const QString &msg, int) {
@@ -303,8 +245,8 @@ void WebPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qin
         emit errorOccurred(QStringLiteral("playback"), tr("无效的录像片段"));
         return;
     }
-    const QString path = QStringLiteral("/api/v1/playback/cloud/start?recordId=%1&startTime=%2")
-            .arg(QString::number(recordId), QString::number(startMs));
+    const QString path = QStringLiteral("/api/v1/resources/%1/playback/cloud/start?recordId=%2&startTime=%3")
+            .arg(ch.resourceId, QString::number(recordId), QString::number(startMs));
     m_http->getJson(path,
         [this, ch, recordId, startMs](bool ok, const QJsonValue &data,
                                       const QString &msg, int) {
@@ -327,9 +269,9 @@ void WebPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qin
 
 void WebPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint64 seekMs)
 {
-    if (recordId <= 0) return;
-    const QString path = QStringLiteral("/api/v1/playback/cloud/seek?recordId=%1&seekTime=%2")
-            .arg(QString::number(recordId), QString::number(seekMs));
+    if (recordId <= 0 || !ch.isValid()) return;
+    const QString path = QStringLiteral("/api/v1/resources/%1/playback/cloud/seek?recordId=%2&seekTime=%3")
+            .arg(ch.resourceId, QString::number(recordId), QString::number(seekMs));
     m_http->getJson(path,
         [ch](bool ok, const QJsonValue &, const QString &msg, int) {
             Q_UNUSED(ok)
@@ -340,9 +282,9 @@ void WebPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint
 
 void WebPlatformApi::stopPlayback(const ChannelRef &ch, qlonglong recordId)
 {
-    if (recordId <= 0) return;
-    const QString path = QStringLiteral("/api/v1/playback/cloud/stop?recordId=%1")
-            .arg(QString::number(recordId));
+    if (recordId <= 0 || !ch.isValid()) return;
+    const QString path = QStringLiteral("/api/v1/resources/%1/playback/cloud/stop?recordId=%2")
+            .arg(ch.resourceId, QString::number(recordId));
     m_http->getJson(path,
         [this, ch, recordId](bool, const QJsonValue &, const QString &, int) {
             emit playbackStopped(ch, recordId);
@@ -364,8 +306,8 @@ void WebPlatformApi::ptzControl(const ChannelRef &ch, const PtzCommand &cmd)
     q.addQueryItem(QStringLiteral("verticalSpeed"), QString::number(panTilt));
     q.addQueryItem(QStringLiteral("zoomSpeed"), QString::number(zoom));
 
-    const QString path = QStringLiteral("/api/v1/front-end/ptz/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    const QString path = QStringLiteral("/api/v1/resources/%1/ptz")
+            .arg(ch.resourceId);
 
     const int cmdType = static_cast<int>(cmd.type);
     const int speed = cmd.speed;
@@ -402,8 +344,8 @@ void WebPlatformApi::queryPresets(const ChannelRef &ch)
     if (!ch.isValid()) {
         return;
     }
-    const QString path = QStringLiteral("/api/v1/front-end/preset/query/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    const QString path = QStringLiteral("/api/v1/resources/%1/preset/query")
+            .arg(ch.resourceId);
     m_http->getJson(path,
         [this, ch](bool ok, const QJsonValue &data, const QString &msg, int) {
             if (!ok) {
@@ -435,8 +377,8 @@ void WebPlatformApi::callPreset(const ChannelRef &ch, int presetId)
     }
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("presetId"), QString::number(presetId));
-    const QString path = QStringLiteral("/api/v1/front-end/preset/call/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    const QString path = QStringLiteral("/api/v1/resources/%1/preset/call")
+            .arg(ch.resourceId);
     m_http->getJson(path, q,
         [this](bool ok, const QJsonValue &, const QString &msg, int) {
             if (!ok) {
@@ -452,8 +394,8 @@ void WebPlatformApi::addPreset(const ChannelRef &ch, int presetId)
     }
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("presetId"), QString::number(presetId));
-    const QString path = QStringLiteral("/api/v1/front-end/preset/add/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    const QString path = QStringLiteral("/api/v1/resources/%1/preset/add")
+            .arg(ch.resourceId);
     m_http->getJson(path, q,
         [this, ch](bool ok, const QJsonValue &, const QString &msg, int) {
             if (!ok) {
@@ -471,8 +413,8 @@ void WebPlatformApi::deletePreset(const ChannelRef &ch, int presetId)
     }
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("presetId"), QString::number(presetId));
-    const QString path = QStringLiteral("/api/v1/front-end/preset/delete/%1/%2")
-            .arg(enc(ch.deviceId), enc(ch.channelId));
+    const QString path = QStringLiteral("/api/v1/resources/%1/preset/delete")
+            .arg(ch.resourceId);
     m_http->getJson(path, q,
         [this, ch](bool ok, const QJsonValue &, const QString &msg, int) {
             if (!ok) {

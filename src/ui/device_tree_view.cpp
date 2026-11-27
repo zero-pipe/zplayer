@@ -23,6 +23,7 @@ constexpr int RoleCh        = Qt::UserRole + 6;
 constexpr int RoleName      = Qt::UserRole + 7;
 constexpr int RoleLoaded    = Qt::UserRole + 8;
 constexpr int RoleLoading   = Qt::UserRole + 9;
+constexpr int RoleRes       = Qt::UserRole + 10; // channel resourceId (primary key)
 } // namespace
 
 DeviceTreeView::DeviceTreeView(QWidget *parent)
@@ -145,6 +146,7 @@ void DeviceTreeView::appendNode(QStandardItem *parentItem, const DeviceNode &nod
     item->setData(node.online, RoleOnline);
     item->setData(node.ref.deviceId, RoleDev);
     item->setData(node.ref.channelId, RoleCh);
+    item->setData(node.ref.resourceId, RoleRes);
     item->setData(node.name, RoleName);
 
     if (node.isGroup()) {
@@ -236,6 +238,7 @@ void DeviceTreeView::onActivated(const QModelIndex &index)
     const QString type = item->data(RoleType).toString();
     if (type == QLatin1String("channel")) {
         ChannelRef ref;
+        ref.resourceId = item->data(RoleRes).toString();
         ref.deviceId = item->data(RoleDev).toString();
         ref.channelId = item->data(RoleCh).toString();
         emit channelActivated(ref, item->data(RoleName).toString(),
