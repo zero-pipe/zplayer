@@ -729,6 +729,9 @@ void PlayerWindow::buildUi()
 
     auto *samplePage = new QWidget(m_toolDock);
     m_samplePage = samplePage;
+    // 样本为空时它还不是一个真正的 Tab，必须隐藏；否则作为 QTabWidget 的
+    // 裸子控件会被默认显示、叠在「云台」页上（启动乱状）。
+    samplePage->hide();
     auto *sampleLay = new QVBoxLayout(samplePage);
     sampleLay->setContentsMargins(10, 10, 10, 10);
     sampleLay->setSpacing(8);
@@ -992,6 +995,7 @@ void PlayerWindow::syncSampleTab(int count)
         m_toolDock->addTab(m_samplePage, tr("样本 %1").arg(count));
     } else if (count == 0 && idx >= 0) {
         m_toolDock->removeTab(idx);
+        m_samplePage->hide();   // 移除后不再由 QTabWidget 管理，需手动隐藏
     } else if (count > 0 && idx >= 0) {
         m_toolDock->setTabText(idx, tr("样本 %1").arg(count));
     }
