@@ -16,6 +16,10 @@ class QTabWidget;
 class QScrollArea;
 class QSplitter;
 class QVBoxLayout;
+class QStackedWidget;
+class QPushButton;
+class QDateEdit;
+class QTimer;
 QT_END_NAMESPACE
 
 namespace zp {
@@ -28,7 +32,7 @@ class Toast;
 class AnalysisService;
 class IFrameAnalyzer;
 class TrainingToolWindow;
-class PlaybackDialog;
+class PlaybackTimeline;
 
 // Slim vertical strip shown when the right tool dock is collapsed: icon on
 // top, optional count just below. (A stock QToolButton with text-under-icon
@@ -87,7 +91,17 @@ private slots:
     void onSessionExpired();
     void onError(const QString &scope, const QString &message);
     void onLayoutButtonClicked(int index);
-    void openCloudPlayback();
+
+    // 顶部三模式：0 实时预览 / 1 录像回放 / AI 打开训练窗口
+    void setMode(int mode);
+    void onModeAi();
+    // 录像回放
+    void queryPlaybackDay();
+    void onPbSegmentClicked(qlonglong recordId, qint64 startMs);
+    void onPbSeek(qint64 absMs);
+    void onPbStop();
+    void onPbPlayPause();
+    void onPbTick();
     void onRecordingsReady(const zp::ChannelRef &ch,
                            const QList<zp::RecordingSegment> &segments);
     void onPlaybackStarted(const zp::ChannelRef &ch, qlonglong recordId,
@@ -109,6 +123,9 @@ private:
     void collapseToolDock();
     void expandToolDock();
     void reloadDetector();
+    void rebuildSegmentList(const QList<zp::RecordingSegment> &segments);
+    void updatePbTimeLabel();
+    void snapshotActiveTile();
 
     // Frameless custom title bar helpers.
     void toggleMaximize();
@@ -138,6 +155,32 @@ private:
 
     QButtonGroup *m_layoutGroup = nullptr;
 
+    // 顶部模式切换 + 中央/右侧堆叠
+    int m_mode = 0;                       // 0 实时 / 1 回放
+    QButtonGroup *m_modeGroup = nullptr;
+    QStackedWidget *m_centerStack = nullptr;
+    QStackedWidget *m_rightStack = nullptr;
+    QWidget *m_pbFilter = nullptr;         // 左侧回放查询条件（仅回放模式显示）
+    QDateEdit *m_pbDate = nullptr;
+
+    // 回放页
+    VideoGrid *m_pbGrid = nullptr;
+    PlaybackTimeline *m_pbTimeline = nullptr;
+    QLabel *m_pbChannelLabel = nullptr;
+    QLabel *m_pbTimeLabel = nullptr;
+    QLabel *m_pbSegHeader = nullptr;       // 右侧片段列表标题
+    QVBoxLayout *m_pbSegLay = nullptr;     // 右侧片段列表容器
+    QToolButton *m_pbPlayBtn = nullptr;
+    QTimer *m_pbTimer = nullptr;
+    bool m_pbPlaying = false;
+    qint64 m_pbDayStart = 0;
+    qint64 m_pbDayEnd = 0;
+    qint64 m_pbSegStart = 0;               // 当前片段绝对起点
+    qint64 m_pbSegDur = 0;                 // 当前片段时长 ms
+    qint64 m_pbPlayBaseWall = 0;           // 进度基准墙钟
+    qint64 m_pbPlayBasePos = 0;            // 基准位置（绝对 ms）
+    QList<zp::RecordingSegment> m_pbSegs;  // 当前日片段
+
     // Custom (frameless) title bar state.
     QWidget *m_topBar = nullptr;
     QToolButton *m_maxBtn = nullptr;
@@ -160,8 +203,7 @@ private:
     bool m_pendingPtz = false;
 
     // 云端回放状态
-    PlaybackDialog *m_pbDialog = nullptr;
-    ChannelRef m_pbChannel;                   // 查询片段所用的通道（打开回放时快照）
+    ChannelRef m_pbChannel;                   // 查询片段所用的通道
     ChannelRef m_pbRef;                       // 回放瓦片使用的合成 ref（与实时区分）
     qlonglong m_pbRecordId = 0;               // 当前回放片段 id
 };

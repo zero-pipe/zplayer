@@ -25,7 +25,7 @@ SOURCES += \
     ui/toast.cpp \
     ui/icon_field.cpp \
     ui/login_dialog.cpp \
-    ui/playback_dialog.cpp \
+    ui/playback_timeline.cpp \
     ui/device_tree_view.cpp \
     ui/ptz_panel.cpp \
     ui/video_settings_page.cpp \
@@ -64,7 +64,7 @@ HEADERS += \
     ui/toast.h \
     ui/icon_field.h \
     ui/login_dialog.h \
-    ui/playback_dialog.h \
+    ui/playback_timeline.h \
     ui/device_tree_view.h \
     ui/ptz_panel.h \
     ui/video_settings_page.h \

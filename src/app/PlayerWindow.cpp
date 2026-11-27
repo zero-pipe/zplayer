@@ -7,7 +7,7 @@
 #include "ui/theme.h"
 #include "ui/settings_dialog.h"
 #include "ui/evidence_dialog.h"
-#include "ui/playback_dialog.h"
+#include "ui/playback_timeline.h"
 #include "ui/ui_kit.h"
 #include "player/video_grid.h"
 #include "player/video_tile.h"
@@ -52,6 +52,12 @@
 #include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
+#include <QStackedWidget>
+#include <QDateEdit>
+#include <QComboBox>
+#include <QDate>
+#include <QDateTime>
+#include <QTime>
 #include <QWidget>
 
 namespace zp {
@@ -139,10 +145,13 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     });
     addAction(aiAct);
 
-    // 云端回放（当前选中通道，按日查片段）。客户端才是回放主战场，Web 不做。
+    // 录像回放模式（快捷键切到回放页并按当前通道查询）。客户端才是回放主战场。
     auto *playbackAct = new QAction(this);
     playbackAct->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
-    connect(playbackAct, &QAction::triggered, this, &PlayerWindow::openCloudPlayback);
+    connect(playbackAct, &QAction::triggered, this, [this]() {
+        setMode(1);
+        queryPlaybackDay();
+    });
     addAction(playbackAct);
 
     buildUi();
@@ -329,6 +338,39 @@ void PlayerWindow::buildUi()
 
     tb->addStretch(1);
 
+    // ---- 中央一级模式切换：实时预览 / 录像回放 / AI 标注与训练 ----
+    {
+        auto *modeTabs = new QWidget(topBar);
+        modeTabs->setObjectName(QStringLiteral("ModeTabs"));
+        auto *mt = new QHBoxLayout(modeTabs);
+        mt->setContentsMargins(0, 0, 0, 0);
+        mt->setSpacing(6);
+        m_modeGroup = new QButtonGroup(this);
+        m_modeGroup->setExclusive(true);
+        auto mkTab = [&](const QString &text, bool checkable) {
+            auto *b = new QToolButton(modeTabs);
+            b->setObjectName(QStringLiteral("ModeTab"));
+            b->setText(text);
+            b->setCheckable(checkable);
+            b->setCursor(Qt::PointingHandCursor);
+            mt->addWidget(b);
+            return b;
+        };
+        auto *liveTab = mkTab(tr("📹 实时预览"), true);
+        m_modeGroup->addButton(liveTab, 0);
+        auto *pbTab = mkTab(tr("🎞️ 录像回放"), true);
+        m_modeGroup->addButton(pbTab, 1);
+        liveTab->setChecked(true);
+        auto *aiTab = mkTab(tr("🧠 AI 标注与训练"), false);
+        aiTab->setToolTip(tr("打开 AI 标注与训练工作台"));
+        connect(aiTab, &QToolButton::clicked, this, &PlayerWindow::onModeAi);
+        connect(m_modeGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+                this, &PlayerWindow::setMode);
+        tb->addWidget(modeTabs);
+    }
+
+    tb->addStretch(1);
+
     // (Sample capture / dataset entry lives in the per-tile AI controls now:
     //  AI 检查 menu → 样本采集, and the 采集 button next to it.)
 
@@ -427,17 +469,60 @@ void PlayerWindow::buildUi()
     bodyLay->setContentsMargins(0, 0, 0, 0);
     bodyLay->setSpacing(0);
 
-    m_tree = new DeviceTreeView(body);
-    m_tree->setMinimumWidth(200);
-    m_tree->setMaximumWidth(420);
+    // ===== 左：组织目录（回放模式额外显示查询条件） =====
+    auto *leftCol = new QWidget(body);
+    leftCol->setObjectName(QStringLiteral("LeftSidebar"));
+    leftCol->setMinimumWidth(200);
+    leftCol->setMaximumWidth(420);
+    auto *leftLay = new QVBoxLayout(leftCol);
+    leftLay->setContentsMargins(0, 0, 0, 0);
+    leftLay->setSpacing(0);
 
-    // Middle column: a slim split-layout bar above the video grid.
-    auto *centerCol = new QWidget(body);
-    auto *centerLay = new QVBoxLayout(centerCol);
+    // 回放查询条件（默认隐藏，进入回放模式显示）
+    m_pbFilter = new QWidget(leftCol);
+    m_pbFilter->setObjectName(QStringLiteral("PlaybackFilter"));
+    {
+        auto *pfLay = new QVBoxLayout(m_pbFilter);
+        pfLay->setContentsMargins(10, 10, 10, 8);
+        pfLay->setSpacing(6);
+        auto *locRow = new QHBoxLayout;
+        auto *locLbl = new QLabel(tr("录像位置"), m_pbFilter);
+        locLbl->setObjectName(QStringLiteral("PageSub"));
+        auto *locVal = new QLabel(tr("云端存储"), m_pbFilter);
+        locRow->addWidget(locLbl);
+        locRow->addStretch(1);
+        locRow->addWidget(locVal);
+        pfLay->addLayout(locRow);
+
+        auto *dateRow = new QHBoxLayout;
+        auto *dLbl = new QLabel(tr("查询日期"), m_pbFilter);
+        dLbl->setObjectName(QStringLiteral("PageSub"));
+        m_pbDate = new QDateEdit(QDate::currentDate(), m_pbFilter);
+        m_pbDate->setCalendarPopup(true);
+        m_pbDate->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+        dateRow->addWidget(dLbl);
+        dateRow->addWidget(m_pbDate, 1);
+        pfLay->addLayout(dateRow);
+
+        auto *qBtn = new QPushButton(tr("检索录像"), m_pbFilter);
+        qBtn->setObjectName(QStringLiteral("PrimaryButton"));
+        qBtn->setCursor(Qt::PointingHandCursor);
+        connect(qBtn, &QPushButton::clicked, this, &PlayerWindow::queryPlaybackDay);
+        pfLay->addWidget(qBtn);
+    }
+    m_pbFilter->setVisible(false);
+    leftLay->addWidget(m_pbFilter);
+
+    m_tree = new DeviceTreeView(leftCol);
+    leftLay->addWidget(m_tree, 1);
+
+    // ===== 中：实时预览页 =====
+    auto *livePage = new QWidget(body);
+    auto *centerLay = new QVBoxLayout(livePage);
     centerLay->setContentsMargins(0, 0, 0, 0);
     centerLay->setSpacing(0);
 
-    auto *layoutBar = new QWidget(centerCol);
+    auto *layoutBar = new QWidget(livePage);
     layoutBar->setObjectName(QStringLiteral("LayoutBar"));
     layoutBar->setFixedHeight(44);
     auto *lb = new QHBoxLayout(layoutBar);
@@ -487,9 +572,147 @@ void PlayerWindow::buildUi()
             this, &PlayerWindow::onLayoutButtonClicked);
     lb->addStretch(1);
 
-    m_grid = new VideoGrid(centerCol);
+    m_grid = new VideoGrid(livePage);
     centerLay->addWidget(layoutBar);
     centerLay->addWidget(m_grid, 1);
+
+    // 实时预览底部操作条（精简，避免文字截断）
+    {
+        auto *liveBottom = new QWidget(livePage);
+        liveBottom->setObjectName(QStringLiteral("LayoutBar"));
+        liveBottom->setFixedHeight(42);
+        auto *lo = new QHBoxLayout(liveBottom);
+        lo->setContentsMargins(12, 0, 12, 0);
+        lo->setSpacing(8);
+        auto mkAct = [&](const QString &t) {
+            auto *b = new QToolButton(liveBottom);
+            b->setObjectName(QStringLiteral("IconBtn"));
+            b->setText(t);
+            b->setCursor(Qt::PointingHandCursor);
+            lo->addWidget(b);
+            return b;
+        };
+        auto *snapBtn = mkAct(tr("📷 抓图"));
+        connect(snapBtn, &QToolButton::clicked, this, &PlayerWindow::snapshotActiveTile);
+        auto *capBtn = mkAct(tr("📥 采集样本"));
+        connect(capBtn, &QToolButton::clicked, this, [this]() {
+            if (VideoTile *t = m_grid->activeTile()) {
+                t->captureSample(QStringLiteral("manual"));
+            } else {
+                toastInfo(tr("请先选择一路通道"));
+            }
+        });
+        lo->addStretch(1);
+        auto *fullBtn = mkAct(tr("⛶ 全屏"));
+        connect(fullBtn, &QToolButton::clicked, this, [this]() {
+            if (m_active.isValid()) onMaximizeRequested(m_active);
+        });
+        centerLay->addWidget(liveBottom);
+    }
+
+    // ===== 中：录像回放页 =====
+    auto *pbPage = new QWidget(body);
+    auto *pl = new QVBoxLayout(pbPage);
+    pl->setContentsMargins(0, 0, 0, 0);
+    pl->setSpacing(0);
+    {
+        auto *pbBar = new QWidget(pbPage);
+        pbBar->setObjectName(QStringLiteral("LayoutBar"));
+        pbBar->setFixedHeight(44);
+        auto *pbl = new QHBoxLayout(pbBar);
+        pbl->setContentsMargins(12, 0, 12, 0);
+        pbl->setSpacing(8);
+        m_pbChannelLabel = new QLabel(tr("当前回放通道：未选择"), pbBar);
+        pbl->addWidget(m_pbChannelLabel);
+        pbl->addStretch(1);
+        auto *oneBtn = new QToolButton(pbBar);
+        oneBtn->setObjectName(QStringLiteral("LayoutBtn"));
+        oneBtn->setText(tr("单画面回放"));
+        oneBtn->setCheckable(true);
+        oneBtn->setChecked(true);
+        oneBtn->setCursor(Qt::PointingHandCursor);
+        auto *fourBtn = new QToolButton(pbBar);
+        fourBtn->setObjectName(QStringLiteral("LayoutBtn"));
+        fourBtn->setText(tr("4 路同步"));
+        fourBtn->setCheckable(true);
+        fourBtn->setCursor(Qt::PointingHandCursor);
+        auto *pbLayoutGrp = new QButtonGroup(this);
+        pbLayoutGrp->setExclusive(true);
+        pbLayoutGrp->addButton(oneBtn);
+        pbLayoutGrp->addButton(fourBtn);
+        pbl->addWidget(oneBtn);
+        pbl->addWidget(fourBtn);
+        pl->addWidget(pbBar);
+
+        m_pbGrid = new VideoGrid(pbPage);
+        m_pbGrid->setLayoutKind(VideoGrid::L1x1);
+        pl->addWidget(m_pbGrid, 1);
+
+        // 时间轴容器：控制条 + 可拖拽时间轴
+        auto *tlBox = new QWidget(pbPage);
+        tlBox->setObjectName(QStringLiteral("TimelineBar"));
+        auto *tlLay = new QVBoxLayout(tlBox);
+        tlLay->setContentsMargins(0, 0, 0, 0);
+        tlLay->setSpacing(0);
+        auto *ctrl = new QWidget(tlBox);
+        ctrl->setObjectName(QStringLiteral("LayoutBar"));
+        ctrl->setFixedHeight(40);
+        auto *cl = new QHBoxLayout(ctrl);
+        cl->setContentsMargins(14, 0, 14, 0);
+        cl->setSpacing(8);
+        auto mkBtn = [&](const QString &t) {
+            auto *b = new QToolButton(ctrl);
+            b->setObjectName(QStringLiteral("IconBtn"));
+            b->setText(t);
+            b->setCursor(Qt::PointingHandCursor);
+            cl->addWidget(b);
+            return b;
+        };
+        auto *prevBtn = mkBtn(tr("⏮ 上一段"));
+        connect(prevBtn, &QToolButton::clicked, this, [this]() {
+            // 播当前片段之前的片段
+            int idx = -1;
+            for (int i = 0; i < m_pbSegs.size(); ++i) {
+                if (m_pbSegs[i].recordId == m_pbRecordId) { idx = i; break; }
+            }
+            if (idx > 0) {
+                const RecordingSegment s = m_pbSegs.at(idx - 1);
+                onPbSegmentClicked(s.recordId, s.startMs);
+            }
+        });
+        m_pbPlayBtn = mkBtn(tr("⏸ 暂停"));
+        m_pbPlayBtn->setCheckable(true);
+        connect(m_pbPlayBtn, &QToolButton::clicked, this, &PlayerWindow::onPbPlayPause);
+        auto *stopBtn = mkBtn(tr("⏹ 停止"));
+        connect(stopBtn, &QToolButton::clicked, this, &PlayerWindow::onPbStop);
+        cl->addStretch(1);
+        m_pbTimeLabel = new QLabel(QStringLiteral("---- --:--:--"), ctrl);
+        m_pbTimeLabel->setObjectName(QStringLiteral("TimeDisplay"));
+        cl->addWidget(m_pbTimeLabel);
+        cl->addStretch(1);
+        auto *speed = new QComboBox(ctrl);
+        speed->addItems({QStringLiteral("0.5x"), QStringLiteral("1.0x"),
+                         QStringLiteral("2.0x"), QStringLiteral("4.0x"),
+                         QStringLiteral("8.0x")});
+        speed->setCurrentIndex(1);
+        speed->setToolTip(tr("倍速（占位，暂未接入）"));
+        cl->addWidget(speed);
+        tlLay->addWidget(ctrl);
+        m_pbTimeline = new PlaybackTimeline(tlBox);
+        connect(m_pbTimeline, &PlaybackTimeline::seekRequested,
+                this, &PlayerWindow::onPbSeek);
+        tlLay->addWidget(m_pbTimeline);
+        m_pbTimer = new QTimer(this);
+        m_pbTimer->setInterval(500);
+        connect(m_pbTimer, &QTimer::timeout, this, &PlayerWindow::onPbTick);
+        pl->addWidget(tlBox);
+    }
+
+    // ===== 中央堆叠：实时(0) / 回放(1) =====
+    auto *centerStack = new QStackedWidget(body);
+    m_centerStack = centerStack;
+    centerStack->addWidget(livePage);
+    centerStack->addWidget(pbPage);
 
     m_ptz = new PtzPanel(body);
     m_ptz->setMinimumWidth(220);
@@ -552,6 +775,38 @@ void PlayerWindow::buildUi()
     sampleLay->addWidget(openBtn);
     // The tab itself is added dynamically: only while the dataset is non-empty.
 
+    // ===== 右：回放模式——录像片段列表 =====
+    auto *pbRight = new QWidget(body);
+    {
+        auto *prl = new QVBoxLayout(pbRight);
+        prl->setContentsMargins(12, 12, 12, 12);
+        prl->setSpacing(8);
+        m_pbSegHeader = new QLabel(tr("录像片段"), pbRight);
+        m_pbSegHeader->setObjectName(QStringLiteral("CardTitle"));
+        prl->addWidget(m_pbSegHeader);
+        auto *segScroll = new QScrollArea(pbRight);
+        segScroll->setObjectName(QStringLiteral("SampleScroll"));
+        segScroll->setWidgetResizable(true);
+        segScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        segScroll->setFrameShape(QFrame::NoFrame);
+        auto *segHost = new QWidget(segScroll);
+        segHost->setObjectName(QStringLiteral("SampleListHost"));
+        m_pbSegLay = new QVBoxLayout(segHost);
+        m_pbSegLay->setContentsMargins(0, 0, 4, 0);
+        m_pbSegLay->setSpacing(6);
+        m_pbSegLay->addStretch(1);
+        segScroll->setWidget(segHost);
+        prl->addWidget(segScroll, 1);
+    }
+
+    // 右侧上下文堆叠：实时(0=云台+样本) / 回放(1=片段列表)
+    auto *rightStack = new QStackedWidget(body);
+    m_rightStack = rightStack;
+    rightStack->setMinimumWidth(230);
+    rightStack->setMaximumWidth(380);
+    rightStack->addWidget(m_toolDock);
+    rightStack->addWidget(pbRight);
+
     // Slim strip shown while the dock is collapsed; one click restores it.
     m_dockReopen = new DockStripButton(body);
     m_dockReopen->setObjectName(QStringLiteral("DockReopen"));
@@ -568,9 +823,9 @@ void PlayerWindow::buildUi()
     auto *splitter = new QSplitter(Qt::Horizontal, body);
     splitter->setObjectName(QStringLiteral("BodySplitter"));
     splitter->setHandleWidth(1);
-    splitter->addWidget(m_tree);
-    splitter->addWidget(centerCol);
-    splitter->addWidget(m_toolDock);
+    splitter->addWidget(leftCol);
+    splitter->addWidget(m_centerStack);
+    splitter->addWidget(m_rightStack);
     splitter->addWidget(m_dockReopen);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
@@ -755,7 +1010,7 @@ void PlayerWindow::collapseToolDock()
         }
         m_bodySplitter->setSizes({sz.value(0, 280), sz.value(1, 840), 0, 36});
     }
-    m_toolDock->hide();
+    m_rightStack->hide();
     m_dockReopen->show();
 }
 
@@ -772,7 +1027,7 @@ void PlayerWindow::expandToolDock()
         const int middle = qMax(0, sz.value(1, 840) + sz.value(3, 36) - target);
         m_bodySplitter->setSizes({sz.value(0, 280), middle, target, 0});
     }
-    m_toolDock->show();
+    m_rightStack->show();
     if (m_sampleCount) {
         m_sampleCount->setText(DatasetStore::instance().count() > 0
                                    ? tr("（%1 条）").arg(DatasetStore::instance().count())
@@ -1078,6 +1333,21 @@ void PlayerWindow::onChannelActivated(const ChannelRef &ch, const QString &name,
     m_channelNames.insert(ch.key(), name);
     m_channelPtz.insert(ch.key(), ptzCapable);
 
+    // 回放模式：选中通道即作为回放对象，不拉实时流。
+    if (m_mode == 1) {
+        m_pbChannel = ch;
+        if (m_pbChannelLabel) {
+            m_pbChannelLabel->setText(tr("当前回放通道：%1").arg(name));
+        }
+        if (m_pbDate) {
+            m_pbDayStart = QDateTime(m_pbDate->date(), QTime(0, 0, 0)).toMSecsSinceEpoch();
+            m_pbDayEnd = m_pbDayStart + 24LL * 3600 * 1000;
+            if (m_pbTimeline) m_pbTimeline->setDay(m_pbDayStart, m_pbDayEnd);
+        }
+        queryPlaybackDay();
+        return;
+    }
+
     if (m_grid->contains(ch)) {
         // Already playing: just focus it.
         m_grid->focusChannel(ch);
@@ -1177,68 +1447,137 @@ void PlayerWindow::onSessionExpired()
 
 void PlayerWindow::onError(const QString &scope, const QString &message)
 {
+    Q_UNUSED(scope)
     toastError(message);
-    if (scope == QLatin1String("playback") && m_pbDialog) {
-        m_pbDialog->setPlaybackError(message);
+}
+
+void PlayerWindow::setMode(int mode)
+{
+    m_mode = mode;
+    if (m_centerStack) m_centerStack->setCurrentIndex(mode);
+    if (m_rightStack) m_rightStack->setCurrentIndex(mode);
+    if (m_pbFilter) m_pbFilter->setVisible(mode == 1);
+
+    if (mode == 0) {
+        // 回到实时预览：停掉回放并清理回放瓦片
+        if (m_pbRecordId > 0) {
+            m_api->stopPlayback(m_pbChannel, m_pbRecordId);
+        }
+        m_pbPlaying = false;
+        if (m_pbTimer) m_pbTimer->stop();
+        if (m_pbGrid) m_pbGrid->stopAll();
+        m_pbRecordId = 0;
+        if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
+    } else {
+        // 进入回放：优先用当前选中的实时通道作为回放对象
+        if (m_active.isValid() && !m_active.channelId.endsWith(QStringLiteral("@playback"))) {
+            m_pbChannel = m_active;
+        }
+        if (m_pbChannelLabel && m_pbChannel.isValid()) {
+            m_pbChannelLabel->setText(tr("当前回放通道：%1")
+                .arg(m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId)));
+        }
+        // 已有通道就自动查一次
+        if (m_pbChannel.isValid()) {
+            queryPlaybackDay();
+        }
     }
 }
 
-void PlayerWindow::openCloudPlayback()
+void PlayerWindow::onModeAi()
 {
-    if (m_api == nullptr) {
+    openTrainingTool();
+}
+
+void PlayerWindow::queryPlaybackDay()
+{
+    if (!m_api) {
         return;
     }
-    ChannelRef target = m_active;
-    if (target.channelId.endsWith(QStringLiteral("@playback")) && m_pbChannel.isValid()) {
-        target = m_pbChannel; // 焦点落在回放瓦片上时，沿用上次查询的通道
-    }
-    if (!target.isValid()) {
+    if (!m_pbChannel.isValid()) {
         toastError(tr("请先在左侧选择要回放的通道"));
         return;
     }
-    if (target.platformId <= 0) {
+    if (m_pbChannel.platformId <= 0) {
         toastError(tr("该通道缺少平台 id，无法查询云端录像"));
         return;
     }
-    m_pbChannel = target;
-
-    if (!m_pbDialog) {
-        m_pbDialog = new PlaybackDialog(this);
-        connect(m_pbDialog, &PlaybackDialog::queryRequested, this,
-                [this](qint64 s, qint64 e) { m_api->queryRecordings(m_pbChannel, s, e); });
-        connect(m_pbDialog, &PlaybackDialog::playSegmentRequested, this,
-                [this](qlonglong id, qint64 startMs) {
-                    m_pbRecordId = id;
-                    m_api->startPlayback(m_pbChannel, id, startMs);
-                });
-        connect(m_pbDialog, &PlaybackDialog::seekRequested, this,
-                [this](qint64 absMs) {
-                    if (m_pbRecordId > 0) {
-                        m_api->seekPlayback(m_pbChannel, m_pbRecordId, absMs);
-                    }
-                });
-        connect(m_pbDialog, &PlaybackDialog::stopRequested, this, [this]() {
-            if (m_pbRecordId > 0) {
-                m_api->stopPlayback(m_pbChannel, m_pbRecordId);
-            }
-            m_grid->closeStream(m_pbRef);
-            m_pbRecordId = 0;
-        });
+    const QDate d = m_pbDate ? m_pbDate->date() : QDate::currentDate();
+    m_pbDayStart = QDateTime(d, QTime(0, 0, 0)).toMSecsSinceEpoch();
+    m_pbDayEnd = m_pbDayStart + 24LL * 3600 * 1000;
+    if (m_pbTimeline) {
+        m_pbTimeline->setDay(m_pbDayStart, m_pbDayEnd);
+        m_pbTimeline->setSegments(QList<RecordingSegment>());
     }
-    const QString name = m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId);
-    m_pbDialog->setChannelName(name);
-    m_pbDialog->show();
-    m_pbDialog->raise();
-    m_pbDialog->activateWindow();
+    if (m_pbSegHeader) {
+        m_pbSegHeader->setText(tr("查询中…"));
+    }
+    m_api->queryRecordings(m_pbChannel, m_pbDayStart, m_pbDayEnd);
 }
 
 void PlayerWindow::onRecordingsReady(const ChannelRef &ch,
                                      const QList<RecordingSegment> &segments)
 {
-    if (!m_pbDialog || ch.key() != m_pbChannel.key()) {
+    if (ch.key() != m_pbChannel.key()) {
         return;
     }
-    m_pbDialog->setSegments(segments);
+    m_pbSegs = segments;
+    if (m_pbTimeline) m_pbTimeline->setSegments(segments);
+    rebuildSegmentList(segments);
+}
+
+void PlayerWindow::rebuildSegmentList(const QList<RecordingSegment> &segments)
+{
+    if (!m_pbSegLay) {
+        return;
+    }
+    QWidget *host = m_pbSegLay->parentWidget();
+    while (m_pbSegLay->count() > 1) {
+        QLayoutItem *it = m_pbSegLay->takeAt(0);
+        if (QWidget *w = it->widget()) w->deleteLater();
+        delete it;
+    }
+    if (m_pbSegHeader) {
+        m_pbSegHeader->setText(segments.isEmpty()
+                                   ? tr("录像片段（无）")
+                                   : tr("录像片段（%1）").arg(segments.size()));
+    }
+    if (segments.isEmpty()) {
+        auto *empty = new QLabel(tr("该日无录像"), host);
+        empty->setObjectName(QStringLiteral("PageSub"));
+        m_pbSegLay->insertWidget(0, empty);
+        return;
+    }
+    for (const RecordingSegment &s : segments) {
+        auto *b = new QPushButton(host);
+        b->setObjectName(QStringLiteral("SegItem"));
+        b->setText(QStringLiteral("%1 - %2    %3")
+            .arg(QDateTime::fromMSecsSinceEpoch(s.startMs).toString(QStringLiteral("HH:mm:ss")),
+                 QDateTime::fromMSecsSinceEpoch(s.endMs).toString(QStringLiteral("HH:mm:ss")),
+                 s.container.isEmpty() ? tr("录像") : s.container.toUpper()));
+        b->setCursor(Qt::PointingHandCursor);
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        b->setToolTip(tr("点击回放该片段"));
+        const qlonglong rid = s.recordId;
+        const qint64 st = s.startMs;
+        connect(b, &QPushButton::clicked, this, [this, rid, st]() {
+            onPbSegmentClicked(rid, st);
+        });
+        m_pbSegLay->insertWidget(m_pbSegLay->count() - 1, b);
+    }
+}
+
+void PlayerWindow::onPbSegmentClicked(qlonglong recordId, qint64 startMs)
+{
+    if (recordId <= 0) {
+        return;
+    }
+    m_pbRecordId = recordId;
+    m_pbSegStart = startMs;
+    if (m_pbTimeline) m_pbTimeline->setPosition(startMs);
+    toastInfo(tr("起播：%1").arg(
+        QDateTime::fromMSecsSinceEpoch(startMs).toString(QStringLiteral("HH:mm:ss"))));
+    m_api->startPlayback(m_pbChannel, recordId, startMs);
 }
 
 void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
@@ -1250,15 +1589,93 @@ void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
         return;
     }
     m_pbRecordId = recordId;
+    m_pbSegStart = segStartMs;
+    m_pbSegDur = segDurationMs > 0 ? segDurationMs : 1;
+    m_pbPlayBasePos = segStartMs;
+    m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
+    m_pbPlaying = true;
+    if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
+    if (m_pbTimer) m_pbTimer->start(500);
+
     m_pbRef = m_pbChannel;
     m_pbRef.channelId = m_pbChannel.channelId + QStringLiteral("@playback");
     const QString name = m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId)
             + tr("（回放）");
-    // 定位/重开时先关旧瓦片，确保按新 offset 重新拉流。
-    m_grid->closeStream(m_pbRef);
-    m_grid->openStream(m_pbRef, name, false, url);
-    if (m_pbDialog) {
-        m_pbDialog->setPlaying(recordId, segStartMs, segDurationMs);
+    if (m_pbGrid) {
+        m_pbGrid->closeStream(m_pbRef);
+        m_pbGrid->openStream(m_pbRef, name, false, url);
+    }
+    if (m_pbTimeline) m_pbTimeline->setPosition(segStartMs);
+    if (m_pbTimeLabel) {
+        m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(segStartMs)
+                                   .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+    }
+}
+
+void PlayerWindow::onPbSeek(qint64 absMs)
+{
+    if (m_pbRecordId <= 0) {
+        toastInfo(tr("请先选择一个录像片段"));
+        return;
+    }
+    m_pbPlayBasePos = absMs;
+    m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
+    if (m_pbTimeLabel) {
+        m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(absMs)
+                                   .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+    }
+    m_api->seekPlayback(m_pbChannel, m_pbRecordId, absMs);
+}
+
+void PlayerWindow::onPbStop()
+{
+    m_pbPlaying = false;
+    if (m_pbTimer) m_pbTimer->stop();
+    if (m_pbRecordId > 0) {
+        m_api->stopPlayback(m_pbChannel, m_pbRecordId);
+    }
+    if (m_pbGrid && m_pbRef.isValid()) {
+        m_pbGrid->closeStream(m_pbRef);
+    }
+    m_pbRecordId = 0;
+    if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("▶ 播放")); }
+}
+
+void PlayerWindow::onPbPlayPause()
+{
+    if (m_pbRecordId <= 0) {
+        toastInfo(tr("请先选择一个录像片段"));
+        if (m_pbPlayBtn) m_pbPlayBtn->setChecked(false);
+        return;
+    }
+    // 仅暂停/继续进度跟随（服务端播放流不中断）。
+    if (m_pbPlaying) {
+        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_pbPlayBaseWall;
+        m_pbPlayBasePos += elapsed;
+        m_pbPlaying = false;
+        if (m_pbTimer) m_pbTimer->stop();
+        if (m_pbPlayBtn) m_pbPlayBtn->setText(tr("▶ 继续"));
+    } else {
+        m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
+        m_pbPlaying = true;
+        if (m_pbTimer) m_pbTimer->start(500);
+        if (m_pbPlayBtn) m_pbPlayBtn->setText(tr("⏸ 暂停"));
+    }
+}
+
+void PlayerWindow::onPbTick()
+{
+    if (!m_pbPlaying) {
+        return;
+    }
+    const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_pbPlayBaseWall;
+    qint64 pos = m_pbPlayBasePos + elapsed;
+    const qint64 segEnd = m_pbSegStart + m_pbSegDur;
+    if (pos > segEnd) pos = segEnd;
+    if (m_pbTimeline) m_pbTimeline->setPosition(pos);
+    if (m_pbTimeLabel) {
+        m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(pos)
+                                   .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
     }
 }
 
@@ -1266,6 +1683,15 @@ void PlayerWindow::onPlaybackStopped(const ChannelRef &ch, qlonglong recordId)
 {
     Q_UNUSED(ch)
     Q_UNUSED(recordId)
+}
+
+void PlayerWindow::snapshotActiveTile()
+{
+    if (VideoTile *t = m_grid->activeTile()) {
+        t->requestSnapshot();
+    } else {
+        toastInfo(tr("请先选择一路通道"));
+    }
 }
 
 void PlayerWindow::openDirect(const QUrl &url)

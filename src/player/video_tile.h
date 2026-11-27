@@ -94,6 +94,10 @@ public:
     // (failed-sample collection). reason = "manual" | "low_conf".
     void captureSample(const QString &reason = QStringLiteral("manual"));
 
+    // Trigger a screenshot of the current frame (same as the footer snapshot
+    // button). Result arrives via snapshotTaken().
+    void requestSnapshot();
+
     // Class names of the active detector (index order). Empty/COCO-80 keeps the
     // person/vehicle/animal semantics; anything else is treated as a custom
     // model where every class counts as a generic "target".

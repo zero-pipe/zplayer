@@ -236,6 +236,11 @@ void VideoTile::takeSnapshot()
     emit snapshotTaken(m_channel, path, ok);
 }
 
+void VideoTile::requestSnapshot()
+{
+    takeSnapshot();
+}
+
 void VideoTile::captureSample(const QString &reason)
 {
     if (!m_player || m_lastBoxes.isEmpty()) {
