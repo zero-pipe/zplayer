@@ -210,8 +210,9 @@ QList<DeviceNode> WebPlatformApi::parseNodes(const QJsonValue &data)
                     : treeId;
             n.ref.deviceId = parentDeviceId;
             n.ref.channelId = nodeDeviceId;
-            // 通道库 id：云端回放按它查片段（切内码后仍保留，作为查询键）。
-            n.ref.platformId = o.value(QStringLiteral("id")).toVariant().toInt();
+            // 业务身份内码：设备 D.../通道 C...（回放按内码对查片段）。
+            n.ref.deviceCode = o.value(QStringLiteral("deviceInternalCode")).toString();
+            n.ref.channelCode = o.value(QStringLiteral("internalCode")).toString();
             // GB channels are treated as PTZ-capable; the device ignores
             // unsupported commands. (ptzType isn't in the tree payload.)
             n.ptzCapable = true;
@@ -266,12 +267,12 @@ void WebPlatformApi::stopPlay(const ChannelRef &ch)
 
 void WebPlatformApi::queryRecordings(const ChannelRef &ch, qint64 startMs, qint64 endMs)
 {
-    if (ch.platformId <= 0) {
-        emit errorOccurred(QStringLiteral("playback"), tr("通道缺少平台 id，无法查询云端录像"));
+    if (ch.deviceCode.isEmpty() || ch.channelCode.isEmpty()) {
+        emit errorOccurred(QStringLiteral("playback"), tr("通道缺少内码，无法查询云端录像"));
         return;
     }
-    const QString path = QStringLiteral("/api/v1/playback/cloud/channel-segments/%1?start=%2&end=%3")
-            .arg(QString::number(ch.platformId),
+    const QString path = QStringLiteral("/api/v1/playback/cloud/segments/%1/%2?start=%3&end=%4")
+            .arg(enc(ch.deviceCode), enc(ch.channelCode),
                  QString::number(startMs), QString::number(endMs));
     m_http->getJson(path,
         [this, ch](bool ok, const QJsonValue &data, const QString &msg, int) {

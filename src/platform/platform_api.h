@@ -15,8 +15,10 @@ namespace zp {
 struct ChannelRef {
     QString deviceId;
     QString channelId;
-    // 通道库 id（平台 group/tree 的 id 字段）；云端回放按它查片段用。
-    int platformId = 0;
+    // 平台内码（业务身份唯一键）：设备 D... / 通道 C...。回放查片段按内码对，
+    // 不用国标编号，也不用数据库自增 id。
+    QString deviceCode;
+    QString channelCode;
 
     bool isValid() const { return !deviceId.isEmpty() && !channelId.isEmpty(); }
     bool operator==(const ChannelRef &o) const {
@@ -114,7 +116,7 @@ public:
     virtual void addPreset(const zp::ChannelRef &ch, int presetId) = 0;
     virtual void deletePreset(const zp::ChannelRef &ch, int presetId) = 0;
 
-    // Cloud playback (绝对时间，ms). 片段查询用通道库 id（ch.platformId）。
+    // Cloud playback (绝对时间，ms). 片段查询用内码对（ch.deviceCode/ch.channelCode）。
     virtual void queryRecordings(const zp::ChannelRef &ch, qint64 startMs,
                                  qint64 endMs) = 0;
     // 起播：从该片段的绝对 startMs（可落在段内任意位置）开始。

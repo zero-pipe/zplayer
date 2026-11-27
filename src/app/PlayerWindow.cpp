@@ -1502,8 +1502,8 @@ void PlayerWindow::queryPlaybackDay()
         toastError(tr("请先在左侧选择要回放的通道"));
         return;
     }
-    if (m_pbChannel.platformId <= 0) {
-        toastError(tr("该通道缺少平台 id，无法查询云端录像"));
+    if (m_pbChannel.deviceCode.isEmpty() || m_pbChannel.channelCode.isEmpty()) {
+        toastError(tr("该通道缺少内码，无法查询云端录像"));
         return;
     }
     const QDate d = m_pbDate ? m_pbDate->date() : QDate::currentDate();
