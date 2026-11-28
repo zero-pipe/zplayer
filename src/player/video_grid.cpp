@@ -168,8 +168,10 @@ void VideoGrid::setLayoutKind(Layout kind)
             }
         }
         m_tiles.resize(newCount);
+        m_emptySlots.resize(newCount);
     } else if (newCount > m_tiles.size()) {
         m_tiles.resize(newCount);
+        m_emptySlots.resize(newCount);
     }
 
     m_kind = kind;
@@ -191,6 +193,29 @@ void VideoGrid::setLayoutKind(Layout kind)
     emitActive();
 }
 
+QWidget *VideoGrid::createEmptySlot(int index)
+{
+    auto *w = new QWidget(m_gridHost);
+    w->setObjectName(QStringLiteral("GridEmptySlot"));
+    w->setAttribute(Qt::WA_StyledBackground, true);
+    auto *vl = new QVBoxLayout(w);
+    vl->setContentsMargins(6, 6, 6, 6);
+    vl->setSpacing(8);
+    vl->addStretch(1);
+
+    auto *icon = new QLabel(w);
+    icon->setPixmap(icons::cameraPixmap(QColor(0x2E, 0x3A, 0x49), 40));
+    icon->setAlignment(Qt::AlignCenter);
+    vl->addWidget(icon);
+
+    auto *hint = new QLabel(tr("窗格 #%1 · 从左侧目录选择").arg(index + 1), w);
+    hint->setObjectName(QStringLiteral("GridEmptySlotHint"));
+    hint->setAlignment(Qt::AlignCenter);
+    vl->addWidget(hint);
+    vl->addStretch(1);
+    return w;
+}
+
 void VideoGrid::rebuildLayout()
 {
     // Detach all widgets from the grid without destroying them.
@@ -202,12 +227,25 @@ void VideoGrid::rebuildLayout()
         delete item;
     }
 
+    // 确保每个槽位都有一个占位或真实 tile，切换分屏时先把画面框全部画出来。
+    m_emptySlots.resize(m_tiles.size());
+    for (int i = 0; i < m_tiles.size(); ++i) {
+        if (!m_tiles[i] && !m_emptySlots[i]) {
+            m_emptySlots[i] = createEmptySlot(i);
+        }
+    }
+
     const QVector<Slot> layoutSlots = slotsFor(m_kind);
     for (int i = 0; i < layoutSlots.size(); ++i) {
         const Slot &s = layoutSlots[i];
-        if (i < m_tiles.size() && m_tiles[i]) {
-            m_grid->addWidget(m_tiles[i], s.row, s.col, s.rowSpan, s.colSpan);
-            m_tiles[i]->show();
+        if (i >= m_tiles.size()) {
+            continue;
+        }
+        QWidget *w = m_tiles[i] ? static_cast<QWidget *>(m_tiles[i])
+                                : static_cast<QWidget *>(m_emptySlots.value(i));
+        if (w) {
+            m_grid->addWidget(w, s.row, s.col, s.rowSpan, s.colSpan);
+            w->show();
         }
     }
     // Normalize column/row stretch. Reset any stale stretch from a previous
@@ -529,7 +567,8 @@ void VideoGrid::stopAll()
 
 void VideoGrid::updateEmptyState()
 {
-    m_stack->setCurrentWidget(tileCount() == 0 ? m_empty : m_gridHost);
+    // 始终显示网格（空槽自带占位框）；整页 m_empty 不再使用。
+    m_stack->setCurrentWidget(m_gridHost);
 }
 
 } // namespace zp

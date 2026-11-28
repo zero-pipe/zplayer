@@ -195,8 +195,8 @@ private:
     QLabel *m_overlayText = nullptr;
     QPushButton *m_retryBtn = nullptr;
     QLabel *m_status = nullptr;
-    QLabel *m_title = nullptr;
-    QWidget *m_footer = nullptr;        // bottom action bar (snapshot, ...)
+    QWidget *m_footer = nullptr;        // bottom player action bar
+    QWidget *m_aiBar = nullptr;         // top floating AI analysis bar
 
     AnalysisOverlay *m_aiOverlay = nullptr;   // detection boxes over the video
 

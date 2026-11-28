@@ -47,43 +47,10 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     setProperty("selected", false);
     setMinimumSize(120, 76);
 
-    // --- Header (floats over the video) ---
-    auto *header = new QWidget(this);
-    header->setObjectName(QStringLiteral("TileHeader"));
-
-    m_title = new QLabel(name, header);
-    m_title->setObjectName(QStringLiteral("TileTitle"));
-    m_title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-
-    m_status = new QLabel(header);
+    // 窗格头部title / 关闭按钮已移到底部悬浮条（设计稿：不遮挡画面 OSD）。
+    m_status = new QLabel(this);
     m_status->setObjectName(QStringLiteral("TileStatus"));
-
-    auto *maxBtn = new QToolButton(header);
-    maxBtn->setObjectName(QStringLiteral("TileBtn"));
-    maxBtn->setText(QString::fromUtf8("⛶"));
-    maxBtn->setToolTip(tr("单画面"));
-    maxBtn->setCursor(Qt::PointingHandCursor);
-    connect(maxBtn, &QToolButton::clicked, this, [this]() {
-        emit maximizeRequested(m_channel);
-    });
-
-    auto *closeBtn = new QToolButton(header);
-    closeBtn->setObjectName(QStringLiteral("TileBtn"));
-    closeBtn->setProperty("role", QStringLiteral("close"));
-    closeBtn->setText(QString::fromUtf8("✕"));
-    closeBtn->setToolTip(tr("关闭"));
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    connect(closeBtn, &QToolButton::clicked, this, [this]() {
-        emit closeRequested(m_channel);
-    });
-
-    auto *hl = new QHBoxLayout(header);
-    hl->setContentsMargins(10, 6, 8, 8);
-    hl->setSpacing(8);
-    hl->addWidget(m_title, 1);
-    hl->addWidget(m_status);
-    hl->addWidget(maxBtn);
-    hl->addWidget(closeBtn);
+    m_status->hide();
 
     // --- Stage: video page + overlay page ---
     m_player = media::createPlayer(MediaBackend::Auto);
@@ -138,13 +105,24 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
         m_video->installEventFilter(this);
     }
 
+    // --- 顶部悬浮：AI 分析层（与播放器操作解耦） ---
+    // 必须在 buildControlBar() 之前创建：后者要把 AI 按钮加进这个布局。
+    if (m_video) {
+        m_aiBar = new QWidget(m_video);
+        m_aiBar->setObjectName(QStringLiteral("TileAiBar"));
+        m_aiBar->setAttribute(Qt::WA_StyledBackground, true);
+        m_aiBar->installEventFilter(this);
+        auto *aiLay = new QHBoxLayout(m_aiBar);
+        aiLay->setContentsMargins(4, 3, 4, 3);
+        aiLay->setSpacing(2);
+    }
+
     // --- Floating glass control bar over the video ---
     buildControlBar();
 
     auto *vl = new QVBoxLayout(this);
-    vl->setContentsMargins(1, 1, 1, 1);
+    vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
-    vl->addWidget(header);
     vl->addWidget(stageWidget, 1);
 
     connect(m_player, &IMediaPlayer::started, this, [this]() {
@@ -397,6 +375,7 @@ void VideoTile::buildControlBar()
     if (!m_video) {
         return;
     }
+    // 底部：播放器操作条（名称 / 放大 / 锐化 / 降噪 / 抓图 / 单画面 / 关闭）
     m_footer = new QWidget(m_video);
     m_footer->setObjectName(QStringLiteral("TileBar"));
     m_footer->setProperty("dock", QStringLiteral("bottom"));
@@ -412,15 +391,16 @@ void VideoTile::buildControlBar()
         b->setText(text);
         b->setCursor(Qt::PointingHandCursor);
         b->setFocusPolicy(Qt::NoFocus);
+        b->setToolButtonStyle(Qt::ToolButtonIconOnly);
         return b;
     };
     // The floating bar is always a dark glass strip (independent of the light/
     // dark theme), so its glyphs use a fixed light palette: muted grey at rest,
     // a soft brand blue when active. This keeps the bar readable and calm in
     // both themes instead of dark theme-tokens sinking into the glass.
-    auto barIcon = [](icons::Glyph g) {
+    auto barIcon = [](icons::Glyph g, bool danger = false) {
         const QColor rest(0xC7, 0xCD, 0xD4);
-        const QColor active(0x8A, 0xB4, 0xF8);
+        const QColor active = danger ? QColor(0xFF, 0x8A, 0x80) : QColor(0x8A, 0xB4, 0xF8);
         QIcon ic;
         ic.addPixmap(icons::glyph(g, rest, 16), QIcon::Normal, QIcon::Off);
         ic.addPixmap(icons::glyph(g, active, 16), QIcon::Normal, QIcon::On);
@@ -430,7 +410,6 @@ void VideoTile::buildControlBar()
     auto dressBtn = [barIcon](QToolButton *b, icons::Glyph g) {
         b->setIcon(barIcon(g));
         b->setIconSize(QSize(16, 16));
-        b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     };
     auto addSep = [this, row]() {
         auto *line = new QFrame(m_footer);
@@ -676,21 +655,65 @@ void VideoTile::buildControlBar()
         emit evidenceExportRequested(m_channel);
     });
 
-    // ---- assemble: action groups, right-aligned (transport has its own row
-    // above this bar) ----
-    row->addStretch(1);
-    row->addWidget(m_aiBtn);
-    row->addWidget(m_captureBtn);
-    row->addWidget(m_ocrBtn);
-    row->addWidget(m_roiBtn);
-    addSep();
+    // ---- assemble ----
+    // 顶部 AI 层：AI 检查 / 采集 / OCR / ROI / 智能检索 / 导出证据
+    if (auto *aiLay = m_aiBar ? qobject_cast<QHBoxLayout *>(m_aiBar->layout()) : nullptr) {
+        aiLay->addWidget(m_aiBtn);
+        aiLay->addWidget(m_captureBtn);
+        aiLay->addWidget(m_ocrBtn);
+        aiLay->addWidget(m_roiBtn);
+        aiLay->addWidget(m_scanBtn);
+        aiLay->addWidget(m_evidenceBtn);
+    } else {
+        // 无渲染面时（异常路径）退回底栏，避免按钮成为无布局的野控件。
+        row->addWidget(m_aiBtn);
+        row->addWidget(m_captureBtn);
+        row->addWidget(m_ocrBtn);
+        row->addWidget(m_roiBtn);
+        row->addWidget(m_scanBtn);
+        row->addWidget(m_evidenceBtn);
+    }
+
+    // 底部播放器层：名称 / 放大 / 锐化 / 降噪 / 抓图 / 单画面 / 关闭
+    auto *nameLbl = new QLabel(m_name, m_footer);
+    nameLbl->setObjectName(QStringLiteral("BarName"));
+    nameLbl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    row->addWidget(nameLbl, 1);
+    auto *dot = new QFrame(m_footer);
+    dot->setObjectName(QStringLiteral("BarDot"));
+    dot->setFixedSize(6, 6);
+    row->insertWidget(0, dot);
     row->addWidget(m_zoomBtn);
     row->addWidget(m_sharpenBtn);
     row->addWidget(m_denoiseBtn);
     addSep();
-    row->addWidget(m_scanBtn);
     row->addWidget(m_snapBtn);
-    row->addWidget(m_evidenceBtn);
+
+    auto *maxBtn = new QToolButton(m_footer);
+    maxBtn->setObjectName(QStringLiteral("BarBtn"));
+    maxBtn->setIcon(barIcon(icons::Layout1));
+    maxBtn->setIconSize(QSize(16, 16));
+    maxBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    maxBtn->setToolTip(tr("单画面"));
+    maxBtn->setCursor(Qt::PointingHandCursor);
+    connect(maxBtn, &QToolButton::clicked, this, [this]() {
+        emit maximizeRequested(m_channel);
+    });
+    row->addWidget(maxBtn);
+
+    auto *closeBtn = new QToolButton(m_footer);
+    closeBtn->setObjectName(QStringLiteral("BarBtn"));
+    closeBtn->setProperty("role", QStringLiteral("close"));
+    closeBtn->setIcon(barIcon(icons::Close, true));
+    closeBtn->setIconSize(QSize(16, 16));
+    closeBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    closeBtn->setToolTip(tr("关闭"));
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    connect(closeBtn, &QToolButton::clicked, this, [this]() {
+        emit closeRequested(m_channel);
+    });
+    addSep();
+    row->addWidget(closeBtn);
 
     if (m_hasTransport) {
         connect(m_player, &IMediaPlayer::positionChanged, this, [this](double pos) {
@@ -754,7 +777,7 @@ void VideoTile::maybeShowHint()
     m_hint = new QLabel(m_video);
     m_hint->setObjectName(QStringLiteral("VideoHint"));
     m_hint->setAttribute(Qt::WA_TransparentForMouseEvents);
-    m_hint->setText(tr("提示：底栏可开启 AI 检查 / OCR 识别 / ROI 圈选，悬停按钮可查看说明"));
+    m_hint->setText(tr("提示：画面右上角可开启 AI 检查 / OCR / ROI，悬停按钮可查看说明"));
     m_hint->adjustSize();
     m_hint->show();
     positionControlBar();
@@ -772,30 +795,34 @@ void VideoTile::positionControlBar()
         return;
     }
     const QRect r = m_video->rect();
-    // Small tiles (4x4 layouts) keep the bars hidden until the pointer is over
-    // the tile, so a 16-way grid stays clean but every tile remains reachable.
+    // 设计稿：窗格无头部，底部播放器条常驻，顶部 AI 条默认半透明悬浮；
+    // 小窗格只把 transport（回放进度条）收进 hover，避免 16 宫格太挤。
     const bool small = r.width() < 380 || r.height() < 150;
-    if (small && !m_hovered) {
-        m_footer->hide();
-        if (m_transportBar) {
-            m_transportBar->hide();
-        }
-        return;
-    }
-
     const int margin = 8;
-    // Action bar is docked: full width, flush to the bottom of the video, so a
-    // solid strip covers the letterbox instead of a translucent pill floating
-    // over it. The transport row above stays a floating pill.
+    // 底部播放器条：通栏贴底；顶部 AI 条：右上角悬浮，默认半透明，
+    // 仅鼠标悬停窗格时完全显现，避免长期遮挡摄像头 OSD。
     const int fh = qMax(30, m_footer->sizeHint().height());
     const int fy = r.height() - fh;
     m_footer->setGeometry(0, fy, r.width(), fh);
     m_footer->show();
     m_footer->raise();
 
+    if (m_aiBar) {
+        const int ah = m_aiBar->sizeHint().height();
+        const int aw = m_aiBar->sizeHint().width();
+        m_aiBar->setGeometry(qMax(margin, r.width() - aw - margin), margin,
+                             qMin(aw, r.width() - 2 * margin), ah);
+        m_aiBar->setProperty("hovered", m_hovered);
+        m_aiBar->style()->unpolish(m_aiBar);
+        m_aiBar->style()->polish(m_aiBar);
+        m_aiBar->show();
+        m_aiBar->raise();
+    }
+
     // Transport lives on its own row above the action bar, and only exists for
     // on-demand playback: live preview has no seekable timeline.
-    const bool showTransport = m_transportBar && m_hasTransport && m_isVod;
+    const bool showTransport = m_transportBar && m_hasTransport && m_isVod
+                               && (!small || m_hovered);
 
     if (m_hint) {
         m_hint->adjustSize();
@@ -1476,6 +1503,15 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
         positionControlBar();
     }
 
+    // 窗格任意子控件（AI 条 / 底部条）的进入离开都视为窗格悬停，确保
+    // 小窗格从任一悬浮条移入时不会闪烁隐藏。
+    if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
+        if (watched == m_aiBar || watched == m_footer || watched == m_transportBar) {
+            m_hovered = (event->type() == QEvent::Enter);
+            positionControlBar();
+        }
+    }
+
     // ---- hover reveal for small tiles ----
     if (watched == m_video && m_video && event->type() == QEvent::Enter) {
         m_hovered = true;
@@ -1483,11 +1519,6 @@ bool VideoTile::eventFilter(QObject *watched, QEvent *event)
     } else if (watched == m_video && m_video && event->type() == QEvent::Leave) {
         // Moving onto the bar itself (a child) must not hide it mid-click.
         if (!m_footer || !m_footer->underMouse()) {
-            m_hovered = false;
-            positionControlBar();
-        }
-    } else if (watched == m_footer && m_footer && event->type() == QEvent::Leave) {
-        if (!m_video || !m_video->underMouse()) {
             m_hovered = false;
             positionControlBar();
         }

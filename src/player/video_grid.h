@@ -112,6 +112,7 @@ private:
     int firstEmptyIndex() const;
     VideoTile *createTile(const zp::ChannelRef &ch, const QString &name, bool ptz);
     void updateEmptyState();
+    QWidget *createEmptySlot(int index);   // 空窗格占位（细边框 + 提示）
 
     Layout m_kind = L2x2;
     int m_activeIndex = -1;
@@ -126,6 +127,7 @@ private:
     QWidget *m_gridHost = nullptr;
     QGridLayout *m_grid = nullptr;
     QWidget *m_empty = nullptr;
+    QVector<QWidget *> m_emptySlots;   // 与 m_tiles 对齐的空槽占位
 };
 
 } // namespace zp

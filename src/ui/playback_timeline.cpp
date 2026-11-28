@@ -13,7 +13,7 @@ PlaybackTimeline::PlaybackTimeline(QWidget *parent)
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(72);
+    setFixedHeight(58);
 }
 
 void PlaybackTimeline::setDay(qint64 dayStartMs, qint64 dayEndMs)

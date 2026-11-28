@@ -138,9 +138,7 @@ public:
     // 起播：从该片段的绝对 startMs（可落在段内任意位置）开始。
     virtual void startPlayback(const zp::ChannelRef &ch, qlonglong recordId,
                                qint64 startMs) = 0;
-    // 定位：绝对 seekMs（平台换算成段内相对再下沉）。
-    virtual void seekPlayback(const zp::ChannelRef &ch, qlonglong recordId,
-                              qint64 seekMs) = 0;
+    // 拖动进度条：stop 当前会话 + startPlayback(绝对目标时间) 重建，不用运行中 seek。
     virtual void stopPlayback(const zp::ChannelRef &ch, qlonglong recordId) = 0;
 
 signals:

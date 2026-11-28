@@ -41,11 +41,20 @@ PtzPanel::PtzPanel(QWidget *parent)
     m_target->setContentsMargins(16, 10, 16, 10);
     m_target->setVisible(false);
 
+    // 能力说明条：通道不支持 PTZ 时显示内联提示并禁用控制区，
+    // 取代生硬的悬浮错误提示。
+    m_notice = new QLabel(this);
+    m_notice->setObjectName(QStringLiteral("PtzNotice"));
+    m_notice->setContentsMargins(16, 8, 16, 8);
+    m_notice->setWordWrap(true);
+    m_notice->setVisible(false);
+
     auto *vl = new QVBoxLayout(this);
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
     vl->addWidget(head);
     vl->addWidget(m_target);
+    vl->addWidget(m_notice);
 
     auto *body = new QWidget(this);
     auto *bv = new QVBoxLayout(body);
@@ -243,14 +252,19 @@ void PtzPanel::setTarget(const ChannelRef &ch, const QString &name, bool ptzCapa
     if (!ch.isValid()) {
         m_target->setText(QString());
         m_target->setVisible(false);
+        m_notice->setText(tr("请先选择一路通道，再使用云台控制"));
+        m_notice->setVisible(true);
     } else if (ptzCapable) {
         m_target->setText(name.isEmpty() ? ch.channelId : name);
         m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12.5px;font-weight:600;").arg(t.accent.name()));
         m_target->setVisible(true);
+        m_notice->setVisible(false);
     } else {
-        m_target->setText(tr("%1 · 不支持云台").arg(name.isEmpty() ? ch.channelId : name));
-        m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12px;").arg(t.danger.name()));
+        m_target->setText(name.isEmpty() ? ch.channelId : name);
+        m_target->setStyleSheet(QStringLiteral("color:%1;font-size:12px;").arg(t.text2.name()));
         m_target->setVisible(true);
+        m_notice->setText(tr("当前通道不支持 PTZ，请换用支持云台的通道"));
+        m_notice->setVisible(true);
     }
     updateEnabled();
 

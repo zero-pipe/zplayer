@@ -1,6 +1,7 @@
 #include "app/PlayerWindow.h"
 #include "app/SessionManager.h"
 #include "ui/device_tree_view.h"
+#include "ui/mode_tab_bar.h"
 #include "ui/ptz_panel.h"
 #include "ui/toast.h"
 #include "ui/icons.h"
@@ -21,6 +22,7 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QAbstractButton>
 #include <QButtonGroup>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -43,6 +45,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSizeGrip>
 #include <QSplitter>
 #include <QStatusBar>
@@ -157,6 +160,10 @@ PlayerWindow::PlayerWindow(IPlatformApi *api, const Session &session, QWidget *p
     buildUi();
 
     updateSampleBadge();
+    // Dev: ZP_MODE=1 opens on the playback page (headless layout screenshots).
+    if (qEnvironmentVariableIntValue("ZP_MODE") == 1) {
+        QTimer::singleShot(0, this, [this]() { setMode(1); });
+    }
     // Dev: ZP_SAMPLETAB=1 opens on the sample tab (headless screenshots).
     if (qEnvironmentVariableIsSet("ZP_SAMPLETAB")) {
         selectSampleTab();
@@ -312,14 +319,14 @@ void PlayerWindow::buildUi()
     setCentralWidget(root);
 
     auto *rootLay = new QVBoxLayout(root);
-    // 1px inset leaves room for the window's own border (see theme.qss).
-    rootLay->setContentsMargins(1, 1, 1, 0);
+    // 通栏布局零边距、零间距：区域之间只靠 1px 分割线界定，避免夹缝。
+    rootLay->setContentsMargins(0, 0, 0, 0);
     rootLay->setSpacing(0);
 
     // ---------------- Title bar (brand + actions + window controls) ----------------
     auto *topBar = new QWidget(root);
     topBar->setObjectName(QStringLiteral("TitleBar"));
-    topBar->setFixedHeight(56);
+    topBar->setFixedHeight(44);
     m_topBar = topBar;
     topBar->installEventFilter(this);
     auto *tb = new QHBoxLayout(topBar);
@@ -338,41 +345,18 @@ void PlayerWindow::buildUi()
 
     tb->addStretch(1);
 
-    // ---- 中央一级模式切换：实时预览 / 录像回放 / AI 标注与训练 ----
+    // ---- AI 标注与训练：只保留一个入口按钮，模式切换已下沉到左栏 ----
     {
-        auto *modeTabs = new QWidget(topBar);
-        modeTabs->setObjectName(QStringLiteral("ModeTabs"));
-        auto *mt = new QHBoxLayout(modeTabs);
-        mt->setContentsMargins(0, 0, 0, 0);
-        mt->setSpacing(6);
-        m_modeGroup = new QButtonGroup(this);
-        m_modeGroup->setExclusive(true);
-        auto mkTab = [&](const QString &text, bool checkable) {
-            auto *b = new QToolButton(modeTabs);
-            b->setObjectName(QStringLiteral("ModeTab"));
-            b->setText(text);
-            b->setCheckable(checkable);
-            b->setCursor(Qt::PointingHandCursor);
-            mt->addWidget(b);
-            return b;
-        };
-        auto *liveTab = mkTab(tr("📹 实时预览"), true);
-        m_modeGroup->addButton(liveTab, 0);
-        auto *pbTab = mkTab(tr("🎞️ 录像回放"), true);
-        m_modeGroup->addButton(pbTab, 1);
-        liveTab->setChecked(true);
-        auto *aiTab = mkTab(tr("🧠 AI 标注与训练"), false);
+        auto *aiTab = new QToolButton(topBar);
+        aiTab->setObjectName(QStringLiteral("IconBtn"));
+        aiTab->setText(tr("🧠 AI 标注与训练"));
+        aiTab->setCursor(Qt::PointingHandCursor);
         aiTab->setToolTip(tr("打开 AI 标注与训练工作台"));
         connect(aiTab, &QToolButton::clicked, this, &PlayerWindow::onModeAi);
-        connect(m_modeGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
-                this, &PlayerWindow::setMode);
-        tb->addWidget(modeTabs);
+        tb->addWidget(aiTab);
     }
 
     tb->addStretch(1);
-
-    // (Sample capture / dataset entry lives in the per-tile AI controls now:
-    //  AI 检查 menu → 样本采集, and the 采集 button next to it.)
 
     // Theme quick-toggle (sun/moon) — icon button, toggles directly.
     auto *themeBtn = new QToolButton(topBar);
@@ -472,11 +456,17 @@ void PlayerWindow::buildUi()
     // ===== 左：组织目录（回放模式额外显示查询条件） =====
     auto *leftCol = new QWidget(body);
     leftCol->setObjectName(QStringLiteral("LeftSidebar"));
-    leftCol->setMinimumWidth(200);
-    leftCol->setMaximumWidth(420);
+    leftCol->setMinimumWidth(260);
+    leftCol->setMaximumWidth(360);
     auto *leftLay = new QVBoxLayout(leftCol);
     leftLay->setContentsMargins(0, 0, 0, 0);
     leftLay->setSpacing(0);
+
+    // 一级：扁平文字 + 底部下划线 Tab（只切顶层工作模式）
+    m_modeTabs = new ModeTabBar(leftCol);
+    connect(m_modeTabs, &ModeTabBar::currentModeChanged,
+            this, &PlayerWindow::setMode);
+    leftLay->addWidget(m_modeTabs);
 
     // 回放查询条件（默认隐藏，进入回放模式显示）
     m_pbFilter = new QWidget(leftCol);
@@ -486,12 +476,17 @@ void PlayerWindow::buildUi()
         pfLay->setContentsMargins(10, 10, 10, 8);
         pfLay->setSpacing(6);
         auto *locRow = new QHBoxLayout;
-        auto *locLbl = new QLabel(tr("录像位置"), m_pbFilter);
+        auto *locLbl = new QLabel(tr("录像检索"), m_pbFilter);
         locLbl->setObjectName(QStringLiteral("PageSub"));
-        auto *locVal = new QLabel(tr("云端存储"), m_pbFilter);
+        m_pbStorage = new QComboBox(m_pbFilter);
+        m_pbStorage->addItem(tr("云端存储"), QStringLiteral("cloud"));
+        m_pbStorage->addItem(tr("设备存储"), QStringLiteral("device"));
+        m_pbStorage->setToolTip(tr("云端存储 / 设备存储（摄像头存储卡）"));
+        connect(m_pbStorage, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, &PlayerWindow::queryPlaybackDay);
         locRow->addWidget(locLbl);
         locRow->addStretch(1);
-        locRow->addWidget(locVal);
+        locRow->addWidget(m_pbStorage);
         pfLay->addLayout(locRow);
 
         auto *dateRow = new QHBoxLayout;
@@ -511,10 +506,14 @@ void PlayerWindow::buildUi()
         pfLay->addWidget(qBtn);
     }
     m_pbFilter->setVisible(false);
-    leftLay->addWidget(m_pbFilter);
 
     m_tree = new DeviceTreeView(leftCol);
+    connect(m_tree, &DeviceTreeView::currentGroupChanged,
+            this, &PlayerWindow::onGroupChanged);
     leftLay->addWidget(m_tree, 1);
+
+    // 回放检索抽屉放在左栏最底部（资源树下方），实时模式隐藏。
+    leftLay->addWidget(m_pbFilter);
 
     // ===== 中：实时预览页 =====
     auto *livePage = new QWidget(body);
@@ -524,7 +523,7 @@ void PlayerWindow::buildUi()
 
     auto *layoutBar = new QWidget(livePage);
     layoutBar->setObjectName(QStringLiteral("LayoutBar"));
-    layoutBar->setFixedHeight(44);
+    layoutBar->setFixedHeight(42);
     auto *lb = new QHBoxLayout(layoutBar);
     lb->setContentsMargins(12, 0, 12, 0);
     lb->setSpacing(8);
@@ -576,37 +575,44 @@ void PlayerWindow::buildUi()
     centerLay->addWidget(layoutBar);
     centerLay->addWidget(m_grid, 1);
 
-    // 实时预览底部操作条（精简，避免文字截断）
+    // 画布工具条：全局抓图 / 批量采集样本 / 画布全屏（设计稿 3.1）
     {
         auto *liveBottom = new QWidget(livePage);
+        m_liveBottom = liveBottom;
         liveBottom->setObjectName(QStringLiteral("LayoutBar"));
-        liveBottom->setFixedHeight(42);
+        liveBottom->setFixedHeight(40);
         auto *lo = new QHBoxLayout(liveBottom);
         lo->setContentsMargins(12, 0, 12, 0);
         lo->setSpacing(8);
-        auto mkAct = [&](const QString &t) {
+
+        auto mkAct = [&](icons::Glyph g, const QString &tip) {
             auto *b = new QToolButton(liveBottom);
             b->setObjectName(QStringLiteral("IconBtn"));
-            b->setText(t);
+            b->setIcon(QIcon(icons::glyph(g, ThemeManager::instance().tokens().text2, 16)));
+            b->setIconSize(QSize(16, 16));
+            b->setToolButtonStyle(Qt::ToolButtonIconOnly);
             b->setCursor(Qt::PointingHandCursor);
+            b->setToolTip(tip);
             lo->addWidget(b);
             return b;
         };
-        auto *snapBtn = mkAct(tr("📷 抓图"));
-        connect(snapBtn, &QToolButton::clicked, this, &PlayerWindow::snapshotActiveTile);
-        auto *capBtn = mkAct(tr("📥 采集样本"));
-        connect(capBtn, &QToolButton::clicked, this, [this]() {
-            if (VideoTile *t = m_grid->activeTile()) {
-                t->captureSample(QStringLiteral("manual"));
-            } else {
-                toastInfo(tr("请先选择一路通道"));
-            }
-        });
+        m_globalSnapBtn = mkAct(icons::Snapshot, tr("全局抓图"));
+        connect(m_globalSnapBtn, &QToolButton::clicked, this, &PlayerWindow::onGlobalSnapshot);
+        m_globalCaptureBtn = mkAct(icons::Queue, tr("批量采集样本"));
+        connect(m_globalCaptureBtn, &QToolButton::clicked, this, &PlayerWindow::onGlobalCapture);
+
         lo->addStretch(1);
-        auto *fullBtn = mkAct(tr("⛶ 全屏"));
+        auto *fullBtn = new QToolButton(liveBottom);
+        fullBtn->setObjectName(QStringLiteral("IconBtn"));
+        fullBtn->setIcon(QIcon(icons::glyph(icons::Expand, ThemeManager::instance().tokens().text2, 16)));
+        fullBtn->setIconSize(QSize(16, 16));
+        fullBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        fullBtn->setToolTip(tr("画布全屏"));
+        fullBtn->setCursor(Qt::PointingHandCursor);
         connect(fullBtn, &QToolButton::clicked, this, [this]() {
             if (m_active.isValid()) onMaximizeRequested(m_active);
         });
+        lo->addWidget(fullBtn);
         centerLay->addWidget(liveBottom);
     }
 
@@ -617,31 +623,48 @@ void PlayerWindow::buildUi()
     pl->setSpacing(0);
     {
         auto *pbBar = new QWidget(pbPage);
+        m_pbBar = pbBar;
         pbBar->setObjectName(QStringLiteral("LayoutBar"));
-        pbBar->setFixedHeight(44);
+        pbBar->setFixedHeight(42);
         auto *pbl = new QHBoxLayout(pbBar);
         pbl->setContentsMargins(12, 0, 12, 0);
         pbl->setSpacing(8);
-        m_pbChannelLabel = new QLabel(tr("当前回放通道：未选择"), pbBar);
-        pbl->addWidget(m_pbChannelLabel);
-        pbl->addStretch(1);
+        // 回放布局：与预览同样式的图标按钮；目前只保留单画面占位
+        // （每路录像计划/时间独立，4 路同步待后续需要再加）。
         auto *oneBtn = new QToolButton(pbBar);
         oneBtn->setObjectName(QStringLiteral("LayoutBtn"));
-        oneBtn->setText(tr("单画面回放"));
         oneBtn->setCheckable(true);
         oneBtn->setChecked(true);
         oneBtn->setCursor(Qt::PointingHandCursor);
-        auto *fourBtn = new QToolButton(pbBar);
-        fourBtn->setObjectName(QStringLiteral("LayoutBtn"));
-        fourBtn->setText(tr("4 路同步"));
-        fourBtn->setCheckable(true);
-        fourBtn->setCursor(Qt::PointingHandCursor);
-        auto *pbLayoutGrp = new QButtonGroup(this);
-        pbLayoutGrp->setExclusive(true);
-        pbLayoutGrp->addButton(oneBtn);
-        pbLayoutGrp->addButton(fourBtn);
+        oneBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        oneBtn->setIconSize(QSize(20, 20));
+        {
+            const ThemeTokens &t = ThemeManager::instance().tokens();
+            QIcon ic;
+            ic.addPixmap(icons::glyph(icons::Layout1, t.text2, 20), QIcon::Normal, QIcon::Off);
+            ic.addPixmap(icons::glyph(icons::Layout1, t.accent, 20), QIcon::Normal, QIcon::On);
+            oneBtn->setIcon(ic);
+        }
+        oneBtn->setToolTip(tr("单画面回放"));
+        oneBtn->setProperty("layoutHint", tr("单画面"));
+        oneBtn->installEventFilter(this);
+        connect(oneBtn, &QToolButton::clicked, this, [this]() {
+            if (m_pbGrid) m_pbGrid->setLayoutKind(VideoGrid::L1x1);
+        });
         pbl->addWidget(oneBtn);
-        pbl->addWidget(fourBtn);
+        pbl->addStretch(1);
+        auto *pbFullBtn = new QToolButton(pbBar);
+        pbFullBtn->setObjectName(QStringLiteral("IconBtn"));
+        pbFullBtn->setIcon(QIcon(icons::glyph(icons::Expand,
+                                             ThemeManager::instance().tokens().text2, 16)));
+        pbFullBtn->setIconSize(QSize(16, 16));
+        pbFullBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        pbFullBtn->setToolTip(tr("画布全屏"));
+        pbFullBtn->setCursor(Qt::PointingHandCursor);
+        connect(pbFullBtn, &QToolButton::clicked, this, [this]() {
+            if (m_pbRef.isValid()) onMaximizeRequested(m_pbRef);
+        });
+        pbl->addWidget(pbFullBtn);
         pl->addWidget(pbBar);
 
         m_pbGrid = new VideoGrid(pbPage);
@@ -683,8 +706,6 @@ void PlayerWindow::buildUi()
         m_pbPlayBtn = mkBtn(tr("⏸ 暂停"));
         m_pbPlayBtn->setCheckable(true);
         connect(m_pbPlayBtn, &QToolButton::clicked, this, &PlayerWindow::onPbPlayPause);
-        auto *stopBtn = mkBtn(tr("⏹ 停止"));
-        connect(stopBtn, &QToolButton::clicked, this, &PlayerWindow::onPbStop);
         cl->addStretch(1);
         m_pbTimeLabel = new QLabel(QStringLiteral("---- --:--:--"), ctrl);
         m_pbTimeLabel->setObjectName(QStringLiteral("TimeDisplay"));
@@ -695,7 +716,21 @@ void PlayerWindow::buildUi()
                          QStringLiteral("2.0x"), QStringLiteral("4.0x"),
                          QStringLiteral("8.0x")});
         speed->setCurrentIndex(1);
-        speed->setToolTip(tr("倍速（占位，暂未接入）"));
+        speed->setToolTip(tr("回放倍速"));
+        connect(speed, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                [this, speed](int idx) {
+                    const double rate = speed->itemData(idx, Qt::UserRole)
+                                            .toDouble();
+                    if (VideoTile *t = m_pbGrid ? m_pbGrid->activeTile() : nullptr) {
+                        if (IMediaPlayer *p = t->player()) {
+                            p->setSpeed(rate > 0 ? rate : 1.0);
+                        }
+                    }
+                });
+        for (int i = 0; i < speed->count(); ++i) {
+            speed->setItemData(i, speed->itemText(i).remove(QStringLiteral("x")).toDouble(),
+                               Qt::UserRole);
+        }
         cl->addWidget(speed);
         tlLay->addWidget(ctrl);
         m_pbTimeline = new PlaybackTimeline(tlBox);
@@ -723,8 +758,9 @@ void PlayerWindow::buildUi()
     m_toolDock = new QTabWidget(body);
     m_toolDock->setObjectName(QStringLiteral("ToolDock"));
     m_toolDock->setDocumentMode(true);
-    m_toolDock->setMinimumWidth(230);
+    m_toolDock->setMinimumWidth(280);
     m_toolDock->setMaximumWidth(380);
+    m_toolDock->setMinimumHeight(42);
     m_toolDock->addTab(m_ptz, tr("云台"));
 
     auto *samplePage = new QWidget(m_toolDock);
@@ -780,14 +816,27 @@ void PlayerWindow::buildUi()
 
     // ===== 右：回放模式——录像片段列表 =====
     auto *pbRight = new QWidget(body);
+    pbRight->setObjectName(QStringLiteral("RightSidebar"));
     {
         auto *prl = new QVBoxLayout(pbRight);
-        prl->setContentsMargins(12, 12, 12, 12);
-        prl->setSpacing(8);
-        m_pbSegHeader = new QLabel(tr("录像片段"), pbRight);
-        m_pbSegHeader->setObjectName(QStringLiteral("CardTitle"));
-        prl->addWidget(m_pbSegHeader);
-        auto *segScroll = new QScrollArea(pbRight);
+        prl->setContentsMargins(0, 0, 0, 0);
+        prl->setSpacing(0);
+        auto *pbHead = new QWidget(pbRight);
+        pbHead->setObjectName(QStringLiteral("PanelHeaderBar"));
+        pbHead->setFixedHeight(42);
+        auto *pbHeadLay = new QHBoxLayout(pbHead);
+        pbHeadLay->setContentsMargins(12, 0, 12, 0);
+        m_pbSegHeader = new QLabel(tr("录像片段列表"), pbHead);
+        m_pbSegHeader->setObjectName(QStringLiteral("PanelHeaderTitle"));
+        pbHeadLay->addWidget(m_pbSegHeader);
+        pbHeadLay->addStretch(1);
+        prl->addWidget(pbHead);
+
+        auto *pbBody = new QWidget(pbRight);
+        auto *pbBodyLay = new QVBoxLayout(pbBody);
+        pbBodyLay->setContentsMargins(12, 12, 12, 12);
+        pbBodyLay->setSpacing(8);
+        auto *segScroll = new QScrollArea(pbBody);
         segScroll->setObjectName(QStringLiteral("SampleScroll"));
         segScroll->setWidgetResizable(true);
         segScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -799,13 +848,14 @@ void PlayerWindow::buildUi()
         m_pbSegLay->setSpacing(6);
         m_pbSegLay->addStretch(1);
         segScroll->setWidget(segHost);
-        prl->addWidget(segScroll, 1);
+        pbBodyLay->addWidget(segScroll, 1);
+        prl->addWidget(pbBody, 1);
     }
 
     // 右侧上下文堆叠：实时(0=云台+样本) / 回放(1=片段列表)
     auto *rightStack = new QStackedWidget(body);
     m_rightStack = rightStack;
-    rightStack->setMinimumWidth(230);
+    rightStack->setMinimumWidth(280);
     rightStack->setMaximumWidth(380);
     rightStack->addWidget(m_toolDock);
     rightStack->addWidget(pbRight);
@@ -838,8 +888,8 @@ void PlayerWindow::buildUi()
     // 1440-wide splitter squeezed into a 1100-wide window.
     {
         const int availW = qMax(720, width());
-        const int left = qBound(200, int(availW * 0.19), 320);
-        const int right = qBound(230, int(availW * 0.22), 360);
+        const int left = qBound(260, int(availW * 0.205), 340);
+        const int right = qBound(280, int(availW * 0.205), 340);
         const int mid = qMax(320, availW - left - right);
         splitter->setSizes({left, mid, right, 0});
     }
@@ -853,8 +903,9 @@ void PlayerWindow::buildUi()
     bodyLay->addWidget(splitter);
     rootLay->addWidget(body, 1);
 
-    // ---------------- Toast ----------------
-    m_toast = new Toast(this);
+    // ---------------- Status feedback ----------------
+    // Transient messages live at the far right of the status bar; no overlay.
+    m_toast = new Toast(statusBar(), this);
 
     // ---------------- Wiring ----------------
     connect(m_tree, &DeviceTreeView::channelActivated, this, &PlayerWindow::onChannelActivated);
@@ -922,7 +973,7 @@ void PlayerWindow::buildUi()
         }
     });
 
-    statusBar()->showMessage(tr("已登录：%1").arg(m_session.username));
+    m_toast->setPersistentText(tr("已登录：%1").arg(m_session.username));
 }
 
 void PlayerWindow::openSettings()
@@ -1337,18 +1388,17 @@ void PlayerWindow::onChannelActivated(const ChannelRef &ch, const QString &name,
     m_channelNames.insert(ch.key(), name);
     m_channelPtz.insert(ch.key(), ptzCapable);
 
-    // 回放模式：选中通道即作为回放对象，不拉实时流。
+    // 回放模式：选中通道只记录回放对象，不自动查全部录像。
+    // 查询由「检索录像」按钮 / 日期变更按需触发，避免切通道时全量预查拖慢界面。
     if (m_mode == 1) {
         m_pbChannel = ch;
-        if (m_pbChannelLabel) {
-            m_pbChannelLabel->setText(tr("当前回放通道：%1").arg(name));
-        }
         if (m_pbDate) {
             m_pbDayStart = QDateTime(m_pbDate->date(), QTime(0, 0, 0)).toMSecsSinceEpoch();
             m_pbDayEnd = m_pbDayStart + 24LL * 3600 * 1000;
             if (m_pbTimeline) m_pbTimeline->setDay(m_pbDayStart, m_pbDayEnd);
         }
-        queryPlaybackDay();
+        showPbEmptyState(tr("选择日期后点击「检索录像」查看该通道的录像片段"),
+                         QString());
         return;
     }
 
@@ -1382,23 +1432,13 @@ void PlayerWindow::onStreamFailed(const ChannelRef &ch, const QString &message)
 
 void PlayerWindow::updatePtzPanel()
 {
-    bool show = false;
-    if (m_active.isValid() && m_activePtzCapable) {
-        if (VideoTile *t = m_grid->tileFor(m_active)) {
-            // Live preview only: a real-time stream cannot be paused, and
-            // recorded playback must not drive the camera.
-            show = t->isPlaying() && !t->isVod();
-        }
-    }
-    if (m_toolDock) {
-        // The dock is always present; just enable/disable the PTZ page and
-        // fall back to the samples page when the channel has no PTZ.
-        m_toolDock->setTabEnabled(0, show);
-        if (!show && m_toolDock->currentIndex() == 0 && m_samplePage) {
-            const int sampleIdx = m_toolDock->indexOf(m_samplePage);
-            if (sampleIdx >= 0) {
-                m_toolDock->setCurrentIndex(sampleIdx);
-            }
+    // 云台 Tab 始终可见：不支持 PTZ 时面板内部显示内联说明并禁用控件，
+    // 让用户明确知道原因和下一步（选支持云台的通道），而不是隐藏整个 Tab。
+    Q_UNUSED(m_activePtzCapable);
+    if (m_toolDock && m_ptz && m_active.isValid()) {
+        const int ptzIdx = m_toolDock->indexOf(m_ptz);
+        if (ptzIdx >= 0) {
+            m_toolDock->setTabEnabled(ptzIdx, true);
         }
     }
 }
@@ -1411,7 +1451,7 @@ void PlayerWindow::onActiveChannelChanged(const ChannelRef &ch, const QString &n
     updatePtzPanel();
     if (ch.isValid()) {
         setWindowTitle(QString::fromUtf8("Zeroo Player — %1").arg(name));
-        statusBar()->showMessage(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));
+        m_toast->setPersistentText(tr("当前通道：%1  [%2/%3]").arg(name, ch.deviceId, ch.channelId));
     } else {
         setWindowTitle(QStringLiteral("Zeroo Player"));
     }
@@ -1451,13 +1491,29 @@ void PlayerWindow::onSessionExpired()
 
 void PlayerWindow::onError(const QString &scope, const QString &message)
 {
-    Q_UNUSED(scope)
+    if (scope == QLatin1String("playback")) {
+        // 查询失败不是严重错误：内容区给可重试空状态 + 状态栏轻提示。
+        if (m_pbSegHeader) m_pbSegHeader->setText(tr("录像片段"));
+        showPbEmptyState(tr("录像查询失败"), tr("请稍后点击「检索录像」重试"));
+        toastInfo(tr("录像查询失败，请重试"));
+        return;
+    }
+    if (scope == QLatin1String("ptz") || scope == QLatin1String("preset")) {
+        // 能力/命令类提示：非阻塞，状态栏短暂显示后自动消失。
+        toastInfo(message);
+        return;
+    }
     toastError(message);
 }
 
 void PlayerWindow::setMode(int mode)
 {
     m_mode = mode;
+    // 快捷键（Ctrl+R）等外部入口切模式时，同步左栏一级 Tab 的选中态。
+    if (m_modeTabs && m_modeTabs->currentIndex() != mode) {
+        const QSignalBlocker blocker(m_modeTabs);
+        m_modeTabs->setCurrentIndex(mode);
+    }
     if (m_centerStack) m_centerStack->setCurrentIndex(mode);
     if (m_rightStack) m_rightStack->setCurrentIndex(mode);
     if (m_pbFilter) m_pbFilter->setVisible(mode == 1);
@@ -1477,10 +1533,6 @@ void PlayerWindow::setMode(int mode)
         if (m_active.isValid() && !m_active.channelId.endsWith(QStringLiteral("@playback"))) {
             m_pbChannel = m_active;
         }
-        if (m_pbChannelLabel && m_pbChannel.isValid()) {
-            m_pbChannelLabel->setText(tr("当前回放通道：%1")
-                .arg(m_channelNames.value(m_pbChannel.key(), m_pbChannel.channelId)));
-        }
         // 已有通道就自动查一次
         if (m_pbChannel.isValid()) {
             queryPlaybackDay();
@@ -1499,16 +1551,16 @@ void PlayerWindow::queryPlaybackDay()
         return;
     }
     if (!m_pbChannel.isValid()) {
-        toastError(tr("请先在左侧选择要回放的通道"));
-        return;
-    }
-    if (m_pbChannel.deviceCode.isEmpty() || m_pbChannel.channelCode.isEmpty()) {
-        toastError(tr("该通道缺少内码，无法查询云端录像"));
+        if (m_pbSegHeader) m_pbSegHeader->setText(tr("录像片段"));
+        showPbEmptyState(tr("请先选择要检索的通道"), tr("在左侧目录点击一个通道后再检索"));
+        toastInfo(tr("请先在左侧选择要回放的通道"));
         return;
     }
     const QDate d = m_pbDate ? m_pbDate->date() : QDate::currentDate();
     m_pbDayStart = QDateTime(d, QTime(0, 0, 0)).toMSecsSinceEpoch();
     m_pbDayEnd = m_pbDayStart + 24LL * 3600 * 1000;
+    // 设备存储（摄像头 SD 卡）的查询路径待平台接口落地后接入；当前下拉
+    // 只做 UI 占位，检索仍走云端入口。
     if (m_pbTimeline) {
         m_pbTimeline->setDay(m_pbDayStart, m_pbDayEnd);
         m_pbTimeline->setSegments(QList<RecordingSegment>());
@@ -1516,6 +1568,7 @@ void PlayerWindow::queryPlaybackDay()
     if (m_pbSegHeader) {
         m_pbSegHeader->setText(tr("查询中…"));
     }
+    showPbEmptyState(tr("正在检索录像片段…"), QString());
     m_api->queryRecordings(m_pbChannel, m_pbDayStart, m_pbDayEnd);
 }
 
@@ -1528,6 +1581,45 @@ void PlayerWindow::onRecordingsReady(const ChannelRef &ch,
     m_pbSegs = segments;
     if (m_pbTimeline) m_pbTimeline->setSegments(segments);
     rebuildSegmentList(segments);
+}
+
+void PlayerWindow::showPbEmptyState(const QString &title, const QString &hint)
+{
+    if (!m_pbSegLay) {
+        return;
+    }
+    QWidget *host = m_pbSegLay->parentWidget();
+    while (m_pbSegLay->count() > 1) {
+        QLayoutItem *it = m_pbSegLay->takeAt(0);
+        if (QWidget *w = it->widget()) w->deleteLater();
+        delete it;
+    }
+    auto *box = new QFrame(host);
+    box->setObjectName(QStringLiteral("PbEmptyState"));
+    auto *vl = new QVBoxLayout(box);
+    vl->setContentsMargins(16, 20, 16, 20);
+    vl->setSpacing(8);
+
+    auto *icon = new QLabel(box);
+    icon->setObjectName(QStringLiteral("PbEmptyIcon"));
+    icon->setText(QStringLiteral("◷"));
+    icon->setAlignment(Qt::AlignCenter);
+    vl->addWidget(icon);
+
+    auto *titleLbl = new QLabel(title, box);
+    titleLbl->setObjectName(QStringLiteral("PbEmptyTitle"));
+    titleLbl->setAlignment(Qt::AlignCenter);
+    titleLbl->setWordWrap(true);
+    vl->addWidget(titleLbl);
+    if (!hint.isEmpty()) {
+        auto *hintLbl = new QLabel(hint, box);
+        hintLbl->setObjectName(QStringLiteral("PbEmptyHint"));
+        hintLbl->setAlignment(Qt::AlignCenter);
+        hintLbl->setWordWrap(true);
+        vl->addWidget(hintLbl);
+    }
+    vl->addStretch(1);
+    m_pbSegLay->insertWidget(0, box);
 }
 
 void PlayerWindow::rebuildSegmentList(const QList<RecordingSegment> &segments)
@@ -1547,9 +1639,7 @@ void PlayerWindow::rebuildSegmentList(const QList<RecordingSegment> &segments)
                                    : tr("录像片段（%1）").arg(segments.size()));
     }
     if (segments.isEmpty()) {
-        auto *empty = new QLabel(tr("该日无录像"), host);
-        empty->setObjectName(QStringLiteral("PageSub"));
-        m_pbSegLay->insertWidget(0, empty);
+        showPbEmptyState(tr("该日期暂无录像"), tr("请更换日期或选择其他通道后重新检索"));
         return;
     }
     for (const RecordingSegment &s : segments) {
@@ -1625,27 +1715,14 @@ void PlayerWindow::onPbSeek(qint64 absMs)
         toastInfo(tr("请先选择一个录像片段"));
         return;
     }
-    m_pbPlayBasePos = absMs;
-    m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
-    if (m_pbTimeLabel) {
-        m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(absMs)
-                                   .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
-    }
-    m_api->seekPlayback(m_pbChannel, m_pbRecordId, absMs);
-}
-
-void PlayerWindow::onPbStop()
-{
+    // 不做运行中 seek：停掉旧会话后以目标绝对时间重新起播，完全复用 start 路径。
+    // 这样服务端只会在新 poller 会话上重定位 demux/fifo，不会跨线程改正在出流的 reader。
+    const qlonglong rid = m_pbRecordId;
+    m_api->stopPlayback(m_pbChannel, rid);
+    if (m_pbGrid) m_pbGrid->closeStream(m_pbRef);
     m_pbPlaying = false;
     if (m_pbTimer) m_pbTimer->stop();
-    if (m_pbRecordId > 0) {
-        m_api->stopPlayback(m_pbChannel, m_pbRecordId);
-    }
-    if (m_pbGrid && m_pbRef.isValid()) {
-        m_pbGrid->closeStream(m_pbRef);
-    }
-    m_pbRecordId = 0;
-    if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("▶ 播放")); }
+    onPbSegmentClicked(rid, absMs);
 }
 
 void PlayerWindow::onPbPlayPause()
@@ -1699,6 +1776,44 @@ void PlayerWindow::snapshotActiveTile()
     } else {
         toastInfo(tr("请先选择一路通道"));
     }
+}
+
+void PlayerWindow::onGroupChanged(int index)
+{
+    // 二级维度变化只刷新目录树，绝不触碰顶层模式（m_mode / centerStack）。
+    // 当前平台只有一个 /api/v1/group/tree/list 口径，因此这里重新拉取根
+    // 目录；后续平台提供两套树时，只需在此按 index 选择不同数据源。
+    if (m_api) {
+        m_api->fetchChildren(QString());
+    }
+    Q_UNUSED(index);
+}
+
+void PlayerWindow::onGlobalSnapshot()
+{
+    // 全局抓图：实时页抓当前焦点窗格；回放页抓回放窗格。
+    VideoGrid *g = m_mode == 1 ? m_pbGrid : m_grid;
+    if (VideoTile *t = g ? g->activeTile() : nullptr) {
+        t->requestSnapshot();
+    } else {
+        toastInfo(tr("请先选择一路通道"));
+    }
+}
+
+void PlayerWindow::onGlobalCapture()
+{
+    if (m_mode == 1) {
+        toastInfo(tr("回放模式请在窗格顶部 AI 条采集样本"));
+        return;
+    }
+    VideoTile *t = m_grid->activeTile();
+    if (!t || !t->player()) {
+        toastInfo(tr("请先选择一路通道"));
+        return;
+    }
+    t->captureSample(QStringLiteral("manual"));
+    m_sampleShown = -1;
+    updateSampleBadge();
 }
 
 void PlayerWindow::openDirect(const QUrl &url)

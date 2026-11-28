@@ -122,14 +122,12 @@ QCheckBox::indicator:checked {
 /* ---------------- Player window ---------------- */
 
 QMainWindow#PlayerWindow { background: %bgRoot%; }
-/* Frameless window: the edge has to be drawn by us, otherwise the player
-   blends into whatever is behind it. The border lives on the central area
-   (left/right/top) and on the status bar (left/right/bottom) so the two
-   pieces join into one continuous outline. */
+/* Frameless window, but no decorative outline: the one-pixel region dividers
+   are drawn by the splitter handles and the top/bottom bars themselves, so
+   edges meet exactly instead of producing a double-line/stepped border. */
 QWidget#RootArea {
     background: %bgRoot%;
-    border: 1px solid %borderStrong%;
-    border-bottom: none;
+    border: none;
 }
 
 QWidget#TitleBar {
@@ -137,10 +135,45 @@ QWidget#TitleBar {
     border-bottom: 1px solid %borderStrong%;
 }
 QWidget#LayoutBar {
-    background: %bgRoot%;
-    border-bottom: 1px solid %border%;
+    background: %bgPanel%;
+    border-bottom: 1px solid %divider%;
 }
+/* 资源目录视图切换（行政区划 / 业务分组） */
+QWidget#TreeViewTabs { background: %bgRoot%; }
+QToolButton#TreeViewTab {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 7px;
+    color: %text2%;
+    font-size: 11.5px;
+    padding: 5px 2px;
+}
+QToolButton#TreeViewTab:hover { color: %text%; border-color: %borderStrong%; }
+QToolButton#TreeViewTab:checked {
+    background: %accentSoft%;
+    border-color: %accent%;
+    color: %accent%;
+    font-weight: 600;
+}
+QLabel#TreeCount { color: %muted%; font-size: 10px; font-family: %monoFamily%; }
+/* 回放检索抽屉：左栏底部，与资源树用细分隔线隔开。 */
+QWidget#PlaybackFilter {
+    background: %bgInput%;
+    border-top: 1px solid %divider%;
+}
+/* 一级模式 Tab（实时预览 / 录像回放）由 ModeTabBar 自绘。 */
+QWidget#ModeTabBar { background: %bgPanel%; border-bottom: 1px solid %divider%; }
 QLabel#AppName { color: %text%; font-size: 15.5px; font-weight: 800; letter-spacing: 0.3px; }
+
+/* 回放空状态：说明当前状态与下一步操作。 */
+QFrame#PbEmptyState {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+}
+QLabel#PbEmptyIcon { color: %muted%; font-size: 26px; }
+QLabel#PbEmptyTitle { color: %text2%; font-size: 12px; font-weight: 600; }
+QLabel#PbEmptyHint { color: %muted%; font-size: 11px; }
 
 QLineEdit#SearchBox {
     background: %bgInput%;
@@ -223,10 +256,15 @@ QMenu::separator { height: 1px; background: %divider%; margin: 5px 8px; }
 /* ---------------- Panels ---------------- */
 
 QWidget#SidePanel { background: %bgPanel%; }
-QWidget#LeftPanel { border-right: 1px solid %borderStrong%; }
-QWidget#RightPanel { border-left: 1px solid %borderStrong%; }
+/* LeftPanel is also the object name of the resource-tree body; it must not
+   paint an edge — the splitter handle is the single divider. */
+QWidget#LeftPanel { background: %bgPanel%; }
+QWidget#LeftSidebar { background: %bgPanel%; }
+QWidget#RightSidebar { background: %bgPanel%; }
 
 QLabel#PanelTitle { color: %text%; font-size: 12.5px; font-weight: 700; }
+QWidget#PanelHeaderBar { background: %bgPanel%; border-bottom: 1px solid %divider%; }
+QLabel#PanelHeaderTitle { color: %text%; font-size: 12.5px; font-weight: 700; }
 
 QTreeView#DeviceTree {
     background: transparent;
@@ -249,19 +287,27 @@ QTreeView#DeviceTree::item:pressed {
 QTreeView#DeviceTree::branch { background: transparent; }
 
 /* Right tool dock: PTZ + local failed samples share one tabbed panel. */
+QTabWidget#ToolDock {
+    background: %bgPanel%;
+    border: none;
+    outline: none;
+}
 QTabWidget#ToolDock::pane {
     border: none;
-    border-left: 1px solid %borderStrong%;
     background: %bgPanel%;
-    top: -1px;
+}
+QTabWidget#ToolDock QTabBar {
+    background: %bgPanel%;
+    border-bottom: 1px solid %divider%;
 }
 QTabWidget#ToolDock QTabBar::tab {
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
     color: %text2%;
-    padding: 9px 16px;
+    padding: 10px 16px;
     font-size: 12.5px;
+    min-height: 40px;
 }
 QTabWidget#ToolDock QTabBar::tab:hover { color: %accent%; }
 QTabWidget#ToolDock QTabBar::tab:selected {
@@ -403,23 +449,28 @@ QListWidget#VersionList::item:selected {
     color: %accent%;
 }
 
-QSplitter#BodySplitter::handle { background: %borderStrong%; }
-
-/* PTZ collapse handle tab on the panel's left edge */
-QToolButton#PtzHandle {
-    background: %bgPanel%;
+/* The one and only vertical divider between left / center / right.
+   No margins, no grip dots — just a continuous 1px line. */
+QSplitter#BodySplitter::handle {
+    background: %borderStrong%;
+    margin: 0;
+    padding: 0;
     border: none;
-    border-left: 1px solid %border%;
-    border-right: 1px solid %border%;
 }
-QToolButton#PtzHandle:hover { background: %accentSoft%; }
 
 /* ---------------- Video grid & tiles ---------------- */
 
 QWidget#VideoArea { background: %bgRoot%; }
 QWidget#GridEmpty { background: transparent; }
-/* Grid divider: the host background shows through the inter-cell gaps,
-   producing a clear 田-style cross between split tiles. */
+/* 空窗格占位：未选通道时先把分屏格子画出来。 */
+QWidget#GridEmptySlot {
+    background: %bgRoot%;
+    border: 1px solid %border%;
+    border-radius: 6px;
+}
+QLabel#GridEmptySlotHint { color: %muted%; font-size: 11px; }
+/* Grid divider: the host background shows through the inter-cell gaps.
+   Same one-pixel skeleton color as the region dividers. */
 QWidget#GridHost { background: %borderStrong%; }
 
 QWidget#VideoTile {
@@ -432,16 +483,6 @@ QWidget#VideoTile[selected="true"] {
     background: %accentSoft%;
 }
 QWidget#VideoTile[selected="false"]:hover { border-color: %accent%; }
-
-QWidget#TileHeader {
-    background: %bgPanel%;
-}
-QWidget#TileHeader:hover, QWidget#VideoTile[selected="true"] QWidget#TileHeader {
-    background: %accentSoft%;
-}
-QWidget#TileHeader { border-top-left-radius: 6px; border-top-right-radius: 6px; }
-QLabel#TileTitle { color: %text%; font-size: 12.5px; font-weight: 600; }
-QLabel#TileStatus { font-size: 11px; }
 
 QWidget#TileFooter {
     background: %bgPanel%;
@@ -466,6 +507,16 @@ QWidget#TileBar[dock="bottom"] {
     border: none;
     border-radius: 0;
 }
+/* 顶部 AI 分析条：半透明玻璃，悬停窗格时由代码提升不透明度。 */
+QWidget#TileAiBar {
+    background: rgba(12, 16, 24, 150);
+    border: 1px solid rgba(255, 255, 255, 35);
+    border-radius: 8px;
+}
+QWidget#TileAiBar[hovered="true"] {
+    background: rgba(12, 16, 24, 235);
+    border: 1px solid rgba(255, 255, 255, 65);
+}
 QToolButton#BarBtn, QToolButton#BarPlay {
     background: transparent;
     border: none;
@@ -486,6 +537,9 @@ QToolButton#BarBtn:checked {
     background: rgba(138, 180, 248, 30);
 }
 QToolButton#BarBtn:disabled { color: rgba(199, 205, 212, 80); }
+QToolButton#BarBtn[role="close"]:hover { background: #C0392B; color: #FFFFFF; }
+QLabel#BarName { color: #E6EAF0; font-size: 11.5px; font-weight: 600; }
+QFrame#BarDot { background: #2ECC71; border-radius: 3px; }
 QToolButton#BarPlay { padding: 3px 5px; }
 /* Visible caret for buttons that open a menu (AI 检查 / 播放速度). */
 QToolButton#BarBtn::menu-button {
@@ -559,6 +613,14 @@ QLabel#SectionTitle {
 QLabel#TargetLabel { color: %text2%; font-size: 12px; }
 QLabel#TargetLabel[state="ok"] { color: %success%; }
 QLabel#TargetLabel[state="bad"] { color: %danger%; }
+/* 能力说明：内联浅色提示，不抢焦点也不使用告警红。 */
+QLabel#PtzNotice {
+    color: %muted%;
+    font-size: 11.5px;
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 6px;
+}
 
 /* PTZ directional pad */
 QToolButton#PtzDirBtn {
@@ -637,25 +699,29 @@ QLabel#SpeedValue { color: %accent%; font-size: 12px; font-weight: 700; }
 
 QStatusBar {
     background: %bgPanel%;
-    border-top: 1px solid %divider%;
-    border-left: 1px solid %borderStrong%;
-    border-right: 1px solid %borderStrong%;
-    border-bottom: 1px solid %borderStrong%;
+    border-top: 1px solid %borderStrong%;
     color: %muted%;
+    min-height: 28px;
+    max-height: 28px;
 }
 QStatusBar::item { border: none; }
+QLabel#StatusBarMessage { color: %muted%; font-size: 11px; padding: 0 6px; }
+QLabel#StatusBarMessage[kind="info"]    { color: %text2%; }
+QLabel#StatusBarMessage[kind="success"] { color: %success%; }
+QLabel#StatusBarMessage[kind="error"]   { color: %warning%; }
 
 /* ---------------- Toast ---------------- */
 
 QFrame#Toast {
     background: %bgElevated%;
     border: 1px solid %border%;
-    border-radius: 10px;
+    border-radius: 8px;
 }
-QFrame#Toast[kind="success"] { border-left: 3px solid %success%; }
-QFrame#Toast[kind="error"]   { border-left: 3px solid %danger%; }
-QFrame#Toast[kind="info"]    { border-left: 3px solid %accent%; }
-QLabel#ToastText { color: %text%; font-size: 13px; }
+/* Subtle 2px accent edge — informative, not alarming. */
+QFrame#Toast[kind="success"] { border-left: 2px solid %success%; }
+QFrame#Toast[kind="error"]   { border-left: 2px solid %warning%; }
+QFrame#Toast[kind="info"]    { border-left: 2px solid %accent%; }
+QLabel#ToastText { color: %text%; font-size: 12px; }
 
 /* ---------------- Scrollbars ---------------- */
 
@@ -1001,7 +1067,6 @@ QComboBox#ParamCombo::down-arrow:on { image: url(:/resources/chevron-down.svg); 
 QToolButton#DockReopen {
     background: %bgPanel%;
     border: none;
-    border-left: 1px solid %borderStrong%;
     color: %text2%;
     font-weight: 700;
 }

@@ -267,19 +267,6 @@ void WebPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qin
         });
 }
 
-void WebPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint64 seekMs)
-{
-    if (recordId <= 0 || !ch.isValid()) return;
-    const QString path = QStringLiteral("/api/v1/resources/%1/playback/cloud/seek?recordId=%2&seekTime=%3")
-            .arg(ch.resourceId, QString::number(recordId), QString::number(seekMs));
-    m_http->getJson(path,
-        [ch](bool ok, const QJsonValue &, const QString &msg, int) {
-            Q_UNUSED(ok)
-            Q_UNUSED(ch)
-            Q_UNUSED(msg)
-        });
-}
-
 void WebPlatformApi::stopPlayback(const ChannelRef &ch, qlonglong recordId)
 {
     if (recordId <= 0 || !ch.isValid()) return;

@@ -1,12 +1,14 @@
 #include "ui/device_tree_view.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
+#include "ui/pill_segment.h"
 
 #include <QLineEdit>
 #include <QTreeView>
 #include <QStandardItemModel>
 #include <QStandardItem>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QModelIndex>
 #include <QColor>
@@ -24,6 +26,8 @@ constexpr int RoleName      = Qt::UserRole + 7;
 constexpr int RoleLoaded    = Qt::UserRole + 8;
 constexpr int RoleLoading   = Qt::UserRole + 9;
 constexpr int RoleRes       = Qt::UserRole + 10; // channel resourceId (primary key)
+constexpr int RoleDevCode   = Qt::UserRole + 11; // device internal code (D...)
+constexpr int RoleChCode    = Qt::UserRole + 12; // channel internal code (C...)
 } // namespace
 
 DeviceTreeView::DeviceTreeView(QWidget *parent)
@@ -31,13 +35,27 @@ DeviceTreeView::DeviceTreeView(QWidget *parent)
 {
     setObjectName(QStringLiteral("LeftPanel"));
 
-    auto *header = new QLabel(tr("组织目录"), this);
+    auto *headerRow = new QHBoxLayout;
+    headerRow->setContentsMargins(0, 0, 0, 0);
+    headerRow->setSpacing(6);
+    auto *header = new QLabel(tr("资源目录"), this);
     header->setObjectName(QStringLiteral("PanelHeader"));
+    headerRow->addWidget(header);
+    headerRow->addStretch(1);
+    m_header = new QLabel(this);
+    m_header->setObjectName(QStringLiteral("TreeCount"));
+    m_header->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    headerRow->addWidget(m_header);
 
     m_filter = new QLineEdit(this);
     m_filter->setObjectName(QStringLiteral("SearchBox"));
     m_filter->setPlaceholderText(tr("搜索设备 / 通道…"));
     m_filter->setClearButtonEnabled(true);
+
+    // 二级目录维度：搜索框下方、树的第一行上方。
+    m_groupPill = new PillSegment(this);
+    connect(m_groupPill, &PillSegment::currentGroupChanged,
+            this, &DeviceTreeView::currentGroupChanged);
 
     m_model = new QStandardItemModel(this);
     m_model->setHorizontalHeaderLabels({tr("组织目录")});
@@ -94,16 +112,49 @@ DeviceTreeView::DeviceTreeView(QWidget *parent)
         "}"));
 
     auto *vl = new QVBoxLayout(this);
-    vl->setContentsMargins(12, 14, 10, 12);
+    vl->setContentsMargins(12, 10, 10, 10);
     vl->setSpacing(8);
-    vl->addWidget(header);
+    vl->addLayout(headerRow);
     vl->addWidget(m_filter);
+    vl->addWidget(m_groupPill);
     vl->addWidget(m_view, 1);
 
     connect(m_filter, &QLineEdit::textChanged, this, &DeviceTreeView::applyFilter);
     connect(m_view, &QTreeView::clicked, this, &DeviceTreeView::onActivated);
     connect(m_view, &QTreeView::activated, this, &DeviceTreeView::onActivated);
     connect(m_view, &QTreeView::expanded, this, &DeviceTreeView::onExpanded);
+}
+
+void DeviceTreeView::setHeaderSuffix(const QString &text)
+{
+    if (m_header) {
+        m_header->setText(text);
+    }
+}
+
+int DeviceTreeView::channelCount(QStandardItem *item) const
+{
+    int n = 0;
+    if (!item) {
+        return 0;
+    }
+    if (item->data(RoleType).toString() == QLatin1String("channel")
+        && item->data(RoleOnline).toBool()) {
+        ++n;
+    }
+    for (int i = 0; i < item->rowCount(); ++i) {
+        n += channelCount(item->child(i));
+    }
+    return n;
+}
+
+void DeviceTreeView::refreshHeaderCount()
+{
+    int n = 0;
+    for (int i = 0; i < m_model->rowCount(); ++i) {
+        n += channelCount(m_model->item(i));
+    }
+    setHeaderSuffix(tr("%1 通道在线").arg(n));
 }
 
 void DeviceTreeView::setRootNodes(const QList<DeviceNode> &nodes)
@@ -134,6 +185,7 @@ void DeviceTreeView::setRootNodes(const QList<DeviceNode> &nodes)
         }
     }
     m_view->setExpanded(root->index(), true);
+    refreshHeaderCount();
 }
 
 void DeviceTreeView::appendNode(QStandardItem *parentItem, const DeviceNode &node)
@@ -147,6 +199,8 @@ void DeviceTreeView::appendNode(QStandardItem *parentItem, const DeviceNode &nod
     item->setData(node.ref.deviceId, RoleDev);
     item->setData(node.ref.channelId, RoleCh);
     item->setData(node.ref.resourceId, RoleRes);
+    item->setData(node.ref.deviceCode, RoleDevCode);
+    item->setData(node.ref.channelCode, RoleChCode);
     item->setData(node.name, RoleName);
 
     if (node.isGroup()) {
@@ -203,6 +257,7 @@ void DeviceTreeView::addChildren(const QString &parentId, const QList<DeviceNode
     if (!m_filter->text().trimmed().isEmpty()) {
         applyFilter(m_filter->text());
     }
+    refreshHeaderCount();
 }
 
 void DeviceTreeView::onExpanded(const QModelIndex &index)
@@ -241,6 +296,8 @@ void DeviceTreeView::onActivated(const QModelIndex &index)
         ref.resourceId = item->data(RoleRes).toString();
         ref.deviceId = item->data(RoleDev).toString();
         ref.channelId = item->data(RoleCh).toString();
+        ref.deviceCode = item->data(RoleDevCode).toString();
+        ref.channelCode = item->data(RoleChCode).toString();
         emit channelActivated(ref, item->data(RoleName).toString(),
                               item->data(RolePtz).toBool());
     } else if (type == QLatin1String("group")) {

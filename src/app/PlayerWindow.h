@@ -19,12 +19,14 @@ class QVBoxLayout;
 class QStackedWidget;
 class QPushButton;
 class QDateEdit;
+class QComboBox;
 class QTimer;
 QT_END_NAMESPACE
 
 namespace zp {
 
 class DeviceTreeView;
+class ModeTabBar;
 class VideoGrid;
 class VideoTile;
 class PtzPanel;
@@ -91,6 +93,9 @@ private slots:
     void onSessionExpired();
     void onError(const QString &scope, const QString &message);
     void onLayoutButtonClicked(int index);
+    void onGlobalSnapshot();
+    void onGlobalCapture();
+    void onGroupChanged(int index);
 
     // 顶部三模式：0 实时预览 / 1 录像回放 / AI 打开训练窗口
     void setMode(int mode);
@@ -99,7 +104,6 @@ private slots:
     void queryPlaybackDay();
     void onPbSegmentClicked(qlonglong recordId, qint64 startMs);
     void onPbSeek(qint64 absMs);
-    void onPbStop();
     void onPbPlayPause();
     void onPbTick();
     void onRecordingsReady(const zp::ChannelRef &ch,
@@ -124,6 +128,7 @@ private:
     void expandToolDock();
     void reloadDetector();
     void rebuildSegmentList(const QList<zp::RecordingSegment> &segments);
+    void showPbEmptyState(const QString &title, const QString &hint);
     void updatePbTimeLabel();
     void snapshotActiveTile();
 
@@ -135,6 +140,7 @@ private:
     Session m_session;
 
     DeviceTreeView *m_tree = nullptr;
+    ModeTabBar *m_modeTabs = nullptr;       // 一级：实时 / 回放（下划线 Tab）
     VideoGrid *m_grid = nullptr;
     PtzPanel *m_ptz = nullptr;
     Toast *m_toast = nullptr;
@@ -153,20 +159,25 @@ private:
     IFrameAnalyzer *m_detector = nullptr;    // owned; YOLO analyzer (may be null)
     IFrameAnalyzer *m_ocr = nullptr;         // owned; scene-text OCR (may be null)
 
+
     QButtonGroup *m_layoutGroup = nullptr;
 
     // 顶部模式切换 + 中央/右侧堆叠
     int m_mode = 0;                       // 0 实时 / 1 回放
-    QButtonGroup *m_modeGroup = nullptr;
     QStackedWidget *m_centerStack = nullptr;
     QStackedWidget *m_rightStack = nullptr;
     QWidget *m_pbFilter = nullptr;         // 左侧回放查询条件（仅回放模式显示）
     QDateEdit *m_pbDate = nullptr;
+    QComboBox *m_pbStorage = nullptr;   // 录像位置：云端 / 设备（客户端写死）
+    QLabel *m_treeCount = nullptr;          // 左栏资源目录在线通道数
+    QToolButton *m_globalSnapBtn = nullptr; // 画布工具条：全局抓图
+    QToolButton *m_globalCaptureBtn = nullptr; // 画布工具条：批量采集样本
+    QWidget *m_liveBottom = nullptr;        // 实时预览画布工具条
+    QWidget *m_pbBar = nullptr;             // 回放画布工具条
 
     // 回放页
     VideoGrid *m_pbGrid = nullptr;
     PlaybackTimeline *m_pbTimeline = nullptr;
-    QLabel *m_pbChannelLabel = nullptr;
     QLabel *m_pbTimeLabel = nullptr;
     QLabel *m_pbSegHeader = nullptr;       // 右侧片段列表标题
     QVBoxLayout *m_pbSegLay = nullptr;     // 右侧片段列表容器

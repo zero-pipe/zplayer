@@ -50,6 +50,7 @@ private:
     QList<PresetInfo> m_presets;
 
     QLabel *m_target = nullptr;
+    QLabel *m_notice = nullptr;   // inline capability note (no toast needed)
     QSlider *m_speedSlider = nullptr;
     QLabel *m_speedValue = nullptr;
     QStackedWidget *m_tabs = nullptr;

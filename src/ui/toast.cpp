@@ -1,74 +1,62 @@
 #include "ui/toast.h"
 
-#include <QHBoxLayout>
 #include <QLabel>
+#include <QStatusBar>
 #include <QTimer>
-#include <QEvent>
-#include <QStyle>
-#include <QPropertyAnimation>
-#include <QGraphicsOpacityEffect>
 
 namespace zp {
 
-Toast::Toast(QWidget *parent)
-    : QFrame(parent)
-    , m_text(new QLabel(this))
+Toast::Toast(QStatusBar *bar, QObject *parent)
+    : QObject(parent)
+    , m_bar(bar)
+    , m_label(new QLabel(bar))
     , m_timer(new QTimer(this))
 {
-    setObjectName(QStringLiteral("Toast"));
-    setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    hide();
+    m_label->setObjectName(QStringLiteral("StatusBarMessage"));
+    m_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_label->setVisible(false);
 
-    m_text->setObjectName(QStringLiteral("ToastText"));
-    m_text->setWordWrap(true);
-
-    auto *hl = new QHBoxLayout(this);
-    hl->setContentsMargins(14, 10, 16, 10);
-    hl->addWidget(m_text);
+    // permanentWidget keeps the text pinned to the right edge of the bar.
+    if (m_bar) {
+        m_bar->addPermanentWidget(m_label, 0);
+    }
 
     m_timer->setSingleShot(true);
-    connect(m_timer, &QTimer::timeout, this, &QWidget::hide);
+    connect(m_timer, &QTimer::timeout, this, &Toast::clearMessage);
+}
 
-    if (parent) {
-        parent->installEventFilter(this);
+void Toast::setPersistentText(const QString &text)
+{
+    m_persistent = text;
+    if (!m_timer->isActive() || m_label->text().isEmpty()) {
+        m_label->setText(m_persistent);
+        m_label->setProperty("kind", QStringLiteral("persistent"));
+        m_label->style()->unpolish(m_label);
+        m_label->style()->polish(m_label);
+        m_label->setVisible(true);
     }
 }
 
 void Toast::showMessage(const QString &text, Kind kind, int msecs)
 {
-    m_text->setText(text);
+    if (!m_label) {
+        return;
+    }
+    m_label->setText(text);
     const char *k = kind == Success ? "success" : (kind == Error ? "error" : "info");
-    setProperty("kind", QString::fromLatin1(k));
-    style()->unpolish(this);
-    style()->polish(this);
-    adjustSize();
-    setFixedWidth(qMin(360, sizeHint().width()));
-    adjustSize();
-    reposition();
-
-    show();
-    raise();
+    m_label->setProperty("kind", QString::fromLatin1(k));
+    m_label->style()->unpolish(m_label);
+    m_label->style()->polish(m_label);
+    m_label->setVisible(true);
     m_timer->start(msecs);
 }
 
-bool Toast::eventFilter(QObject *watched, QEvent *event)
+void Toast::clearMessage()
 {
-    if (watched == parentWidget() && event->type() == QEvent::Resize) {
-        reposition();
-    }
-    return QFrame::eventFilter(watched, event);
-}
-
-void Toast::reposition()
-{
-    if (!parentWidget()) {
-        return;
-    }
-    // Top-centre, like modern players' status pills: visible without covering
-    // the picture's lower area where the control bar floats.
-    const QRect pr = parentWidget()->rect();
-    const int margin = 14;
-    move(pr.center().x() - width() / 2, pr.top() + margin);
+    m_label->setText(m_persistent);
+    m_label->setProperty("kind", QStringLiteral("persistent"));
+    m_label->style()->unpolish(m_label);
+    m_label->style()->polish(m_label);
 }
 
 } // namespace zp

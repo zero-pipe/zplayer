@@ -188,13 +188,6 @@ void MockPlatformApi::startPlayback(const ChannelRef &ch, qlonglong recordId, qi
     });
 }
 
-void MockPlatformApi::seekPlayback(const ChannelRef &ch, qlonglong recordId, qint64 seekMs)
-{
-    Q_UNUSED(ch)
-    Q_UNUSED(recordId)
-    Q_UNUSED(seekMs)
-}
-
 void MockPlatformApi::stopPlayback(const ChannelRef &ch, qlonglong recordId)
 {
     QTimer::singleShot(20, this, [this, ch, recordId]() {

@@ -27,6 +27,8 @@ SOURCES += \
     ui/login_dialog.cpp \
     ui/playback_timeline.cpp \
     ui/device_tree_view.cpp \
+    ui/mode_tab_bar.cpp \
+    ui/pill_segment.cpp \
     ui/ptz_panel.cpp \
     ui/video_settings_page.cpp \
     ui/settings_dialog.cpp \
@@ -66,6 +68,8 @@ HEADERS += \
     ui/login_dialog.h \
     ui/playback_timeline.h \
     ui/device_tree_view.h \
+    ui/mode_tab_bar.h \
+    ui/pill_segment.h \
     ui/ptz_panel.h \
     ui/video_settings_page.h \
     ui/settings_dialog.h \

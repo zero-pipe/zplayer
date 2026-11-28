@@ -35,8 +35,6 @@ public:
                          qint64 endMs) override;
     void startPlayback(const zp::ChannelRef &ch, qlonglong recordId,
                        qint64 startMs) override;
-    void seekPlayback(const zp::ChannelRef &ch, qlonglong recordId,
-                      qint64 seekMs) override;
     void stopPlayback(const zp::ChannelRef &ch, qlonglong recordId) override;
 
 private:

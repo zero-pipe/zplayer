@@ -55,23 +55,26 @@ ThemeTokens ThemeTokens::dark()
     ThemeTokens t;
     t.name = QStringLiteral("dark");
 
-    t.bgRoot     = c("#1A212B");
-    t.bgPanel    = c("#212A36");
-    t.bgElevated = c("#2A3542");
-    t.bgInput    = c("#1C242F");
-    t.bgHover    = c("#2C3947");
-    t.border       = c("#39485A");
-    t.borderStrong = c("#4B5D72");
-    t.divider      = c("#2B3644");
+    // Dark layers (HTML prototype): the center stage is the darkest, the
+    // surrounding chrome is one step lighter and cards one step above that.
+    // Dividing lines use a single skeleton color so panel edges stay continuous.
+    t.bgRoot     = c("#0F131A");   // stageBg: center video stage
+    t.bgPanel    = c("#161B24");   // surfaceBg: top / side / bottom chrome
+    t.bgElevated = c("#283244");   // cardBorder tone, used for raised surfaces
+    t.bgInput    = c("#1E2532");   // cardBg: inputs / cards
+    t.bgHover    = c("#283244");
+    t.border       = c("#283244"); // cardBorder: inner cards / controls
+    t.borderStrong = c("#232B3A"); // skeletonBorder: the one-pixel panel divider
+    t.divider      = c("#232B3A"); // same continuous line between regions
 
     t.text  = c("#E6EDF3");
     t.text2 = c("#9AA7B6");
     t.muted = c("#5F6B7A");
 
-    t.accent      = c("#3B82F6");
+    t.accent      = c("#2B7FFF");
     t.accent2     = c("#60A5FA");
-    t.accentSoft  = QColor(59, 130, 246, 34);
-    t.accentSoft2 = QColor(59, 130, 246, 62);
+    t.accentSoft  = QColor(43, 127, 255, 34);
+    t.accentSoft2 = QColor(43, 127, 255, 62);
 
     t.success     = c("#22C55E");
     t.successSoft = QColor(34, 197, 94, 30);
@@ -80,7 +83,7 @@ ThemeTokens ThemeTokens::dark()
     t.danger      = c("#F43F5E");
     t.dangerSoft  = QColor(244, 63, 94, 30);
 
-    t.videoBg = c("#121A24");
+    t.videoBg = c("#0F131A");
     return t;
 }
 
