@@ -251,6 +251,22 @@ QToolButton#IconBtn {
 }
 QToolButton#IconBtn:hover { background: %bgInput%; color: %accent%; }
 
+/* Title-bar entry into the AI annotation / training workbench: a quiet chip
+   with a line icon so it reads as an action, not as body text. */
+QToolButton#AiEntry {
+    background: transparent;
+    border: 1px solid %border%;
+    border-radius: 9px;
+    color: %text2%;
+    padding: 4px 12px;
+    font-size: 12.5px;
+}
+QToolButton#AiEntry:hover {
+    background: %bgHover%;
+    border-color: %accentSoft2%;
+    color: %text%;
+}
+
 QToolButton#WinBtn {
     background: transparent;
     border: none;
@@ -522,21 +538,18 @@ QWidget#TileFooter {
     border-bottom-right-radius: 6px;
 }
 
-/* Floating transport pill and docked action bar over the video.
-   The transport pill floats over the picture, so it stays translucent to avoid
-   blocking the view; the docked action bar stays opaque and covers the
-   letterbox strip at the bottom. */
+/* Floating transport pill and action bar over the video.
+   The picture now fills the whole pane (no letterbox), so every bar floats on
+   top of it as translucent glass; hovering the pane brings it back to nearly
+   opaque for readability. */
 QWidget#TileBar {
-    background: rgba(16, 18, 22, 120);
-    border: 1px solid rgba(255, 255, 255, 22);
+    background: rgba(11, 15, 22, 198);
+    border: 1px solid rgba(255, 255, 255, 36);
     border-radius: 10px;
 }
-/* Docked action bar: full width, flush to the bottom edge, square corners so
-   it reads as one standalone strip fully covering the letterbox below. */
-QWidget#TileBar[dock="bottom"] {
-    background: #16191E;
-    border: none;
-    border-radius: 0;
+QWidget#TileBar[hovered="true"] {
+    background: rgba(11, 15, 22, 238);
+    border: 1px solid rgba(255, 255, 255, 58);
 }
 /* 顶部 AI 分析条：半透明玻璃，悬停窗格时由代码提升不透明度。 */
 QWidget#TileAiBar {
@@ -547,6 +560,115 @@ QWidget#TileAiBar {
 QWidget#TileAiBar[hovered="true"] {
     background: rgba(12, 16, 24, 235);
     border: 1px solid rgba(255, 255, 255, 65);
+}
+/* AI 检查激活态：盾牌按钮变蓝，与悬浮面板里的目标选择联动。 */
+QToolButton#BarBtn[aiActive="true"] {
+    color: #60A5FA;
+    background: rgba(59, 130, 246, 56);
+    border: 1px solid rgba(59, 130, 246, 130);
+}
+
+/* ==========================================================================
+   AI 播放检查悬浮面板（Popover）。始终为深色玻璃卡片，不跟随明暗主题。
+   卡片本体由 AiCheckPanel 自绘（含柔和投影），这里只负责内部控件。
+   ========================================================================== */
+QMenu#AiPopoverMenu {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    margin: 0px;
+}
+QLabel#AiGroupTitle {
+    color: #8A94A6;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#AiTargetCount {
+    color: #60A5FA;
+    font-size: 11px;
+}
+QLabel#AiRowLabel {
+    color: #E2E8F0;
+    font-size: 13px;
+}
+QLabel#AiMasterLabel {
+    color: #F1F5F9;
+    font-size: 13px;
+    font-weight: 600;
+}
+QLabel#AiCustomNote {
+    color: #94A3B8;
+    font-size: 12px;
+}
+QFrame#AiSep {
+    background: #2D3540;
+    border: none;
+}
+QPushButton#AiPill {
+    color: #94A3B8;
+    background: #28303A;
+    border: 1px solid #38424F;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 6px;
+}
+QPushButton#AiPill:hover {
+    background: #2E3742;
+    color: #CBD5E1;
+}
+QPushButton#AiPill:checked {
+    color: #60A5FA;
+    background: rgba(59, 130, 246, 51);
+    border: 1px solid #3B82F6;
+}
+/* AI 检查关闭时：胶囊只表示"待检查的目标"，按空闲态收敛。 */
+QPushButton#AiPill[aiDim="true"] {
+    color: #7E8B9C;
+    background: #262E38;
+    border: 1px solid #333C48;
+}
+QPushButton#AiPill:checked[aiDim="true"] {
+    color: #7FA7D8;
+    background: rgba(59, 130, 246, 30);
+    border: 1px solid rgba(59, 130, 246, 105);
+}
+QComboBox#AiThreshold {
+    color: #F1F5F9;
+    background: #28303A;
+    border: 1px solid #38424F;
+    border-radius: 5px;
+    padding-left: 10px;
+    font-size: 13px;
+}
+QComboBox#AiThreshold:hover {
+    border: 1px solid #3B82F6;
+}
+QComboBox#AiThreshold::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox#AiThreshold::down-arrow {
+    image: none;
+    width: 0px;
+}
+QComboBox#AiThreshold QAbstractItemView {
+    background: #242B33;
+    color: #E2E8F0;
+    border: 1px solid #38424F;
+    border-radius: 6px;
+    outline: none;
+    padding: 4px;
+    selection-background-color: #3B82F6;
+    selection-color: #FFFFFF;
+}
+QComboBox#AiThreshold QAbstractItemView::item {
+    min-height: 22px;
+    padding: 0 8px;
+}
+QComboBox#AiThreshold QAbstractItemView::item:selected {
+    background: #3B82F6;
+    color: #FFFFFF;
 }
 QToolButton#BarBtn, QToolButton#BarPlay {
     background: transparent;
@@ -572,7 +694,7 @@ QToolButton#BarBtn[role="close"]:hover { background: #C0392B; color: #FFFFFF; }
 QLabel#BarName { color: #E6EAF0; font-size: 11.5px; font-weight: 600; }
 QFrame#BarDot { background: #2ECC71; border-radius: 3px; }
 QToolButton#BarPlay { padding: 3px 5px; }
-/* Visible caret for buttons that open a menu (AI 检查 / 播放速度). */
+/* Visible caret for buttons that open a menu (播放速度). */
 QToolButton#BarBtn::menu-button {
     border: none;
     width: 13px;

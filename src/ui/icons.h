@@ -36,6 +36,12 @@ enum Glyph {
     SearchClock, // magnifier with clock: 智能检索
     Export,      // arrow into tray: 导出证据
     Snapshot,    // line camera: 抓图
+    VolumeOn,    // speaker with sound arcs: 有声
+    VolumeOff,   // crossed-out speaker: 静音
+    SampleFrame, // sample box + centre crosshair: 采集样本
+    Person,      // head + shoulders: 检查目标·人
+    Car,         // car silhouette: 检查目标·车
+    Dog,         // dog head with floppy ears: 检查目标·狗
     // Split-layout pictograms for the layout bar.
     Layout1,     // single pane
     Layout2x2,   // 2x2 grid

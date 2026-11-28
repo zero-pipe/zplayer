@@ -3,6 +3,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+#include <QVector>
 #include <QtMath>
 
 namespace zp {
@@ -175,6 +176,10 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
     p.scale(k, k);
 
     QPainterPath path;
+    // Extra ink a single stroked path cannot express: dashed selection corners
+    // (region select) and filled noise dots (denoise).
+    QPainterPath dashedPath;
+    QVector<QPointF> dots;
     switch (g) {
     case User:
         path.addEllipse(QPointF(12, 8), 4, 4);
@@ -283,12 +288,15 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         break;
     }
     case AiScan: {
-        // Scan corners around a sensor dot: "AI is watching this frame".
-        path.moveTo(4, 9);  path.lineTo(4, 4);  path.lineTo(9, 4);
-        path.moveTo(15, 4); path.lineTo(20, 4); path.lineTo(20, 9);
-        path.moveTo(20, 15); path.lineTo(20, 20); path.lineTo(15, 20);
-        path.moveTo(9, 20); path.lineTo(4, 20); path.lineTo(4, 15);
-        path.addEllipse(QPointF(12, 12), 2.2, 2.2);
+        // Shield + check: AI screening / inspection.
+        path.moveTo(12, 3);
+        path.lineTo(19, 6);
+        path.lineTo(19, 12);
+        path.cubicTo(19, 16.5, 16, 19.5, 12, 21);
+        path.cubicTo(8, 19.5, 5, 16.5, 5, 12);
+        path.lineTo(5, 6);
+        path.closeSubpath();
+        path.moveTo(9, 12);   path.lineTo(11, 14); path.lineTo(15, 10);
         break;
     }
     case FastSkip:
@@ -296,20 +304,27 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(12, 7); path.lineTo(18, 12); path.lineTo(12, 17);
         break;
     case Ocr:
-        // "T" over a baseline with scan brackets.
-        path.moveTo(8, 8);  path.lineTo(16, 8);
-        path.moveTo(12, 8); path.lineTo(12, 15);
-        path.moveTo(8, 18); path.lineTo(16, 18);
-        path.moveTo(4, 5);  path.lineTo(4, 3);  path.lineTo(6, 3);
-        path.moveTo(18, 3); path.lineTo(20, 3); path.lineTo(20, 5);
+        // OCR frame (four corners) + text lines.
+        path.moveTo(4, 8);   path.lineTo(4, 5);
+        path.cubicTo(4, 4.45, 4.45, 4, 5, 4);     path.lineTo(8, 4);
+        path.moveTo(16, 4);  path.lineTo(19, 4);
+        path.cubicTo(19.55, 4, 20, 4.45, 20, 5);  path.lineTo(20, 8);
+        path.moveTo(20, 16); path.lineTo(20, 19);
+        path.cubicTo(20, 19.55, 19.55, 20, 19, 20); path.lineTo(16, 20);
+        path.moveTo(8, 20);  path.lineTo(5, 20);
+        path.cubicTo(4.45, 20, 4, 19.55, 4, 19);  path.lineTo(4, 16);
+        path.moveTo(8, 9);   path.lineTo(16, 9);
+        path.moveTo(8, 13);  path.lineTo(14, 13);
+        path.moveTo(8, 17);  path.lineTo(12, 17);
         break;
     case Roi:
-        // Frame with corner handles and an inner selection box.
-        path.moveTo(3, 7);  path.lineTo(3, 3);  path.lineTo(7, 3);
-        path.moveTo(17, 3); path.lineTo(21, 3); path.lineTo(21, 7);
-        path.moveTo(21, 17); path.lineTo(21, 21); path.lineTo(17, 21);
-        path.moveTo(7, 21); path.lineTo(3, 21); path.lineTo(3, 17);
-        path.addRect(QRectF(8, 8, 8, 8));
+        // Dashed selection corners + pointer: draw a region by hand.
+        dashedPath.moveTo(4, 8);   dashedPath.lineTo(4, 5);   dashedPath.lineTo(7, 5);
+        dashedPath.moveTo(17, 5);  dashedPath.lineTo(20, 5);  dashedPath.lineTo(20, 8);
+        dashedPath.moveTo(20, 16); dashedPath.lineTo(20, 19); dashedPath.lineTo(17, 19);
+        dashedPath.moveTo(7, 19);  dashedPath.lineTo(4, 19);  dashedPath.lineTo(4, 16);
+        path.moveTo(11, 11);  path.lineTo(18, 13.5); path.lineTo(15, 15);
+        path.lineTo(13.5, 18); path.closeSubpath();
         break;
     case Magnify:
         path.addEllipse(QPointF(10.5, 10.5), 6, 6);
@@ -318,35 +333,40 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(7.8, 10.5); path.lineTo(13.2, 10.5);
         break;
     case Sparkle:
-        path.moveTo(12, 2.5);
-        path.lineTo(13.7, 10.3);
-        path.lineTo(21.5, 12);
-        path.lineTo(13.7, 13.7);
-        path.lineTo(12, 21.5);
-        path.lineTo(10.3, 13.7);
-        path.lineTo(2.5, 12);
-        path.lineTo(10.3, 10.3);
-        path.closeSubpath();
+        // Picture frame with a detail curve + sparkle: image enhancement.
+        path.addRoundedRect(QRectF(3, 5, 14, 14), 2, 2);
+        path.moveTo(7, 15);   path.lineTo(10, 12); path.lineTo(12, 14);
+        path.lineTo(14.5, 11.5);
+        path.moveTo(19.5, 4.5);  path.lineTo(20.2, 6.3);  path.lineTo(22, 7);
+        path.lineTo(20.2, 7.7);  path.lineTo(19.5, 9.5);
+        path.lineTo(18.8, 7.7);  path.lineTo(17, 7);
+        path.lineTo(18.8, 6.3);  path.closeSubpath();
         break;
     case Wave:
-        // Speech waveform crossed out: noise removed.
-        path.moveTo(3, 14);
-        path.cubicTo(5, 9, 7, 19, 9, 14);
-        path.cubicTo(11, 9, 13, 19, 15, 14);
-        path.cubicTo(16.2, 11.6, 17.4, 13.4, 18, 13.4);
-        path.moveTo(7, 18.5); path.lineTo(18.5, 7);
+        // Scattered noise dots + smoothed signal: denoise.
+        dots << QPointF(6.5, 7.5) << QPointF(11, 6) << QPointF(16.5, 8)
+             << QPointF(5.5, 13.5) << QPointF(18.5, 14);
+        path.moveTo(4, 18.5);
+        path.cubicTo(7, 17, 9, 20, 12, 18.5);
+        path.cubicTo(15, 17, 17, 20, 20, 18.5);
+        path.moveTo(15, 11);  path.lineTo(20, 16);
         break;
     case SearchClock:
-        path.addEllipse(QPointF(10.5, 10.5), 6, 6);
-        path.moveTo(15, 15); path.lineTo(20.5, 20.5);
-        path.moveTo(10.5, 10.5); path.lineTo(10.5, 7.2);
-        path.moveTo(10.5, 10.5); path.lineTo(13.2, 11.8);
+        // Magnifier + plus: smart search.
+        path.addEllipse(QPointF(11, 11), 6.5, 6.5);
+        path.moveTo(16, 16);  path.lineTo(20.5, 20.5);
+        path.moveTo(11, 8.5); path.lineTo(11, 13.5);
+        path.moveTo(8.5, 11); path.lineTo(13.5, 11);
         break;
     case Export:
-        path.moveTo(12, 3.5);  path.lineTo(12, 14);
-        path.moveTo(8, 10);    path.lineTo(12, 14); path.lineTo(16, 10);
-        path.moveTo(4.5, 16);  path.lineTo(4.5, 19.5);
-        path.lineTo(19.5, 19.5); path.lineTo(19.5, 16);
+        // Down arrow into a tray: export evidence.
+        path.moveTo(12, 4);  path.lineTo(12, 15);
+        path.moveTo(8, 11);  path.lineTo(12, 15); path.lineTo(16, 11);
+        path.moveTo(4, 16);  path.lineTo(4, 18);
+        path.cubicTo(4, 19.1, 4.9, 20, 6, 20);
+        path.lineTo(18, 20);
+        path.cubicTo(19.1, 20, 20, 19.1, 20, 18);
+        path.lineTo(20, 16);
         break;
     case Snapshot:
         // Line camera body + lens + top viewfinder bump, matched to the rest
@@ -355,6 +375,64 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         path.moveTo(8.5, 7);  path.lineTo(9.5, 4.5);
         path.lineTo(14.5, 4.5); path.lineTo(15.5, 7);
         path.addEllipse(QPointF(12, 13), 3.2, 3.2);
+        break;
+    case VolumeOn:
+        // Speaker cone + two sound arcs.
+        path.moveTo(3.5, 9.5);  path.lineTo(7.0, 9.5);
+        path.lineTo(11.5, 5.5); path.lineTo(11.5, 18.5);
+        path.lineTo(7.0, 14.5); path.lineTo(3.5, 14.5);
+        path.closeSubpath();
+        path.moveTo(14.8, 9.2);  path.quadTo(17.4, 12.0, 14.8, 14.8);
+        path.moveTo(17.8, 6.4);  path.quadTo(21.6, 12.0, 17.8, 17.6);
+        break;
+    case VolumeOff:
+        // Same cone, muted with a cross instead of the sound arcs.
+        path.moveTo(3.5, 9.5);  path.lineTo(7.0, 9.5);
+        path.lineTo(11.5, 5.5); path.lineTo(11.5, 18.5);
+        path.lineTo(7.0, 14.5); path.lineTo(3.5, 14.5);
+        path.closeSubpath();
+        path.moveTo(15.2, 9.6);  path.lineTo(20.2, 14.6);
+        path.moveTo(20.2, 9.6);  path.lineTo(15.2, 14.6);
+        break;
+    case SampleFrame:
+        // Sample box + centre crosshair: take a training sample.
+        path.addRoundedRect(QRectF(4, 4, 16, 16), 2.5, 2.5);
+        path.addEllipse(QPointF(12, 12), 2.5, 2.5);
+        path.moveTo(12, 7);  path.lineTo(12, 9);
+        path.moveTo(12, 15); path.lineTo(12, 17);
+        path.moveTo(7, 12);  path.lineTo(9, 12);
+        path.moveTo(15, 12); path.lineTo(17, 12);
+        break;
+    case Person:
+        // Head + shoulders: the "人" check target.
+        path.addEllipse(QPointF(12, 7.5), 3.6, 3.6);
+        path.moveTo(5.5, 20.5);
+        path.cubicTo(5.5, 14.8, 18.5, 14.8, 18.5, 20.5);
+        break;
+    case Car:
+        // Sedan silhouette with two wheels: the "车" check target.
+        path.moveTo(4.2, 17.0);
+        path.cubicTo(4.2, 14.0, 4.4, 12.4, 5.0, 11.2);
+        path.lineTo(6.6, 8.2);
+        path.cubicTo(7.0, 7.6, 7.5, 7.3, 8.2, 7.3);
+        path.lineTo(15.8, 7.3);
+        path.cubicTo(16.5, 7.3, 17.0, 7.6, 17.4, 8.2);
+        path.lineTo(19.0, 11.2);
+        path.cubicTo(19.6, 12.4, 19.8, 14.0, 19.8, 17.0);
+        path.lineTo(4.2, 17.0);
+        path.moveTo(5.6, 13.2);  path.lineTo(18.4, 13.2);
+        dots << QPointF(7.6, 17.9) << QPointF(16.4, 17.9);
+        break;
+    case Dog:
+        // Dog head with two pointed ears, eyes as dots: the "狗" check target.
+        path.moveTo(8.6, 10.4);
+        path.lineTo(6.2, 4.6);
+        path.lineTo(11.0, 8.0);
+        path.moveTo(15.4, 10.4);
+        path.lineTo(17.8, 4.6);
+        path.lineTo(13.0, 8.0);
+        path.addEllipse(QPointF(12, 13.8), 5.6, 5.8);
+        dots << QPointF(9.9, 12.6) << QPointF(14.1, 12.6) << QPointF(12, 17.0);
         break;
     case Layout1:
         path.addRoundedRect(QRectF(3, 3, 18, 18), 2.5, 2.5);
@@ -450,6 +528,22 @@ QPixmap glyph(Glyph g, const QColor &color, int size)
         break;
     }
     strokePath(p, path, color, w);
+    if (!dashedPath.isEmpty()) {
+        QPen dash(color, w);
+        dash.setCapStyle(Qt::RoundCap);
+        dash.setDashPattern({1.1, 1.1});   // in pen-width units
+        dash.setDashOffset(0);
+        p.setPen(dash);
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(dashedPath);
+    }
+    if (!dots.isEmpty()) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(color);
+        for (const QPointF &c : dots) {
+            p.drawEllipse(c, 1.15, 1.15);
+        }
+    }
     return pm;
 }
 

@@ -119,21 +119,26 @@ void AnalysisOverlay::paintEvent(QPaintEvent *)
         if (!m_labels) {
             continue;
         }
+        // Operator-facing label: just what it is plus how sure we are
+        // ("人 88%"). Internal track ids (#4) are debugging detail.
+        static const bool showTrackId = qEnvironmentVariableIsSet("ZP_TRACK_LABELS");
         QString text = box.label.isEmpty() ? QString::number(box.classId) : box.label;
-        if (box.trackId >= 0) {
+        if (showTrackId && box.trackId >= 0) {
             text = QStringLiteral("#%1 %2").arg(box.trackId).arg(text);
         }
         text += QString::fromUtf8(" %1%").arg(int(box.score * 100));
 
         p.setFont(f);
         const QFontMetrics fm(f);
-        const int tw = fm.boundingRect(text).width() + 8;
-        const int th = fm.height() + 2;
+        const int tw = fm.boundingRect(text).width() + 12;
+        const int th = fm.height() + 4;
         QRectF chip(r.left(), r.top() - th, tw, th);
         if (chip.top() < 0) {
             chip.moveTop(r.top());   // no room above: put the label inside
         }
-        p.fillRect(chip, QColor(c.red(), c.green(), c.blue(), 210));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(c.red(), c.green(), c.blue(), 215));
+        p.drawRoundedRect(chip, 4, 4);
         p.setPen(Qt::white);
         p.drawText(chip, Qt::AlignCenter, text);
     }

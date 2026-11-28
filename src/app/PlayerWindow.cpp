@@ -349,11 +349,19 @@ void PlayerWindow::buildUi()
     // ---- AI 标注与训练：只保留一个入口按钮，模式切换已下沉到左栏 ----
     {
         auto *aiTab = new QToolButton(topBar);
-        aiTab->setObjectName(QStringLiteral("IconBtn"));
-        aiTab->setText(tr("🧠 AI 标注与训练"));
+        aiTab->setObjectName(QStringLiteral("AiEntry"));
+        aiTab->setText(tr("AI 标注与训练"));
+        aiTab->setIcon(QIcon(icons::glyph(icons::Annotate,
+                                          ThemeManager::instance().tokens().text2, 16)));
+        aiTab->setIconSize(QSize(16, 16));
+        aiTab->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         aiTab->setCursor(Qt::PointingHandCursor);
         aiTab->setToolTip(tr("打开 AI 标注与训练工作台"));
         connect(aiTab, &QToolButton::clicked, this, &PlayerWindow::onModeAi);
+        connect(&ThemeManager::instance(), &ThemeManager::themeChanged, aiTab, [aiTab]() {
+            aiTab->setIcon(QIcon(icons::glyph(icons::Annotate,
+                                              ThemeManager::instance().tokens().text2, 16)));
+        });
         tb->addWidget(aiTab);
     }
 
@@ -796,8 +804,10 @@ void PlayerWindow::buildUi()
     m_sampleScroll->setWidget(sampleHost);
     sampleLay->addWidget(m_sampleScroll, 1);
 
-    auto *openBtn = new QPushButton(tr("打开标注 / 训练工具 →"), samplePage);
+    auto *openBtn = new QPushButton(tr("打开标注训练工具"), samplePage);
     openBtn->setObjectName(QStringLiteral("PrimaryButton"));
+    openBtn->setIcon(QIcon(icons::glyph(icons::Annotate, QColor(Qt::white), 14)));
+    openBtn->setIconSize(QSize(14, 14));
     openBtn->setCursor(Qt::PointingHandCursor);
     connect(openBtn, &QPushButton::clicked, this, &PlayerWindow::openTrainingTool);
     sampleLay->addWidget(openBtn);
@@ -1097,7 +1107,7 @@ void PlayerWindow::refreshSampleList()
     const int insertAt = m_sampleLay->count() - 1;   // before the stretch
     if (recs.isEmpty()) {
         auto *empty = new QLabel(
-            tr("暂无样本。\n开启画面「AI 检查」菜单里的「样本采集」后，\n低置信帧会自动收进这里；也可点底栏「采集」手动保存。"),
+            tr("暂无样本。\n开启画面「AI 检查」面板里的「样本采集」后，\n低置信帧会自动收进这里；也可点底栏「采样本」手动保存。"),
             m_sampleLay->parentWidget());
         empty->setObjectName(QStringLiteral("SampleEmpty"));
         empty->setWordWrap(true);
@@ -2062,6 +2072,50 @@ void PlayerWindow::fillDemo(const QUrl &url, int count)
                 t->setDenoiseEnabled(true);
             }
         }
+    }
+    // ZP_AI_ON=1: switch the AI check on for every demo tile (default is off).
+    if (qEnvironmentVariableIsSet("ZP_AI_ON")) {
+        for (VideoTile *t : m_grid->tiles()) {
+            if (t) {
+                t->setAiSkipEnabled(true);
+            }
+        }
+    }
+    // ZP_AI_PANEL=1: open the AI check popover on the first demo tile so the
+    // floating card can be inspected headlessly. ZP_SHOT_POPUP=<png> writes
+    // just the popup window (it is a separate top-level, so the window grab
+    // used by ZP_SHOT cannot include it).
+    if (qEnvironmentVariableIsSet("ZP_AI_PANEL")) {
+        QTimer::singleShot(900, this, [this]() {
+            VideoTile *t = m_grid->tiles().value(0);
+            if (!t) {
+                return;
+            }
+            t->openAiPopover();
+            if (qEnvironmentVariableIsSet("ZP_AI_THRESH")) {
+                QTimer::singleShot(300, t, [t]() { t->openAiThresholdPopup(); });
+            }
+            const QString shot = qEnvironmentVariable("ZP_SHOT_POPUP");
+            if (!shot.isEmpty()) {
+                QTimer::singleShot(400, t, [t, shot]() {
+                    if (QWidget *pop = t->aiPopover()) {
+                        pop->grab().save(shot, "PNG");
+                    }
+                });
+            }
+            const QString screenShot = qEnvironmentVariable("ZP_SHOT_SCREEN");
+            if (!screenShot.isEmpty()) {
+                int screenDelay = qEnvironmentVariableIntValue("ZP_SHOT_SCREEN_DELAY");
+                if (screenDelay <= 0) {
+                    screenDelay = 500;
+                }
+                QTimer::singleShot(screenDelay, this, [screenShot]() {
+                    if (QScreen *s = QGuiApplication::primaryScreen()) {
+                        s->grabWindow(0).save(screenShot, "PNG");
+                    }
+                });
+            }
+        });
     }
     // ZP_SCAN=1: kick off the smart-timeline scan on the first tile once the
     // media length is known (dev/headless testing).

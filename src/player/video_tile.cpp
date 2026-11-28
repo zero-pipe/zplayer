@@ -4,6 +4,7 @@
 #include "player/shaders.h"
 #include "analysis/yolo_detector.h"
 #include "ui/analysis_overlay.h"
+#include "ui/ai_check_panel.h"
 #include "ui/icons.h"
 #include "ui/theme.h"
 #include "ui/timeline_slider.h"
@@ -19,6 +20,7 @@
 #include <QStackedLayout>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QWidgetAction>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QStyle>
@@ -188,6 +190,7 @@ void VideoTile::play(const QUrl &url)
     positionControlBar();
     m_player->open(url);
     m_player->play();
+    m_player->setMuted(m_muted);   // keep the saved audio choice per stream
 }
 
 void VideoTile::stop()
@@ -226,6 +229,23 @@ void VideoTile::takeSnapshot()
 void VideoTile::requestSnapshot()
 {
     takeSnapshot();
+}
+
+void VideoTile::openAiPopover()
+{
+    showAiPanel();
+}
+
+QWidget *VideoTile::aiPopover() const
+{
+    return m_aiMenu;
+}
+
+void VideoTile::openAiThresholdPopup()
+{
+    if (m_aiPanel) {
+        m_aiPanel->openThresholdPopup();
+    }
 }
 
 void VideoTile::captureSample(const QString &reason)
@@ -408,7 +428,6 @@ void VideoTile::buildControlBar()
     // 底部：播放器操作条（名称 / 放大 / 锐化 / 降噪 / 抓图 / 单画面 / 关闭）
     m_footer = new QWidget(m_video);
     m_footer->setObjectName(QStringLiteral("TileBar"));
-    m_footer->setProperty("dock", QStringLiteral("bottom"));
     m_footer->setAttribute(Qt::WA_StyledBackground, true);
     m_footer->installEventFilter(this);
     auto *row = new QHBoxLayout(m_footer);
@@ -432,14 +451,14 @@ void VideoTile::buildControlBar()
         const QColor rest(0xC7, 0xCD, 0xD4);
         const QColor active = danger ? QColor(0xFF, 0x8A, 0x80) : QColor(0x8A, 0xB4, 0xF8);
         QIcon ic;
-        ic.addPixmap(icons::glyph(g, rest, 16), QIcon::Normal, QIcon::Off);
-        ic.addPixmap(icons::glyph(g, active, 16), QIcon::Normal, QIcon::On);
-        ic.addPixmap(icons::glyph(g, active, 16), QIcon::Active, QIcon::Off);
+        ic.addPixmap(icons::glyph(g, rest, 18), QIcon::Normal, QIcon::Off);
+        ic.addPixmap(icons::glyph(g, active, 18), QIcon::Normal, QIcon::On);
+        ic.addPixmap(icons::glyph(g, active, 18), QIcon::Active, QIcon::Off);
         return ic;
     };
     auto dressBtn = [barIcon](QToolButton *b, icons::Glyph g) {
         b->setIcon(barIcon(g));
-        b->setIconSize(QSize(16, 16));
+        b->setIconSize(QSize(18, 18));
     };
     auto addSep = [this, row]() {
         auto *line = new QFrame(m_footer);
@@ -448,6 +467,24 @@ void VideoTile::buildControlBar()
         line->setFixedHeight(18);
         row->addWidget(line);
     };
+
+    // ---- audio: per-stream mute (the choice is remembered for new tiles) ----
+    // Camera streams often carry a noisy microphone; one click silences this
+    // tile only, and the state is persisted so re-opening a channel stays quiet.
+    m_muted = QSettings().value(QStringLiteral("player/muted"), false).toBool();
+    m_muteBtn = makeBtn(tr("声音"));
+    m_muteBtn->setCheckable(true);
+    m_muteBtn->setChecked(m_muted);
+    connect(m_muteBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_muted = on;
+        if (m_player) {
+            m_player->setMuted(on);
+        }
+        QSettings().setValue(QStringLiteral("player/muted"), on);
+        updateMuteUi();
+        emit statusMessage(m_channel, on ? tr("已静音") : tr("取消静音"));
+    });
+    updateMuteUi();
 
     m_hasTransport = m_player && m_player->supportsPlaybackControl();
 
@@ -545,32 +582,31 @@ void VideoTile::buildControlBar()
     // The old "AI skip" toggle and its separate caret are merged here: the
     // button itself is the master switch, the menu decides what counts as a
     // target and which actions fire (fast-forward when empty, pause on hit).
-    m_aiBtn = makeBtn(tr("AI 检查"));
+    m_aiBtn = makeBtn(tr("AI检查"));
     dressBtn(m_aiBtn, icons::AiScan);
-    m_aiBtn->setCheckable(true);
-    m_aiBtn->setToolTip(tr("开启 AI 检查（框选目标、无目标快进、检出暂停）"));
-    connect(m_aiBtn, &QToolButton::toggled, this, [this](bool on) {
-        setAiSkipEnabled(on);
-        emit statusMessage(m_channel, on ? tr("AI 检查：开") : tr("AI 检查：关"));
-    });
+    m_aiBtn->setToolTip(tr("AI 播放检查设置"));
+    // The shield opens the settings card; the check itself is driven by the
+    // chosen targets (no target = nothing to check).
+    connect(m_aiBtn, &QToolButton::clicked, this, &VideoTile::showAiPanel);
     // Persisted similarity threshold (percent). Default 80% — low-confidence
     // boxes around 30% were too noisy to read.
     m_aiMinScore = qBound(0.30f, QSettings().value(QStringLiteral("ai/minScorePct"), 80).toInt() / 100.0f, 0.95f);
     applyDefaultAiClasses();
     buildAiMenu();
+    updateAiActiveState();
 
     // 采集: save the current frame (+ last detections) as a training sample.
     // Only meaningful with AI check on and the global capture switch on.
-    m_captureBtn = makeBtn(tr("采集"));
-    dressBtn(m_captureBtn, icons::Layers);
-    m_captureBtn->setToolTip(tr("采集当前画面为训练样本（需开启 AI 检查与样本采集）"));
+    m_captureBtn = makeBtn(tr("采样本"));
+    dressBtn(m_captureBtn, icons::SampleFrame);
+    m_captureBtn->setToolTip(tr("采样本"));
     connect(m_captureBtn, &QToolButton::clicked, this, [this]() {
         if (!m_aiSkip) {
             emit statusMessage(m_channel, tr("请先开启 AI 检查"));
             return;
         }
         if (!m_captureEnabled) {
-            emit statusMessage(m_channel, tr("请在 AI 检查菜单中开启「样本采集」"));
+            emit statusMessage(m_channel, tr("请先在 AI 检查面板中开启「样本采集」"));
             return;
         }
         captureSample(QStringLiteral("manual"));
@@ -578,19 +614,19 @@ void VideoTile::buildControlBar()
     });
     updateCaptureUi();
 
-    m_ocrBtn = makeBtn(tr("OCR识别"));
+    m_ocrBtn = makeBtn(tr("识文字"));
     dressBtn(m_ocrBtn, icons::Ocr);
     m_ocrBtn->setCheckable(true);
-    m_ocrBtn->setToolTip(tr("识别画面中的文字/车牌；配合 ROI 可只识别局部"));
+    m_ocrBtn->setToolTip(tr("识文字"));
     connect(m_ocrBtn, &QToolButton::toggled, this, [this](bool on) {
         emit ocrToggled(m_channel, on);
         emit statusMessage(m_channel, on ? tr("OCR 识别：开") : tr("OCR 识别：关"));
     });
 
-    m_roiBtn = makeBtn(tr("ROI框"));
+    m_roiBtn = makeBtn(tr("选区域"));
     dressBtn(m_roiBtn, icons::Roi);
     m_roiBtn->setCheckable(true);
-    m_roiBtn->setToolTip(tr("圈选重点分析区域：点击后拖动框选，再点一次清除"));
+    m_roiBtn->setToolTip(tr("选区域"));
     connect(m_roiBtn, &QToolButton::clicked, this, [this](bool checked) {
         if (!checked) {
             m_roiMode = false;
@@ -617,18 +653,18 @@ void VideoTile::buildControlBar()
     });
 
     // ---- right group 2: picture ----
-    m_zoomBtn = makeBtn(tr("电子放大"));
+    m_zoomBtn = makeBtn(tr("放大"));
     dressBtn(m_zoomBtn, icons::Magnify);
-    m_zoomBtn->setToolTip(tr("点击循环 1x/2x/4x；放大后可滚轮切换倍数、拖动平移画面"));
+    m_zoomBtn->setToolTip(tr("放大"));
     m_zoomBtn->setEnabled(m_player && m_player->supportsVideoCrop());
     connect(m_zoomBtn, &QToolButton::clicked, this, [this]() {
         setZoomLevel((m_zoomLevel + 1) % 3);
     });
 
-    m_sharpenBtn = makeBtn(tr("画质锐化"));
+    m_sharpenBtn = makeBtn(tr("增画质"));
     dressBtn(m_sharpenBtn, icons::Sparkle);
     m_sharpenBtn->setCheckable(true);
-    m_sharpenBtn->setToolTip(tr("GPU 锐化增强（配合电子放大观看细节）"));
+    m_sharpenBtn->setToolTip(tr("增画质"));
     connect(m_sharpenBtn, &QToolButton::toggled, this, [this](bool on) {
         if (!m_player) {
             return;
@@ -638,10 +674,10 @@ void VideoTile::buildControlBar()
     });
 
     // Voice denoising: rnnoise through the engine's audio filter chain.
-    m_denoiseBtn = makeBtn(tr("语音降噪"));
+    m_denoiseBtn = makeBtn(tr("去噪点"));
     dressBtn(m_denoiseBtn, icons::Wave);
     m_denoiseBtn->setCheckable(true);
-    m_denoiseBtn->setToolTip(tr("rnnoise 实时降噪：抑制风噪/机械底噪，突出人声"));
+    m_denoiseBtn->setToolTip(tr("去噪点"));
     m_denoiseBtn->setEnabled(m_player && m_player->supportsDenoise());
     connect(m_denoiseBtn, &QToolButton::toggled, this, [this](bool on) {
         if (!m_player) {
@@ -661,10 +697,10 @@ void VideoTile::buildControlBar()
     });
 
     // ---- right group 3: search & evidence ----
-    m_scanBtn = makeBtn(tr("智能检索"));
+    m_scanBtn = makeBtn(tr("智能搜"));
     dressBtn(m_scanBtn, icons::SearchClock);
     m_scanBtn->setCheckable(true);
-    m_scanBtn->setToolTip(tr("快速扫描全片，在时间轴标出有目标的片段"));
+    m_scanBtn->setToolTip(tr("智能搜"));
     connect(m_scanBtn, &QToolButton::clicked, this, [this](bool checked) {
         if (checked) {
             startScan();
@@ -678,30 +714,27 @@ void VideoTile::buildControlBar()
     m_snapBtn->setToolTip(tr("抓图"));
     connect(m_snapBtn, &QToolButton::clicked, this, &VideoTile::takeSnapshot);
 
-    m_evidenceBtn = makeBtn(tr("导出证据"));
+    m_evidenceBtn = makeBtn(tr("导证据"));
     dressBtn(m_evidenceBtn, icons::Export);
-    m_evidenceBtn->setToolTip(tr("导出事件列表与截图（HTML + JSON）"));
+    m_evidenceBtn->setToolTip(tr("导证据"));
     connect(m_evidenceBtn, &QToolButton::clicked, this, [this]() {
         emit evidenceExportRequested(m_channel);
     });
 
     // ---- assemble ----
-    // 顶部 AI 层：AI 检查 / 采集 / OCR / ROI / 智能检索 / 导出证据
+    // 顶部 AI 层：AI 检查 / 采集 / 文字识别 / 区域框选 / 智能检索 / 导出证据
+    // 窗格够宽时按钮带中文名称，小窗格自动退回纯图标 + 悬停提示。
+    const QVector<QToolButton *> aiButtons = {m_aiBtn, m_captureBtn, m_ocrBtn,
+                                              m_roiBtn, m_scanBtn, m_evidenceBtn};
     if (auto *aiLay = m_aiBar ? qobject_cast<QHBoxLayout *>(m_aiBar->layout()) : nullptr) {
-        aiLay->addWidget(m_aiBtn);
-        aiLay->addWidget(m_captureBtn);
-        aiLay->addWidget(m_ocrBtn);
-        aiLay->addWidget(m_roiBtn);
-        aiLay->addWidget(m_scanBtn);
-        aiLay->addWidget(m_evidenceBtn);
+        for (QToolButton *b : aiButtons) {
+            aiLay->addWidget(b);
+        }
     } else {
         // 无渲染面时（异常路径）退回底栏，避免按钮成为无布局的野控件。
-        row->addWidget(m_aiBtn);
-        row->addWidget(m_captureBtn);
-        row->addWidget(m_ocrBtn);
-        row->addWidget(m_roiBtn);
-        row->addWidget(m_scanBtn);
-        row->addWidget(m_evidenceBtn);
+        for (QToolButton *b : aiButtons) {
+            row->addWidget(b);
+        }
     }
 
     // 底部播放器层：名称 / 放大 / 锐化 / 降噪 / 抓图 / 单画面 / 关闭
@@ -713,6 +746,8 @@ void VideoTile::buildControlBar()
     dot->setObjectName(QStringLiteral("BarDot"));
     dot->setFixedSize(6, 6);
     row->insertWidget(0, dot);
+    row->addWidget(m_muteBtn);
+    addSep();
     row->addWidget(m_zoomBtn);
     row->addWidget(m_sharpenBtn);
     row->addWidget(m_denoiseBtn);
@@ -721,8 +756,8 @@ void VideoTile::buildControlBar()
 
     auto *maxBtn = new QToolButton(m_footer);
     maxBtn->setObjectName(QStringLiteral("BarBtn"));
-    maxBtn->setIcon(barIcon(icons::Layout1));
-    maxBtn->setIconSize(QSize(16, 16));
+    maxBtn->setIcon(barIcon(icons::Expand));
+    maxBtn->setIconSize(QSize(18, 18));
     maxBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
     maxBtn->setToolTip(tr("单画面"));
     maxBtn->setCursor(Qt::PointingHandCursor);
@@ -735,7 +770,7 @@ void VideoTile::buildControlBar()
     closeBtn->setObjectName(QStringLiteral("BarBtn"));
     closeBtn->setProperty("role", QStringLiteral("close"));
     closeBtn->setIcon(barIcon(icons::Close, true));
-    closeBtn->setIconSize(QSize(16, 16));
+    closeBtn->setIconSize(QSize(18, 18));
     closeBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
     closeBtn->setToolTip(tr("关闭"));
     closeBtn->setCursor(Qt::PointingHandCursor);
@@ -829,11 +864,15 @@ void VideoTile::positionControlBar()
     // 小窗格只把 transport（回放进度条）收进 hover，避免 16 宫格太挤。
     const bool small = r.width() < 380 || r.height() < 150;
     const int margin = 8;
-    // 底部播放器条：通栏贴底；顶部 AI 条：右上角悬浮，默认半透明，
-    // 仅鼠标悬停窗格时完全显现，避免长期遮挡摄像头 OSD。
+    // 画面铺满整个窗格（无黑边），所以底部条也改成悬浮玻璃条：离边 8px、
+    // 圆角、半透明，悬停窗格时加深到接近不透明，保证文字可读。
     const int fh = qMax(30, m_footer->sizeHint().height());
-    const int fy = r.height() - fh;
-    m_footer->setGeometry(0, fy, r.width(), fh);
+    const int fy = r.height() - fh - margin;
+    const int fw = qMax(60, r.width() - 2 * margin);
+    m_footer->setGeometry(qMax(0, (r.width() - fw) / 2), fy, fw, fh);
+    m_footer->setProperty("hovered", m_hovered);
+    m_footer->style()->unpolish(m_footer);
+    m_footer->style()->polish(m_footer);
     m_footer->show();
     m_footer->raise();
 
@@ -876,6 +915,24 @@ void VideoTile::positionControlBar()
     if (m_selRing && m_selected) {
         m_selRing->raise();
     }
+}
+
+void VideoTile::updateMuteUi()
+{
+    if (!m_muteBtn) {
+        return;
+    }
+    // Rest = speaker with waves, active/checked = crossed-out speaker, both in
+    // the same two-tone scheme as the other bar actions.
+    const QColor rest(0xC7, 0xCD, 0xD4);
+    const QColor active(0x8A, 0xB4, 0xF8);
+    QIcon ic;
+    ic.addPixmap(icons::glyph(icons::VolumeOn, rest, 18), QIcon::Normal, QIcon::Off);
+    ic.addPixmap(icons::glyph(icons::VolumeOff, active, 18), QIcon::Normal, QIcon::On);
+    ic.addPixmap(icons::glyph(icons::VolumeOff, active, 18), QIcon::Active, QIcon::On);
+    m_muteBtn->setIcon(ic);
+    m_muteBtn->setIconSize(QSize(18, 18));
+    m_muteBtn->setToolTip(m_muted ? tr("取消静音") : tr("静音"));
 }
 
 void VideoTile::updateEvidenceBadge()
@@ -1085,7 +1142,7 @@ void VideoTile::setAnalysisResult(const zp::AnalysisResult &result)
             QVector<AnalysisBox> shown;
             shown.reserve(result.boxes.size());
             for (const AnalysisBox &b : result.boxes) {
-                if (b.score >= m_aiMinScore) {
+                if (b.score >= m_aiMinScore && m_aiClasses.contains(b.classId)) {
                     shown.append(b);
                 }
             }
@@ -1151,9 +1208,10 @@ void VideoTile::setAiSkipEnabled(bool on)
     if (!on && m_aiOverlay) {
         m_aiOverlay->clear();   // hide boxes immediately when AI check is off
     }
-    if (m_aiBtn && m_aiBtn->isChecked() != on) {
-        m_aiBtn->setChecked(on);
+    if (m_aiPanel) {
+        m_aiPanel->setAiCheckEnabled(on);
     }
+    updateAiActiveState();
     updateCaptureUi();
 }
 
@@ -1180,9 +1238,8 @@ void VideoTile::setClassNames(const QStringList &names)
 void VideoTile::setCaptureEnabled(bool on)
 {
     m_captureEnabled = on;
-    if (m_captureAct && m_captureAct->isChecked() != on) {
-        const QSignalBlocker blocker(m_captureAct);
-        m_captureAct->setChecked(on);
+    if (m_aiPanel) {
+        m_aiPanel->setCaptureEnabled(on);
     }
     updateCaptureUi();
 }
@@ -1217,97 +1274,120 @@ void VideoTile::buildAiMenu()
         return;
     }
     if (m_aiMenu) {
-        m_aiBtn->setMenu(nullptr);
+        m_aiMenu->hide();
         m_aiMenu->deleteLater();
         m_aiMenu = nullptr;
+        m_aiPanel = nullptr;
     }
-    auto *aiMenu = new QMenu(m_aiBtn);
+
+    // A frameless, translucent QMenu is just the popup host here: all of the
+    // visuals come from the embedded card (see AiCheckPanel), so no native
+    // menu chrome, padding or drop shadow leaks through.
+    auto *aiMenu = new QMenu(this);
+    aiMenu->setObjectName(QStringLiteral("AiPopoverMenu"));
+    aiMenu->setWindowFlags(aiMenu->windowFlags() | Qt::FramelessWindowHint
+                           | Qt::NoDropShadowWindowHint);
+    aiMenu->setAttribute(Qt::WA_TranslucentBackground, true);
+    aiMenu->setStyleSheet(QStringLiteral(
+        "QMenu#AiPopoverMenu{background:transparent;border:none;padding:0px;margin:0px;}"));
     m_aiMenu = aiMenu;
-    const bool coco = cocoModel();
 
-    if (coco) {
-        aiMenu->addAction(tr("检查目标"))->setEnabled(false);
-        auto addTarget = [this, aiMenu](const QString &label, const QVector<int> &ids,
-                                        bool on) {
-            QAction *a = aiMenu->addAction(label);
-            a->setCheckable(true);
-            a->setChecked(on);
-            connect(a, &QAction::toggled, this, [this, ids](bool on2) {
-                for (int id : ids) {
-                    if (on2) {
-                        m_aiClasses.insert(id);
-                    } else {
-                        m_aiClasses.remove(id);
-                    }
-                }
-                emit statusMessage(m_channel, tr("AI 检查目标已更新"));
-            });
-        };
-        addTarget(tr("人"), {0}, m_aiClasses.contains(0));
-        addTarget(tr("车"), {2, 3, 5, 7}, m_aiClasses.contains(2));
-        addTarget(tr("狗"), {16}, m_aiClasses.contains(16));
-    } else {
-        // Custom / retrained model: its class ids have no COCO meaning, so
-        // "人/车/狗" would be wrong. Every class is a target instead.
-        QAction *note = aiMenu->addAction(tr("自定义类别模型：全部类别参与检查"));
-        note->setEnabled(false);
-    }
+    m_aiPanel = new AiCheckPanel(aiMenu);
+    auto *host = new QWidgetAction(aiMenu);
+    host->setDefaultWidget(m_aiPanel);
+    aiMenu->addAction(host);
 
-    QMenu *scoreMenu = aiMenu->addMenu(tr("相似度阈值"));
-    auto *scoreGroup = new QActionGroup(scoreMenu);
-    scoreGroup->setExclusive(true);
-    const int curPct = qRound(m_aiMinScore * 100.0f);
-    for (int pct : {30, 40, 50, 60, 70, 80}) {
-        QAction *a = scoreMenu->addAction(QStringLiteral("%1%").arg(pct));
-        a->setCheckable(true);
-        a->setActionGroup(scoreGroup);
-        a->setChecked(pct == curPct);
-        connect(a, &QAction::triggered, this, [this, pct]() {
-            m_aiMinScore = pct / 100.0f;
-            QSettings().setValue(QStringLiteral("ai/minScorePct"), pct);
-            emit statusMessage(m_channel, tr("相似度阈值：%1%").arg(pct));
-        });
-    }
-
-    aiMenu->addSeparator();
-    const QString skipText = coco ? tr("无人时快进跳过") : tr("无目标时快进跳过");
-    QAction *skipAct = aiMenu->addAction(skipText);
-    skipAct->setCheckable(true);
-    skipAct->setChecked(m_aiSkipEmpty);
-    connect(skipAct, &QAction::toggled, this, [this, skipText](bool on) {
+    connect(m_aiPanel, &AiCheckPanel::aiCheckToggled, this, [this](bool on) {
+        setAiSkipEnabled(on);
+        emit statusMessage(m_channel, on ? tr("AI 检查：开") : tr("AI 检查：关"));
+    });
+    connect(m_aiPanel, &AiCheckPanel::targetsChanged, this, [this](const QSet<int> &ids) {
+        m_aiClasses = ids;
+        emit statusMessage(m_channel, ids.isEmpty()
+                           ? tr("未选择检查目标，检测不会输出结果")
+                           : tr("AI 检查目标已更新"));
+    });
+    connect(m_aiPanel, &AiCheckPanel::thresholdChanged, this, [this](int pct) {
+        m_aiMinScore = pct / 100.0f;
+        QSettings().setValue(QStringLiteral("ai/minScorePct"), pct);
+        emit statusMessage(m_channel, tr("相似度阈值：%1%").arg(pct));
+    });
+    connect(m_aiPanel, &AiCheckPanel::skipEmptyToggled, this, [this](bool on) {
         m_aiSkipEmpty = on;
-        emit statusMessage(m_channel,
-                           on ? tr("%1：开").arg(skipText) : tr("%1：关").arg(skipText));
+        emit statusMessage(m_channel, on ? tr("无目标跳过：开") : tr("无目标跳过：关"));
     });
-    QAction *pauseAct = aiMenu->addAction(tr("检出目标自动暂停"));
-    pauseAct->setCheckable(true);
-    pauseAct->setChecked(m_aiPauseOnHit);
-    connect(pauseAct, &QAction::toggled, this, [this](bool on) {
+    connect(m_aiPanel, &AiCheckPanel::pauseOnHitToggled, this, [this](bool on) {
         m_aiPauseOnHit = on;
-        emit statusMessage(m_channel, on ? tr("检出自动暂停：开") : tr("检出自动暂停：关"));
+        emit statusMessage(m_channel, on ? tr("检出目标暂停：开") : tr("检出目标暂停：关"));
     });
-
-    // Sample collection switch: automatic low-confidence frames + the 采集
-    // button. Off by default; the choice is global (window persists it).
-    aiMenu->addSeparator();
-    m_captureAct = aiMenu->addAction(tr("样本采集（保存失败帧）"));
-    m_captureAct->setCheckable(true);
-    m_captureAct->setChecked(m_captureEnabled);
-    m_captureAct->setToolTip(tr("开启后自动收集低置信帧，并允许用「采集」按钮手动保存当前画面"));
-    connect(m_captureAct, &QAction::toggled, this, [this](bool on) {
+    connect(m_aiPanel, &AiCheckPanel::captureToggled, this, [this](bool on) {
         setCaptureEnabled(on);
         emit captureSettingChanged(on);
         emit statusMessage(m_channel, on ? tr("样本采集：开") : tr("样本采集：关"));
     });
 
-    m_aiBtn->setMenu(aiMenu);
-    // Main area toggles the switch, the caret opens the settings.
-    m_aiBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    syncAiPanel();
+}
+
+void VideoTile::syncAiPanel()
+{
+    if (!m_aiPanel) {
+        return;
+    }
+    m_aiPanel->setCustomModel(!cocoModel());
+    m_aiPanel->setTargets(m_aiClasses);
+    m_aiPanel->setThresholdPct(qRound(m_aiMinScore * 100.0f));
+    m_aiPanel->setAiCheckEnabled(m_aiSkip);
+    m_aiPanel->setSkipEmpty(m_aiSkipEmpty);
+    m_aiPanel->setPauseOnHit(m_aiPauseOnHit);
+    m_aiPanel->setCaptureEnabled(m_captureEnabled);
+}
+
+void VideoTile::showAiPanel()
+{
+    if (!m_aiMenu || !m_aiPanel || !m_aiBtn) {
+        return;
+    }
+    if (m_aiMenu->isVisible()) {
+        m_aiMenu->hide();
+        return;
+    }
+    syncAiPanel();
+
+    const QSize hint = m_aiPanel->sizeHint();
+    const QPoint anchor = m_aiBtn->mapToGlobal(QPoint(m_aiBtn->width(), m_aiBtn->height()));
+    // Align the card's right edge with the button and leave a 6 px gap; the
+    // panel's transparent shadow margin is compensated for.
+    m_aiMenu->popup(QPoint(anchor.x() - hint.width() + AiCheckPanel::kShadow,
+                           anchor.y() + 6 - AiCheckPanel::kShadow));
+}
+
+void VideoTile::updateAiActiveState()
+{
+    if (!m_aiBtn) {
+        return;
+    }
+    const QColor rest(0xC7, 0xCD, 0xD4);
+    const QColor hot(0x8A, 0xB4, 0xF8);
+    QIcon ic;
+    ic.addPixmap(icons::glyph(icons::AiScan, rest, 18), QIcon::Normal, QIcon::Off);
+    ic.addPixmap(icons::glyph(icons::AiScan, hot, 18), QIcon::Normal, QIcon::On);
+    ic.addPixmap(icons::glyph(icons::AiScan, hot, 18), QIcon::Active, QIcon::Off);
+    m_aiBtn->setIcon(ic);
+    m_aiBtn->setIconSize(QSize(18, 18));
+    m_aiBtn->setProperty("aiActive", m_aiSkip);
+    m_aiBtn->style()->unpolish(m_aiBtn);
+    m_aiBtn->style()->polish(m_aiBtn);
 }
 
 void VideoTile::updateAiSkip(double pts, const QVector<AnalysisBox> &boxes)
 {
     if (!m_aiSkip || !m_player || !m_player->supportsPlaybackControl()) {
+        return;
+    }
+    // No target selected means nothing can ever be "present"; skipping would
+    // race through the whole file, so the strategy stays inert.
+    if (m_aiClasses.isEmpty()) {
         return;
     }
     if (m_player->state() != MediaState::Playing) {

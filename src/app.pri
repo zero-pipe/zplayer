@@ -18,6 +18,7 @@ SOURCES += \
     player/video_grid.cpp \
     ui/theme.cpp \
     ui/icons.cpp \
+    ui/ai_check_panel.cpp \
     ui/ui_kit.cpp \
     ui/analysis_overlay.cpp \
     ui/timeline_slider.cpp \
@@ -59,6 +60,7 @@ HEADERS += \
     player/video_grid.h \
     ui/theme.h \
     ui/icons.h \
+    ui/ai_check_panel.h \
     ui/ui_kit.h \
     ui/analysis_overlay.h \
     ui/timeline_slider.h \

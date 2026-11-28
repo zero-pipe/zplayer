@@ -247,6 +247,10 @@ MpvMediaPlayer::MpvMediaPlayer(QObject *parent)
         mpv_set_option_string(m_holder->h, "terminal", "no");
         mpv_set_option_string(m_holder->h, "keep-open", "yes");
         mpv_set_option_string(m_holder->h, "hwdec", "auto-safe");
+        // Fill the tile: the picture is scaled up until it covers the whole
+        // render surface and the overflow is cropped, so no letterbox bars
+        // remain inside a pane whose aspect differs from the stream.
+        mpv_set_option_string(m_holder->h, "panscan", "1.0");
 
         // --- Live latency budget ---
         // mpv's stock defaults (demuxer-readahead-secs=1 + cache-secs=auto)
@@ -398,6 +402,7 @@ void MpvMediaPlayer::stop()
 
 void MpvMediaPlayer::setMuted(bool muted)
 {
+    qInfo().noquote() << "[audio] mute" << (muted ? "on" : "off");
     if (m_holder && m_holder->h) {
         mpv_set_property_string(m_holder->h, "mute", muted ? "yes" : "no");
     }

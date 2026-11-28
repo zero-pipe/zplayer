@@ -31,6 +31,7 @@ namespace zp {
 
 class AnalysisOverlay;
 class TimelineSlider;
+class AiCheckPanel;
 
 // One stream cell: a media engine renderer behind a status overlay, with a
 // floating header (title, state, close/maximize). Depends only on IMediaPlayer,
@@ -100,6 +101,12 @@ public:
     // button). Result arrives via snapshotTaken().
     void requestSnapshot();
 
+    // Dev/test hooks: open the AI check popover and hand out its window so a
+    // screenshot can be taken without simulating mouse input.
+    void openAiPopover();
+    QWidget *aiPopover() const;
+    void openAiThresholdPopup();
+
     // Class names of the active detector (index order). Empty/COCO-80 keeps the
     // person/vehicle/animal semantics; anything else is treated as a custom
     // model where every class counts as a generic "target".
@@ -157,6 +164,7 @@ private:
     void setState(State state, const QString &text);
     void refreshSelectionStyle();
     void updateSelectionRing();
+    void updateMuteUi();
     void takeSnapshot();
 
     // Transport bar (only built when the engine supports playback control).
@@ -181,6 +189,12 @@ private:
     void applyDefaultAiClasses();
     bool cocoModel() const;
     void buildAiMenu();
+    // Show / hide the AI check popover anchored under the shield button.
+    void showAiPanel();
+    // Blue "active" skin for the shield while AI check is running.
+    void updateAiActiveState();
+    // Push the tile's stored settings into the popover controls.
+    void syncAiPanel();
 
     // Smart timeline: scan driving.
     void finishScan();
@@ -200,6 +214,8 @@ private:
     QPushButton *m_retryBtn = nullptr;
     QLabel *m_status = nullptr;
     QFrame *m_selRing = nullptr;        // accent ring marking the active tile
+    QToolButton *m_muteBtn = nullptr;    // audio on/off for this stream
+    bool m_muted = false;
     QWidget *m_footer = nullptr;        // bottom player action bar
     QWidget *m_aiBar = nullptr;         // top floating AI analysis bar
 
@@ -217,8 +233,8 @@ private:
     QToolButton *m_snapBtn = nullptr;
     QToolButton *m_aiBtn = nullptr;
     QMenu *m_aiMenu = nullptr;
+    AiCheckPanel *m_aiPanel = nullptr;
     QToolButton *m_captureBtn = nullptr;
-    QAction *m_captureAct = nullptr;
     QToolButton *m_evidenceBtn = nullptr;
     QToolButton *m_roiBtn = nullptr;
     QToolButton *m_ocrBtn = nullptr;
