@@ -21,6 +21,8 @@ class QPushButton;
 class QSlider;
 class QMenu;
 class QAction;
+class QFrame;
+class QResizeEvent;
 class TimelineSlider;
 class QHBoxLayout;
 QT_END_NAMESPACE
@@ -148,11 +150,13 @@ signals:
 protected:
     void mousePressEvent(QMouseEvent *e) override;
     void mouseDoubleClickEvent(QMouseEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setState(State state, const QString &text);
     void refreshSelectionStyle();
+    void updateSelectionRing();
     void takeSnapshot();
 
     // Transport bar (only built when the engine supports playback control).
@@ -195,6 +199,7 @@ private:
     QLabel *m_overlayText = nullptr;
     QPushButton *m_retryBtn = nullptr;
     QLabel *m_status = nullptr;
+    QFrame *m_selRing = nullptr;        // accent ring marking the active tile
     QWidget *m_footer = nullptr;        // bottom player action bar
     QWidget *m_aiBar = nullptr;         // top floating AI analysis bar
 

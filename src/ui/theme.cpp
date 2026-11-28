@@ -154,6 +154,14 @@ void ThemeManager::restyle()
     pal.setColor(QPalette::ToolTipBase, m_tokens.bgElevated);
     pal.setColor(QPalette::ToolTipText, m_tokens.text);
     pal.setColor(QPalette::PlaceholderText, m_tokens.muted);
+    // Bevel roles: the Fusion style paints tab/frame edges from Light/Mid/Dark.
+    // Left at Qt's defaults they stay bright, which shows up as a stray white
+    // 1px highlight along tab bars in the dark theme (invisible in light mode).
+    pal.setColor(QPalette::Light, m_tokens.bgPanel.lighter(115));
+    pal.setColor(QPalette::Midlight, m_tokens.border);
+    pal.setColor(QPalette::Mid, m_tokens.border);
+    pal.setColor(QPalette::Dark, m_tokens.borderStrong);
+    pal.setColor(QPalette::Shadow, m_tokens.bgRoot.darker(130));
     pal.setColor(QPalette::Disabled, QPalette::Text, m_tokens.muted);
     pal.setColor(QPalette::Disabled, QPalette::ButtonText, m_tokens.muted);
     pal.setColor(QPalette::Disabled, QPalette::WindowText, m_tokens.muted);

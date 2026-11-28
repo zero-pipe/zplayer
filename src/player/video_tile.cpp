@@ -95,6 +95,15 @@ VideoTile::VideoTile(const ChannelRef &ch, const QString &name, bool ptzCapable,
     }
     m_stage->addWidget(m_overlay);
 
+    // Accent ring that marks the active tile. It is a transparent overlay on
+    // top of the picture (and the floating bars) instead of a stylesheet border
+    // on this widget: a border would inset the video by its width and make the
+    // picture jump whenever the selection moved.
+    m_selRing = new QFrame(this);
+    m_selRing->setObjectName(QStringLiteral("TileSelectionRing"));
+    m_selRing->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_selRing->hide();
+
     // Detection overlay sits directly on the video surface. Boxes are
     // normalized to the full tile frame (bars included), so it simply fills the
     // video widget.
@@ -329,7 +338,28 @@ void VideoTile::refreshSelectionStyle()
     setProperty("selected", m_selected);
     style()->unpolish(this);
     style()->polish(this);
+    updateSelectionRing();
     update();
+}
+
+void VideoTile::updateSelectionRing()
+{
+    if (!m_selRing) {
+        return;
+    }
+    m_selRing->setGeometry(rect());
+    if (m_selected) {
+        m_selRing->show();
+        m_selRing->raise();
+    } else {
+        m_selRing->hide();
+    }
+}
+
+void VideoTile::resizeEvent(QResizeEvent *e)
+{
+    QWidget::resizeEvent(e);
+    updateSelectionRing();
 }
 
 void VideoTile::mousePressEvent(QMouseEvent *e)
@@ -840,6 +870,11 @@ void VideoTile::positionControlBar()
         m_transportBar->raise();
     } else if (m_transportBar) {
         m_transportBar->hide();
+    }
+
+    // The bars above were just raised; keep the selection ring on top of them.
+    if (m_selRing && m_selected) {
+        m_selRing->raise();
     }
 }
 

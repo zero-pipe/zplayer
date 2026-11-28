@@ -504,16 +504,16 @@ QLabel#GridEmptySlotHint { color: %muted%; font-size: 11px; }
    Same one-pixel skeleton color as the region dividers. */
 QWidget#GridHost { background: %borderStrong%; }
 
-QWidget#VideoTile {
-    background: %videoBg%;
-    border: 1px solid %borderStrong%;
+/* VideoTile is a QWidget subclass, so Qt does not paint stylesheet borders or
+   backgrounds on it (WA_StyledBackground stays off for subclasses). The active
+   tile is therefore marked by an overlay ring painted above the picture. */
+QWidget#VideoTile { background: transparent; }
+
+QFrame#TileSelectionRing {
+    background: transparent;
+    border: 2px solid %accent%;
     border-radius: 6px;
 }
-QWidget#VideoTile[selected="true"] {
-    border: 2px solid %accent%;
-    background: %accentSoft%;
-}
-QWidget#VideoTile[selected="false"]:hover { border-color: %accent%; }
 
 QWidget#TileFooter {
     background: %bgPanel%;
