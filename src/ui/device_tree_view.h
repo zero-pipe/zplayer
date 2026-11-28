@@ -8,9 +8,9 @@
 QT_BEGIN_NAMESPACE
 class QLineEdit;
 class QLabel;
-class QTreeView;
 class QStandardItemModel;
 class QStandardItem;
+class QPainter;
 QT_END_NAMESPACE
 
 namespace zp {
@@ -51,7 +51,10 @@ private:
     QLineEdit *m_filter = nullptr;
     QLabel *m_header = nullptr;
     PillSegment *m_groupPill = nullptr;   // 搜索框与树之间的二级维度滑块
-    QTreeView *m_view = nullptr;
+
+    // Branch-painting delegate (see .cpp): draws ▶ / ▼ for folders only.
+    class BranchTreeView;
+    BranchTreeView *m_view = nullptr;
     QStandardItemModel *m_model = nullptr;
     QHash<QString, QStandardItem *> m_parentMap;
 };

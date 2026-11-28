@@ -155,11 +155,24 @@ QToolButton#TreeViewTab:checked {
     color: %accent%;
     font-weight: 600;
 }
-QLabel#TreeCount { color: %muted%; font-size: 10px; font-family: %monoFamily%; }
+/* 在线通道数：12px 胶囊徽章，数字高亮，和标题垂直居中对齐。 */
+QLabel#TreeCount {
+    color: %text2%;
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 9px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
 /* 回放检索抽屉：左栏底部，与资源树用细分隔线隔开。 */
 QWidget#PlaybackFilter {
     background: %bgInput%;
     border-top: 1px solid %divider%;
+}
+QLabel#PlaybackFilterLabel {
+    color: %text2%;
+    font-size: 13px;
 }
 /* 一级模式 Tab（实时预览 / 录像回放）由 ModeTabBar 自绘。 */
 QWidget#ModeTabBar { background: %bgPanel%; border-bottom: 1px solid %divider%; }
@@ -184,6 +197,24 @@ QLineEdit#SearchBox {
     selection-background-color: %accent%;
 }
 QLineEdit#SearchBox:focus { border-color: %accent%; background: %bgPanel%; }
+
+QPushButton#SegItem {
+    background: %bgInput%;
+    border: 1px solid %border%;
+    border-radius: 8px;
+    color: %text2%;
+    text-align: left;
+    padding: 8px 11px;
+    font-size: 11.5px;
+    font-family: %monoFamily%;
+}
+QPushButton#SegItem:hover { border-color: %accentSoft2%; background: %bgHover%; color: %text%; }
+QPushButton#SegItem:checked {
+    background: %accentSoft%;
+    border-color: %accent%;
+    color: %accent%;
+    font-weight: 600;
+}
 
 QToolButton#LayoutBtn {
     background: transparent;

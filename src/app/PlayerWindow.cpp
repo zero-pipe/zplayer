@@ -62,6 +62,7 @@
 #include <QDateTime>
 #include <QTime>
 #include <QWidget>
+#include <limits>
 
 namespace zp {
 
@@ -475,23 +476,9 @@ void PlayerWindow::buildUi()
         auto *pfLay = new QVBoxLayout(m_pbFilter);
         pfLay->setContentsMargins(10, 10, 10, 8);
         pfLay->setSpacing(6);
-        auto *locRow = new QHBoxLayout;
-        auto *locLbl = new QLabel(tr("录像检索"), m_pbFilter);
-        locLbl->setObjectName(QStringLiteral("PageSub"));
-        m_pbStorage = new QComboBox(m_pbFilter);
-        m_pbStorage->addItem(tr("云端存储"), QStringLiteral("cloud"));
-        m_pbStorage->addItem(tr("设备存储"), QStringLiteral("device"));
-        m_pbStorage->setToolTip(tr("云端存储 / 设备存储（摄像头存储卡）"));
-        connect(m_pbStorage, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &PlayerWindow::queryPlaybackDay);
-        locRow->addWidget(locLbl);
-        locRow->addStretch(1);
-        locRow->addWidget(m_pbStorage);
-        pfLay->addLayout(locRow);
-
         auto *dateRow = new QHBoxLayout;
         auto *dLbl = new QLabel(tr("查询日期"), m_pbFilter);
-        dLbl->setObjectName(QStringLiteral("PageSub"));
+        dLbl->setObjectName(QStringLiteral("PlaybackFilterLabel"));
         m_pbDate = new QDateEdit(QDate::currentDate(), m_pbFilter);
         m_pbDate->setCalendarPopup(true);
         m_pbDate->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
@@ -693,14 +680,16 @@ void PlayerWindow::buildUi()
         };
         auto *prevBtn = mkBtn(tr("⏮ 上一段"));
         connect(prevBtn, &QToolButton::clicked, this, [this]() {
-            // 播当前片段之前的片段
+            // 从当前时刻往前找：靠近段首时跳上一段末尾，否则回到本段开头。
             int idx = -1;
             for (int i = 0; i < m_pbSegs.size(); ++i) {
                 if (m_pbSegs[i].recordId == m_pbRecordId) { idx = i; break; }
             }
             if (idx > 0) {
                 const RecordingSegment s = m_pbSegs.at(idx - 1);
-                onPbSegmentClicked(s.recordId, s.startMs);
+                seekPlayback(s.startMs);
+            } else if (idx == 0) {
+                seekPlayback(m_pbSegs.at(0).startMs);
             }
         });
         m_pbPlayBtn = mkBtn(tr("⏸ 暂停"));
@@ -1527,6 +1516,7 @@ void PlayerWindow::setMode(int mode)
         if (m_pbTimer) m_pbTimer->stop();
         if (m_pbGrid) m_pbGrid->stopAll();
         m_pbRecordId = 0;
+        if (m_pbTimeline) m_pbTimeline->setActiveSegment(0);
         if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
     } else {
         // 进入回放：优先用当前选中的实时通道作为回放对象
@@ -1559,11 +1549,10 @@ void PlayerWindow::queryPlaybackDay()
     const QDate d = m_pbDate ? m_pbDate->date() : QDate::currentDate();
     m_pbDayStart = QDateTime(d, QTime(0, 0, 0)).toMSecsSinceEpoch();
     m_pbDayEnd = m_pbDayStart + 24LL * 3600 * 1000;
-    // 设备存储（摄像头 SD 卡）的查询路径待平台接口落地后接入；当前下拉
-    // 只做 UI 占位，检索仍走云端入口。
     if (m_pbTimeline) {
         m_pbTimeline->setDay(m_pbDayStart, m_pbDayEnd);
         m_pbTimeline->setSegments(QList<RecordingSegment>());
+        m_pbTimeline->setActiveSegment(0);
     }
     if (m_pbSegHeader) {
         m_pbSegHeader->setText(tr("查询中…"));
@@ -1642,22 +1631,40 @@ void PlayerWindow::rebuildSegmentList(const QList<RecordingSegment> &segments)
         showPbEmptyState(tr("该日期暂无录像"), tr("请更换日期或选择其他通道后重新检索"));
         return;
     }
+    QList<QPushButton *> segButtons;
     for (const RecordingSegment &s : segments) {
         auto *b = new QPushButton(host);
         b->setObjectName(QStringLiteral("SegItem"));
+        b->setCheckable(true);
+        b->setProperty("recordId", QVariant::fromValue(s.recordId));
         b->setText(QStringLiteral("%1 - %2    %3")
             .arg(QDateTime::fromMSecsSinceEpoch(s.startMs).toString(QStringLiteral("HH:mm:ss")),
                  QDateTime::fromMSecsSinceEpoch(s.endMs).toString(QStringLiteral("HH:mm:ss")),
                  s.container.isEmpty() ? tr("录像") : s.container.toUpper()));
         b->setCursor(Qt::PointingHandCursor);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        b->setToolTip(tr("点击回放该片段"));
+        b->setToolTip(tr("点击跳转到该片段起点"));
         const qlonglong rid = s.recordId;
         const qint64 st = s.startMs;
         connect(b, &QPushButton::clicked, this, [this, rid, st]() {
             onPbSegmentClicked(rid, st);
         });
         m_pbSegLay->insertWidget(m_pbSegLay->count() - 1, b);
+        segButtons.append(b);
+    }
+    // 检索结果刷新后恢复当前片段的列表高亮。
+    for (QPushButton *b : segButtons) {
+        b->setChecked(b->property("recordId").toLongLong() == m_pbRecordId);
+    }
+}
+
+void PlayerWindow::highlightSegmentInList(qlonglong recordId)
+{
+    if (!m_pbSegLay) return;
+    for (int i = 0; i < m_pbSegLay->count(); ++i) {
+        if (QPushButton *b = qobject_cast<QPushButton *>(m_pbSegLay->itemAt(i)->widget())) {
+            b->setChecked(b->property("recordId").toLongLong() == recordId);
+        }
     }
 }
 
@@ -1666,12 +1673,83 @@ void PlayerWindow::onPbSegmentClicked(qlonglong recordId, qint64 startMs)
     if (recordId <= 0) {
         return;
     }
-    m_pbRecordId = recordId;
-    m_pbSegStart = startMs;
-    if (m_pbTimeline) m_pbTimeline->setPosition(startMs);
-    toastInfo(tr("起播：%1").arg(
-        QDateTime::fromMSecsSinceEpoch(startMs).toString(QStringLiteral("HH:mm:ss"))));
-    m_api->startPlayback(m_pbChannel, recordId, startMs);
+    // 列表点击等价于时间轴 seek：统一走一条路径，保证高亮/状态一致。
+    seekPlayback(startMs);
+}
+
+const RecordingSegment *PlayerWindow::pbSegmentFor(qint64 absMs) const
+{
+    for (const RecordingSegment &s : m_pbSegs) {
+        if (absMs >= s.startMs && absMs < s.endMs) {
+            return &s;
+        }
+    }
+    // 空隙里取最近的一段（左侧优先），拖动时总能给出可播放目标。
+    const RecordingSegment *best = nullptr;
+    qint64 bestGap = std::numeric_limits<qint64>::max();
+    for (const RecordingSegment &s : m_pbSegs) {
+        const qint64 gap = absMs < s.startMs ? s.startMs - absMs : absMs - s.endMs;
+        if (gap < bestGap) {
+            bestGap = gap;
+            best = &s;
+        }
+    }
+    return best;
+}
+
+void PlayerWindow::seekPlayback(qint64 absMs, bool fromTimeline)
+{
+    if (!m_pbChannel.isValid()) {
+        toastInfo(tr("请先在左侧选择要回放的通道"));
+        return;
+    }
+    if (m_pbSegs.isEmpty()) {
+        if (!fromTimeline) {
+            queryPlaybackDay();
+            toastInfo(tr("请先检索录像，然后点击时间轴选择播放位置"));
+        } else {
+            toastInfo(tr("当前日期没有可播放的录像片段"));
+        }
+        return;
+    }
+    const RecordingSegment *seg = pbSegmentFor(absMs);
+    if (!seg || seg->recordId <= 0) {
+        toastInfo(tr("该时刻没有可播放的录像片段"));
+        return;
+    }
+    // 目标时刻可能不在片段内（空隙）：钳到片段边界，避免服务端拒绝非法 startTime。
+    const qint64 target = qBound(seg->startMs, absMs, qMax(seg->startMs, seg->endMs - 1));
+    m_pbRecordId = seg->recordId;
+    m_pbSegStart = target;
+    m_pbSegDur = seg->durationMs > 0 ? seg->durationMs
+                                     : qMax<qint64>(1, seg->endMs - seg->startMs);
+    if (m_pbTimeline) {
+        m_pbTimeline->setPosition(target);
+        m_pbTimeline->setActiveSegment(seg->recordId);
+    }
+    highlightSegmentInList(seg->recordId);
+    if (m_pbTimeLabel) {
+        m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(target)
+                                   .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+    }
+
+    // 平台没有运行中 seek：停旧会话，以目标绝对时间重新起播。
+    if (m_pbRecordId > 0) {
+        m_api->stopPlayback(m_pbChannel, m_pbRecordId);
+    }
+    if (m_pbGrid) m_pbGrid->closeStream(m_pbRef);
+    m_pbPlaying = false;
+    m_pbLastRealPos = -1.0;
+    m_pbStallTicks = 0;
+    m_pbStallNotified = false;
+    if (m_pbTimer) m_pbTimer->stop();
+    if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
+    m_api->startPlayback(m_pbChannel, seg->recordId, target);
+}
+
+void PlayerWindow::onPbSeek(qint64 absMs)
+{
+    seekPlayback(absMs, true);
 }
 
 void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
@@ -1684,10 +1762,11 @@ void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
     }
     m_pbRecordId = recordId;
     m_pbSegStart = segStartMs;
-    m_pbSegDur = segDurationMs > 0 ? segDurationMs : 1;
-    m_pbPlayBasePos = segStartMs;
-    m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
+    m_pbSegDur = segDurationMs > 0 ? segDurationMs : m_pbSegDur;
     m_pbPlaying = true;
+    m_pbLastRealPos = -1.0;
+    m_pbStallTicks = 0;
+    m_pbStallNotified = false;
     if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
     if (m_pbTimer) m_pbTimer->start(500);
 
@@ -1702,48 +1781,41 @@ void PlayerWindow::onPlaybackStarted(const ChannelRef &ch, qlonglong recordId,
         m_pbGrid->closeStream(m_pbRef);
         m_pbGrid->openStream(m_pbRef, name, false, url);
     }
-    if (m_pbTimeline) m_pbTimeline->setPosition(segStartMs);
+    if (m_pbTimeline) {
+        m_pbTimeline->setPosition(segStartMs);
+        m_pbTimeline->setActiveSegment(recordId);
+    }
     if (m_pbTimeLabel) {
         m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(segStartMs)
                                    .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
     }
 }
 
-void PlayerWindow::onPbSeek(qint64 absMs)
-{
-    if (m_pbRecordId <= 0) {
-        toastInfo(tr("请先选择一个录像片段"));
-        return;
-    }
-    // 不做运行中 seek：停掉旧会话后以目标绝对时间重新起播，完全复用 start 路径。
-    // 这样服务端只会在新 poller 会话上重定位 demux/fifo，不会跨线程改正在出流的 reader。
-    const qlonglong rid = m_pbRecordId;
-    m_api->stopPlayback(m_pbChannel, rid);
-    if (m_pbGrid) m_pbGrid->closeStream(m_pbRef);
-    m_pbPlaying = false;
-    if (m_pbTimer) m_pbTimer->stop();
-    onPbSegmentClicked(rid, absMs);
-}
-
 void PlayerWindow::onPbPlayPause()
 {
-    if (m_pbRecordId <= 0) {
-        toastInfo(tr("请先选择一个录像片段"));
+    VideoTile *tile = m_pbGrid ? m_pbGrid->activeTile() : nullptr;
+    IMediaPlayer *player = tile ? tile->player() : nullptr;
+    if (m_pbRecordId <= 0 || !player || !player->supportsPlaybackControl()) {
+        toastInfo(tr("请先拖动时间轴选择录像位置"));
         if (m_pbPlayBtn) m_pbPlayBtn->setChecked(false);
         return;
     }
-    // 仅暂停/继续进度跟随（服务端播放流不中断）。
-    if (m_pbPlaying) {
-        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_pbPlayBaseWall;
-        m_pbPlayBasePos += elapsed;
+    if (player->state() == MediaState::Paused) {
+        player->play();
+        m_pbPlaying = true;
+        m_pbLastRealPos = -1.0;
+        m_pbStallTicks = 0;
+        if (m_pbTimer) m_pbTimer->start(500);
+        if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(false); m_pbPlayBtn->setText(tr("⏸ 暂停")); }
+    } else {
+        player->pause();
         m_pbPlaying = false;
         if (m_pbTimer) m_pbTimer->stop();
-        if (m_pbPlayBtn) m_pbPlayBtn->setText(tr("▶ 继续"));
-    } else {
-        m_pbPlayBaseWall = QDateTime::currentMSecsSinceEpoch();
-        m_pbPlaying = true;
-        if (m_pbTimer) m_pbTimer->start(500);
-        if (m_pbPlayBtn) m_pbPlayBtn->setText(tr("⏸ 暂停"));
+        if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(true); m_pbPlayBtn->setText(tr("▶ 继续")); }
+        const double pos = player->position();
+        if (pos >= 0.0 && m_pbTimeline) {
+            m_pbTimeline->setPosition(m_pbSegStart + qint64(pos * 1000.0));
+        }
     }
 }
 
@@ -1752,15 +1824,38 @@ void PlayerWindow::onPbTick()
     if (!m_pbPlaying) {
         return;
     }
-    const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_pbPlayBaseWall;
-    qint64 pos = m_pbPlayBasePos + elapsed;
-    const qint64 segEnd = m_pbSegStart + m_pbSegDur;
-    if (pos > segEnd) pos = segEnd;
+    VideoTile *tile = m_pbGrid ? m_pbGrid->activeTile() : nullptr;
+    IMediaPlayer *player = tile ? tile->player() : nullptr;
+    if (!player) {
+        return;
+    }
+    const double posSec = player->position();
+    if (posSec < 0.0) {
+        return; // 流还未真正建立，不要把假位置写到界面上
+    }
+    // mpv 在流结束时 keep-open 会自己暂停：同步按钮状态，避免界面显示"暂停"实际已停。
+    if (player->state() == MediaState::Paused && m_pbPlaying) {
+        m_pbPlaying = false;
+        if (m_pbTimer) m_pbTimer->stop();
+        if (m_pbPlayBtn) { m_pbPlayBtn->setChecked(true); m_pbPlayBtn->setText(tr("▶ 继续")); }
+    }
+    const qint64 pos = m_pbSegStart + qint64(posSec * 1000.0);
     if (m_pbTimeline) m_pbTimeline->setPosition(pos);
     if (m_pbTimeLabel) {
         m_pbTimeLabel->setText(QDateTime::fromMSecsSinceEpoch(pos)
                                    .toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
     }
+
+    // 位置连续不动说明底层流没有前进：明确告诉用户，而不是继续画假时钟。
+    if (m_pbLastRealPos >= 0.0 && posSec <= m_pbLastRealPos + 0.01) {
+        if (++m_pbStallTicks >= 12 && !m_pbStallNotified) { // 约 6 秒无进展
+            m_pbStallNotified = true;
+            toastInfo(tr("回放画面未前进：流未推送或该时段无数据，请重新拖动时间轴或检索"));
+        }
+    } else {
+        m_pbStallTicks = 0;
+    }
+    m_pbLastRealPos = posSec;
 }
 
 void PlayerWindow::onPlaybackStopped(const ChannelRef &ch, qlonglong recordId)

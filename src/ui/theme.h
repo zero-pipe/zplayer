@@ -26,6 +26,12 @@ struct ThemeTokens {
 
     QColor videoBg;
 
+    // Custom-painted widget colours (segmented control / timeline). Kept in
+    // tokens so light mode never falls back to the dark prototype palette.
+    QColor segmentedTrack, segmentedThumb, segmentedTextOff;
+    QColor timelineBg, timelineTrack, timelineTick;
+    QColor timelineClip, timelinePlayhead;
+
     int radiusPanel = 12;
     int radiusCard = 10;
     int radiusBtn = 9;

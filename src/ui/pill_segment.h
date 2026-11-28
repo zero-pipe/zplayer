@@ -9,8 +9,8 @@ class QHBoxLayout;
 namespace zp {
 
 // 二级目录维度切换：横向药丸分段滑块。
-// 深色圆角轨道 + 主题蓝高亮药丸，点击时滑块平滑滑动（属性动画）。
-// 只表达“目录数据维度”，不切换顶层工作模式。
+// 圆角凹槽 + 主题蓝高亮药丸，颜色随白天/夜晚主题切换；点击时滑块平滑滑动
+// （属性动画）。只表达“目录数据维度”，不切换顶层工作模式。
 class PillSegment : public QWidget {
     Q_OBJECT
     Q_PROPERTY(qreal thumbX READ thumbX WRITE setThumbX)

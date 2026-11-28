@@ -5,6 +5,7 @@
 #include <QResizeEvent>
 #include <QPropertyAnimation>
 #include <QEasingCurve>
+#include "ui/theme.h"
 
 namespace zp {
 namespace {
@@ -23,6 +24,11 @@ PillSegment::PillSegment(QWidget *parent)
     m_anim = new QPropertyAnimation(this, QByteArrayLiteral("thumbX"), this);
     m_anim->setDuration(180);
     m_anim->setEasingCurve(QEasingCurve::OutCubic);
+
+    // Custom-painted: the global stylesheet cannot restyle this widget, so
+    // repaint explicitly when the theme preset changes.
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, static_cast<void (QWidget::*)()>(&QWidget::update));
 }
 
 qreal PillSegment::thumbX() const
@@ -97,25 +103,25 @@ void PillSegment::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    // 深色圆角轨道（grooveBg / skeletonBorder，来自原型）。
-    const QColor track(0x11, 0x16, 0x1F);
-    const QColor trackBorder(0x23, 0x2B, 0x3A);
-    p.setBrush(track);
-    p.setPen(QPen(trackBorder, 1));
+    const ThemeTokens &tk = ThemeManager::instance().tokens();
+
+    // 圆角凹槽：颜色随主题切换（浅色为 #E2E8F0），保留胶囊形态。
+    p.setBrush(tk.segmentedTrack);
+    p.setPen(QPen(tk.border, 1));
     p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), kRadius, kRadius);
 
-    // 高亮药丸滑块（主题蓝 #2B7FFF）。
+    // 高亮药丸滑块（主题蓝）。
     const qreal segW = (width() - 2.0 * kInset) / kCount;
     const QRectF thumb(m_thumbX, kInset, segW, height() - 2.0 * kInset);
-    p.setBrush(QColor(0x2B, 0x7F, 0xFF));
+    p.setBrush(tk.segmentedThumb);
     p.setPen(Qt::NoPen);
     p.drawRoundedRect(thumb, kRadius - kInset, kRadius - kInset);
 
-    // 文字：当前项白，非当前项灰。
+    // 文字：当前项白，非当前项由主题决定（浅色深灰，夜晚浅灰）。
+    const QColor onText = Qt::white;
     for (int i = 0; i < kCount; ++i) {
         const QRect r(int(i * width() / kCount), 0, int(width() / kCount), height());
-        p.setPen(i == m_current ? QColor(0xFF, 0xFF, 0xFF)
-                                : QColor(0x9A, 0xA7, 0xB6));
+        p.setPen(i == m_current ? onText : tk.segmentedTextOff);
         QFont f = font();
         f.setPixelSize(11);
         f.setBold(i == m_current);

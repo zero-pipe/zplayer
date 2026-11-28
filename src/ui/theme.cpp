@@ -47,6 +47,16 @@ ThemeTokens ThemeTokens::light()
     t.dangerSoft  = QColor(225, 29, 72, 26);
 
     t.videoBg = c("#F1F5F9");
+
+    // Custom-painted widgets: pale groove/panel, dark ticks, blue thumb.
+    t.segmentedTrack   = c("#E2E8F0");
+    t.segmentedThumb   = c("#2B7FFF");
+    t.segmentedTextOff = c("#475569");
+    t.timelineBg       = c("#F1F5F9");
+    t.timelineTrack    = c("#E2E8F0");
+    t.timelineTick     = c("#475569");
+    t.timelineClip     = c("#2563EB");
+    t.timelinePlayhead = c("#EF4444");
     return t;
 }
 
@@ -84,6 +94,16 @@ ThemeTokens ThemeTokens::dark()
     t.dangerSoft  = QColor(244, 63, 94, 30);
 
     t.videoBg = c("#0F131A");
+
+    // Dark prototype palette: preserved exactly as before for night mode.
+    t.segmentedTrack   = c("#11161F");
+    t.segmentedThumb   = c("#2B7FFF");
+    t.segmentedTextOff = c("#9AA7B6");
+    t.timelineBg       = c("#11161F");
+    t.timelineTrack    = c("#1A2230");
+    t.timelineTick     = c("#5C6B82");
+    t.timelineClip     = c("#2563EB");
+    t.timelinePlayhead = c("#EF4444");
     return t;
 }
 

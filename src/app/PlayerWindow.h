@@ -103,6 +103,7 @@ private slots:
     // 录像回放
     void queryPlaybackDay();
     void onPbSegmentClicked(qlonglong recordId, qint64 startMs);
+    void seekPlayback(qint64 absMs, bool fromTimeline = false);
     void onPbSeek(qint64 absMs);
     void onPbPlayPause();
     void onPbTick();
@@ -128,8 +129,9 @@ private:
     void expandToolDock();
     void reloadDetector();
     void rebuildSegmentList(const QList<zp::RecordingSegment> &segments);
+    void highlightSegmentInList(qlonglong recordId);
+    const zp::RecordingSegment *pbSegmentFor(qint64 absMs) const;
     void showPbEmptyState(const QString &title, const QString &hint);
-    void updatePbTimeLabel();
     void snapshotActiveTile();
 
     // Frameless custom title bar helpers.
@@ -168,7 +170,6 @@ private:
     QStackedWidget *m_rightStack = nullptr;
     QWidget *m_pbFilter = nullptr;         // 左侧回放查询条件（仅回放模式显示）
     QDateEdit *m_pbDate = nullptr;
-    QComboBox *m_pbStorage = nullptr;   // 录像位置：云端 / 设备（客户端写死）
     QLabel *m_treeCount = nullptr;          // 左栏资源目录在线通道数
     QToolButton *m_globalSnapBtn = nullptr; // 画布工具条：全局抓图
     QToolButton *m_globalCaptureBtn = nullptr; // 画布工具条：批量采集样本
@@ -186,10 +187,13 @@ private:
     bool m_pbPlaying = false;
     qint64 m_pbDayStart = 0;
     qint64 m_pbDayEnd = 0;
-    qint64 m_pbSegStart = 0;               // 当前片段绝对起点
-    qint64 m_pbSegDur = 0;                 // 当前片段时长 ms
-    qint64 m_pbPlayBaseWall = 0;           // 进度基准墙钟
-    qint64 m_pbPlayBasePos = 0;            // 基准位置（绝对 ms）
+    qint64 m_pbSegStart = 0;               // 当前片段绝对起点（客户端起播位置）
+    qint64 m_pbSegDur = 0;                 // 当前片段时长 ms（start 返回）
+    // 回放时钟直接读播放器 time-pos，不再用墙钟假装前进。
+    // 起播会话仍有 recordId / startMs 的概念（平台按绝对时间重定位）。
+    double m_pbLastRealPos = -1.0;        // 上次 tick 读到的播放器位置（秒）
+    int m_pbStallTicks = 0;               // 连续无进展的 tick 数
+    bool m_pbStallNotified = false;       // 本次会话是否已提示过卡住
     QList<zp::RecordingSegment> m_pbSegs;  // 当前日片段
 
     // Custom (frameless) title bar state.

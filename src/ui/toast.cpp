@@ -2,7 +2,9 @@
 
 #include <QLabel>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTimer>
+#include <QVariant>
 
 namespace zp {
 
